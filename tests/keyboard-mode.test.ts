@@ -394,9 +394,9 @@ describe('toolbar integration', () => {
 		document.body.appendChild(element)
 		reportKeyboardUnavailable(keyboard)
 		expect(document.getElementById('wt-keyboard-unavailable')).not.toBeNull()
-		expect(document.querySelector('.wt-keyboard-toggle')?.classList.contains('wt-action-error')).toBe(
-			true,
-		)
+		expect(
+			document.querySelector('.wt-keyboard-toggle')?.classList.contains('wt-action-error'),
+		).toBe(true)
 		keyboard.dispose()
 	})
 })

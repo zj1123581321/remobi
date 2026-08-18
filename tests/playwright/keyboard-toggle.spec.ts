@@ -66,14 +66,10 @@ test('onFocusChange fires on real textarea focus and blur', async ({ page }) => 
 	})
 
 	await page.locator('#terminal').click()
-	await expect
-		.poll(() => page.evaluate(() => window.__focusEvents ?? []))
-		.toContain(true)
+	await expect.poll(() => page.evaluate(() => window.__focusEvents ?? [])).toContain(true)
 
 	await page.evaluate(() => window.term?.blur?.())
-	await expect
-		.poll(() => page.evaluate(() => window.__focusEvents ?? []))
-		.toContain(false)
+	await expect.poll(() => page.evaluate(() => window.__focusEvents ?? [])).toContain(false)
 })
 
 test('send button produces a WS input payload while the keyboard is suppressed', async ({
@@ -96,8 +92,8 @@ test('send button produces a WS input payload while the keyboard is suppressed',
 	// Suppression is active: inputmode="none" on the real textarea
 	await expect
 		.poll(() =>
-			page.evaluate(
-				() => document.querySelector('.xterm-helper-textarea')?.getAttribute('inputmode'),
+			page.evaluate(() =>
+				document.querySelector('.xterm-helper-textarea')?.getAttribute('inputmode'),
 			),
 		)
 		.toBe('none')
