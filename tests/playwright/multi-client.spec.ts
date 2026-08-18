@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test'
+import { startIsolatedServe } from './isolated-serve'
 
 test('two live clients stay in sync after alternating resizes', async ({ browser }) => {
+	// Private server: this spec resizes the shared PTY repeatedly, which races
+	// parallel specs on the suite-wide webServer (and vice versa) — on CI the
+	// two browser projects interleave and the shared session starves.
+	test.setTimeout(60_000)
+	const serve = await startIsolatedServe()
 	const firstContext = await browser.newContext({
 		viewport: { width: 430, height: 932 },
 		isMobile: true,
@@ -16,8 +22,8 @@ test('two live clients stay in sync after alternating resizes', async ({ browser
 		const firstPage = await firstContext.newPage()
 		const secondPage = await secondContext.newPage()
 
-		await firstPage.goto('/')
-		await secondPage.goto('/')
+		await firstPage.goto(serve.url)
+		await secondPage.goto(serve.url)
 		await firstPage.waitForSelector('#terminal .xterm', { timeout: 10_000 })
 		await secondPage.waitForSelector('#terminal .xterm', { timeout: 10_000 })
 
@@ -66,5 +72,6 @@ test('two live clients stay in sync after alternating resizes', async ({ browser
 	} finally {
 		await firstContext.close()
 		await secondContext.close()
+		await serve.close()
 	}
 })
