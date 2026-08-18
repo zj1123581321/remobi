@@ -34,7 +34,7 @@ const defaultGestures: RemobiConfig['gestures'] = {
 	doubleTap: { enabled: false, data: '\x02z', maxInterval: 300 },
 }
 
-/** Default row 1 buttons (prefix + nav) */
+/** Default row 1 buttons (moshi-style single row: the high-frequency keys) */
 const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 	{
 		id: 'esc',
@@ -43,23 +43,17 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 		action: { type: 'send', data: '\x1b' },
 	},
 	{
+		id: 'ctrl',
+		label: 'Ctrl',
+		description: 'Sticky Ctrl modifier (applies to the next key)',
+		action: { type: 'ctrl-modifier' },
+	},
+	{ id: 'tab', label: 'Tab', description: 'Send Tab key', action: { type: 'send', data: '\t' } },
+	{
 		id: 'tmux-prefix',
 		label: 'Prefix',
 		description: 'Send tmux prefix key (Ctrl-B)',
 		action: { type: 'prefix', data: '\x02' },
-	},
-	{ id: 'tab', label: 'Tab', description: 'Send Tab key', action: { type: 'send', data: '\t' } },
-	{
-		id: 'shift-tab',
-		label: 'S-Tab',
-		description: 'Send Shift+Tab key',
-		action: { type: 'send', data: '\x1b[Z', keyLabel: 'Shift+Tab' },
-	},
-	{
-		id: 'left',
-		label: '\u2190',
-		description: 'Send Left arrow key',
-		action: { type: 'send', data: '\x1b[D', keyLabel: 'Left' },
 	},
 	{
 		id: 'up',
@@ -74,66 +68,27 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 		action: { type: 'send', data: '\x1b[B', keyLabel: 'Down' },
 	},
 	{
-		id: 'right',
-		label: '\u2192',
-		description: 'Send Right arrow key',
-		action: { type: 'send', data: '\x1b[C', keyLabel: 'Right' },
-	},
-	{
-		id: 'ctrl-c',
-		label: 'C-c',
-		description: 'Send Ctrl-C interrupt',
-		action: { type: 'send', data: '\x03' },
-	},
-	{
 		id: 'enter',
 		label: '\u23CE',
 		description: 'Send Enter/Return key',
 		action: { type: 'send', data: '\r' },
 	},
-]
-
-/** Default row 2 buttons */
-const defaultRow2: RemobiConfig['toolbar']['row2'] = [
-	{
-		id: 'q',
-		label: 'q',
-		description: 'Send q key',
-		action: { type: 'send', data: 'q' },
-	},
-	{
-		id: 'alt-enter',
-		label: 'M-↵',
-		description: 'Send Alt+Enter (ESC + Enter)',
-		action: { type: 'send', data: '\x1b\r', keyLabel: 'Alt+Enter' },
-	},
-	{
-		id: 'ctrl-d',
-		label: 'C-d',
-		description: 'Send Ctrl-D key',
-		action: { type: 'send', data: '\x04' },
-	},
+	{ id: 'paste', label: 'Paste', description: 'Paste from clipboard', action: { type: 'paste' } },
+	keyboardToggleButton,
 	{
 		id: 'drawer-toggle',
 		label: '\u2630 More',
 		description: 'Open command drawer',
 		action: { type: 'drawer-toggle' },
 	},
-	{ id: 'paste', label: 'Paste', description: 'Paste from clipboard', action: { type: 'paste' } },
-	{
-		id: 'backspace',
-		label: '\u232b',
-		description: 'Send Backspace key',
-		action: { type: 'send', data: '\x7f', keyLabel: 'Backspace' },
-	},
-	{
-		id: 'space',
-		label: 'Space',
-		description: 'Send Space key',
-		action: { type: 'send', data: ' ' },
-	},
-	keyboardToggleButton,
 ]
+
+/**
+ * Default row 2 buttons — empty: the toolbar is a single row by default
+ * (moshi style). The removed keys live in the drawer defaults below; set
+ * `toolbar.row2` to opt back into a second row.
+ */
+const defaultRow2: RemobiConfig['toolbar']['row2'] = []
 
 /** Default drawer commands */
 export const defaultDrawerButtons: readonly ControlButton[] = [
@@ -226,6 +181,61 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 		label: 'Guide',
 		description: 'Open the remobi help guide',
 		action: { type: 'help' },
+	},
+	// Keys removed from the toolbar when it went single-row stay reachable here
+	{
+		id: 'shift-tab',
+		label: 'S-Tab',
+		description: 'Send Shift+Tab key',
+		action: { type: 'send', data: '\x1b[Z', keyLabel: 'Shift+Tab' },
+	},
+	{
+		id: 'left',
+		label: '\u2190',
+		description: 'Send Left arrow key',
+		action: { type: 'send', data: '\x1b[D', keyLabel: 'Left' },
+	},
+	{
+		id: 'right',
+		label: '\u2192',
+		description: 'Send Right arrow key',
+		action: { type: 'send', data: '\x1b[C', keyLabel: 'Right' },
+	},
+	{
+		id: 'ctrl-c',
+		label: 'C-c',
+		description: 'Send Ctrl-C interrupt',
+		action: { type: 'send', data: '\x03' },
+	},
+	{
+		id: 'ctrl-d',
+		label: 'C-d',
+		description: 'Send Ctrl-D key',
+		action: { type: 'send', data: '\x04' },
+	},
+	{
+		id: 'q',
+		label: 'q',
+		description: 'Send q key',
+		action: { type: 'send', data: 'q' },
+	},
+	{
+		id: 'alt-enter',
+		label: 'M-↵',
+		description: 'Send Alt+Enter (ESC + Enter)',
+		action: { type: 'send', data: '\x1b\r', keyLabel: 'Alt+Enter' },
+	},
+	{
+		id: 'space',
+		label: 'Space',
+		description: 'Send Space key',
+		action: { type: 'send', data: ' ' },
+	},
+	{
+		id: 'backspace',
+		label: '\u232b',
+		description: 'Send Backspace key',
+		action: { type: 'send', data: '\x7f', keyLabel: 'Backspace' },
 	},
 ]
 

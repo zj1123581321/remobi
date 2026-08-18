@@ -191,7 +191,7 @@ interface ToolbarResult {
 	readonly ctrlState: CtrlState
 }
 
-/** Create the two-row toolbar */
+/** Create the toolbar; empty rows are skipped (single-row by default) */
 export function createToolbar(
 	term: XTerminal,
 	config: RemobiConfig,
@@ -206,29 +206,12 @@ export function createToolbar(
 	const toolbar = el('div', { id: 'wt-toolbar' })
 	const ctrlState = createCtrlState()
 
-	const row1 = buildRow(
-		config.toolbar.row1,
-		term,
-		ctrlState,
-		config,
-		actions,
-		hooks,
-		openDrawer,
-		openComboPicker,
-	)
-	const row2 = buildRow(
-		config.toolbar.row2,
-		term,
-		ctrlState,
-		config,
-		actions,
-		hooks,
-		openDrawer,
-		openComboPicker,
-	)
-
-	toolbar.appendChild(row1)
-	toolbar.appendChild(row2)
+	for (const buttons of [config.toolbar.row1, config.toolbar.row2]) {
+		if (buttons.length === 0) continue
+		toolbar.appendChild(
+			buildRow(buttons, term, ctrlState, config, actions, hooks, openDrawer, openComboPicker),
+		)
+	}
 
 	return { element: toolbar, ctrlState }
 }

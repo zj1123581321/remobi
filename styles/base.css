@@ -33,7 +33,7 @@ body {
 	}
 }
 
-/* Toolbar: two-row layout */
+/* Toolbar: single row by default; a second row renders when row2 is non-empty */
 #wt-toolbar {
 	display: none;
 	position: fixed;
@@ -80,8 +80,9 @@ body {
 	min-width: 38px;
 }
 
-/* Row 2 may overflow on narrow screens — scroll horizontally instead of
-   shrinking buttons below the 44px touch target (V2 窄屏修复) */
+/* The last rendered row (the only row in the default single-row layout) may
+   overflow on narrow screens — scroll horizontally instead of shrinking
+   buttons below the 44px touch target (V2 窄屏修复) */
 #wt-toolbar .wt-row:last-child {
 	overflow-x: auto;
 }
@@ -479,10 +480,11 @@ body {
 }
 
 /* Landscape + keyboard: hide row 2 buttons, shrink buttons.
-   The keyboard-toggle is exempt — it must stay reachable so the user can
-   dismiss the keyboard (F1). */
+   Only a true second row is hidden — :not(:first-child) keeps the default
+   single-row toolbar fully visible. The keyboard-toggle is exempt either
+   way — it must stay reachable so the user can dismiss the keyboard (F1). */
 @media (orientation: landscape) {
-	#wt-toolbar.wt-kb-open .wt-row:last-child button:not(.wt-keyboard-toggle) {
+	#wt-toolbar.wt-kb-open .wt-row:not(:first-child):last-child button:not(.wt-keyboard-toggle) {
 		display: none;
 	}
 	#wt-toolbar.wt-kb-open button {
