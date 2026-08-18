@@ -1,3 +1,4 @@
+import { FONT_SIZE_STORAGE_KEY } from '../actions/registry'
 import type { FontConfig, XTerminal } from '../types'
 import { resizeTerm } from '../util/terminal'
 import type { GestureLock } from './lock'
@@ -61,9 +62,17 @@ export function attachPinchGestures(term: XTerminal, font: FontConfig, lock: Ges
 	}
 
 	function onTouchEnd(): void {
-		if (lock.current === 'pinch') {
-			resetLock(lock)
+		if (lock.current !== 'pinch') return
+		// Persist the result once per gesture — the move phase must not write
+		if (term.options.fontSize !== pinchBaseFontSize) {
+			try {
+				localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(term.options.fontSize))
+			} catch (error) {
+				// iOS private mode throws on localStorage writes — keep going without a cache
+				console.error('remobi: failed to persist font size', error)
+			}
 		}
+		resetLock(lock)
 	}
 
 	// Wait for .xterm-screen then attach

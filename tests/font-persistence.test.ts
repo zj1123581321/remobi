@@ -1,8 +1,11 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { FONT_SIZE_STORAGE_KEY } from '../src/actions/registry'
-import { defineConfig } from '../src/config'
+import { defaultConfig, defineConfig } from '../src/config'
+import { createGestureLock } from '../src/gestures/lock'
+import { attachPinchGestures } from '../src/gestures/pinch'
 import type { RemobiConfig, XTerminal } from '../src/types'
+import { mockTerminal } from './fixtures'
 
 beforeEach(() => {
 	GlobalRegistrator.register()
@@ -101,6 +104,69 @@ describe('font size persistence (localStorage remobi:fontSize)', () => {
 		})
 		const term = await bootOverlay()
 		expect(term.options.fontSize).toBe(13)
+		expect(errorSpy).toHaveBeenCalled()
+	})
+})
+
+describe('pinch gesture font persistence', () => {
+	function setupPinch(): { screen: HTMLElement; term: XTerminal } {
+		const screen = document.createElement('div')
+		screen.className = 'xterm-screen'
+		document.body.appendChild(screen)
+		const term = mockTerminal()
+		attachPinchGestures(term, defaultConfig.font, createGestureLock())
+		return { screen, term }
+	}
+
+	function touch(x: number): { clientX: number; clientY: number } {
+		return { clientX: x, clientY: 0 }
+	}
+
+	function dispatchPinch(screen: HTMLElement, startDist: number, moves: readonly number[]): void {
+		screen.dispatchEvent(
+			Object.assign(new Event('touchstart'), { touches: [touch(0), touch(startDist)] }),
+		)
+		for (const dist of moves) {
+			screen.dispatchEvent(
+				Object.assign(new Event('touchmove', { cancelable: true }), {
+					touches: [touch(0), touch(dist)],
+				}),
+			)
+		}
+		screen.dispatchEvent(new Event('touchend'))
+	}
+
+	test('multiple moves, one touchend — persists the final size exactly once', () => {
+		const setItem = vi.spyOn(Storage.prototype, 'setItem')
+		const { screen, term } = setupPinch()
+
+		dispatchPinch(screen, 100, [150, 200])
+
+		expect(term.options.fontSize).toBe(28) // 14 * 2, within [8, 32]
+		const writes = setItem.mock.calls.filter(([key]) => key === FONT_SIZE_STORAGE_KEY)
+		expect(writes).toEqual([[FONT_SIZE_STORAGE_KEY, '28']])
+	})
+
+	test('gesture ending back at the base size writes nothing', () => {
+		const setItem = vi.spyOn(Storage.prototype, 'setItem')
+		const { screen, term } = setupPinch()
+
+		dispatchPinch(screen, 100, [200, 100])
+
+		expect(term.options.fontSize).toBe(14)
+		expect(setItem.mock.calls.filter(([key]) => key === FONT_SIZE_STORAGE_KEY)).toEqual([])
+	})
+
+	test('write failure logs and continues — gesture still completes', () => {
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+		vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+			throw new Error('QuotaExceededError')
+		})
+		const { screen, term } = setupPinch()
+
+		dispatchPinch(screen, 100, [200])
+
+		expect(term.options.fontSize).toBe(28)
 		expect(errorSpy).toHaveBeenCalled()
 	})
 })
