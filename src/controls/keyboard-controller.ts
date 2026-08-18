@@ -3,7 +3,7 @@ import { el } from '../util/dom'
 import { isKeyboardOpen } from '../util/keyboard'
 
 /** Debounce window for rapid keyboard-toggle taps */
-export const KEYBOARD_TOGGLE_DEBOUNCE_MS = 300
+const KEYBOARD_TOGGLE_DEBOUNCE_MS = 300
 
 /**
  * Decorate a keyboard-toggle button: marker class (indicator + error-state
@@ -213,7 +213,7 @@ export function reportKeyboardUnavailable(keyboard: KeyboardController): void {
  * keyboard-toggle button with the error state and show a reconnect-style
  * overlay. Never silently fall back to auto.
  */
-export function showKeyboardUnavailableOverlay(mode: KeyboardMode): void {
+function showKeyboardUnavailableOverlay(mode: KeyboardMode): void {
 	const overlay = el('div', {
 		id: 'wt-keyboard-unavailable',
 		style: [
