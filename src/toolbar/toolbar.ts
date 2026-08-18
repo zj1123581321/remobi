@@ -178,6 +178,12 @@ function buildRow(
 		}
 		if (def.action.type === 'keyboard-toggle') {
 			button.classList.add('wt-keyboard-toggle')
+			// 探针③ race: onTap fires on touchend, then the synthesised mousedown
+			// steals focus back to the button — an unlock focus() would be lost
+			// and the keyboard would never open. preventDefault suppresses the
+			// synthesised mouse events for this button only, so the unlock
+			// focus sticks. Locking is unaffected (it blurs anyway).
+			button.addEventListener('touchend', (e) => e.preventDefault())
 		}
 		wireButton(button, def, term, ctrlState, config, registry, hooks, openDrawer, openComboPicker)
 		row.appendChild(button)

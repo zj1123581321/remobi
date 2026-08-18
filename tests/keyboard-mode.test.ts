@@ -399,6 +399,29 @@ describe('toolbar integration', () => {
 		).toBe(true)
 		keyboard.dispose()
 	})
+
+	test('keyboard-toggle prevents synthesised mouse events on touchend (探针③ race)', () => {
+		// Emulator-verified: without this, the synthesised mousedown after
+		// touchend steals the unlock focus back to the button and the soft
+		// keyboard never opens.
+		const config = defineConfig({
+			toolbar: {
+				row1: [
+					{ id: 'q', label: 'q', description: 'Send q key', action: { type: 'send', data: 'q' } },
+				],
+				row2: [keyboardToggleButton],
+			},
+		})
+		const { element } = createToolbar(mockTerminal(), config, () => {}, createHookRegistry())
+		const toggle = element.querySelector('.wt-keyboard-toggle')
+		const plain = element.querySelector('button:not(.wt-keyboard-toggle)')
+		const toggleEvent = new Event('touchend', { cancelable: true })
+		toggle?.dispatchEvent(toggleEvent)
+		expect(toggleEvent.defaultPrevented).toBe(true)
+		const plainEvent = new Event('touchend', { cancelable: true })
+		plain?.dispatchEvent(plainEvent)
+		expect(plainEvent.defaultPrevented).toBe(false)
+	})
 })
 
 describe('base.css keyboard rules', () => {
