@@ -114,16 +114,16 @@ describe('defaultConfig', () => {
 		expect(defaultConfig.theme.foreground).toBe('#cdd6f4')
 	})
 
-	test('has 10 row1 buttons (moshi-style single row)', () => {
-		expect(defaultConfig.toolbar.row1).toHaveLength(10)
+	test('has 8 row1 buttons (moshi-style single row)', () => {
+		expect(defaultConfig.toolbar.row1).toHaveLength(8)
 	})
 
 	test('row2 defaults to empty — single-row toolbar', () => {
 		expect(defaultConfig.toolbar.row2).toEqual([])
 	})
 
-	test('has 24 drawer buttons', () => {
-		expect(defaultConfig.drawer.buttons).toHaveLength(24)
+	test('has 27 drawer buttons', () => {
+		expect(defaultConfig.drawer.buttons).toHaveLength(27)
 	})
 
 	test('default drawer uses stock tmux bindings only', () => {
@@ -140,9 +140,9 @@ describe('defaultConfig', () => {
 		expect(byId.has('tmux-links')).toBe(false)
 	})
 
-	test('row1 is Esc, Ctrl, Tab, Prefix, ↑, ↓, Enter, Paste, ⌨, ☰ More', () => {
+	test('row1 is Esc, C-c, Tab, ↑, ↓, Enter, ⌨, ☰ More', () => {
 		const labels = defaultConfig.toolbar.row1.map((b) => b.label)
-		expect(labels).toEqual(['Esc', 'Ctrl', 'Tab', 'Prefix', '↑', '↓', '⏎', 'Paste', '⌨', '☰ More'])
+		expect(labels).toEqual(['Esc', 'C-c', 'Tab', '↑', '↓', '⏎', '⌨', '☰ More'])
 	})
 
 	test('default mobile font size is 13', () => {

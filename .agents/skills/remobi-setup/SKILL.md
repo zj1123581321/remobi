@@ -67,7 +67,7 @@ remobi serve -- zellij attach --create main
 `zellij attach --create <name>` attaches or creates, like `tmux new-session -A`. On the zellij path:
 
 - **Skip the tmux inspection and mouse-mode steps entirely** — zellij enables mouse mode by default, so touch scroll and tap-to-focus work with no multiplexer config
-- Stock zellij ships a tmux-compat mode on Ctrl-B (`\x02`): the Prefix button, swipe gestures (`\x02n`/`\x02p` — next/previous tab), and the `+ Win` (`\x02c`), Split (`\x02%`/`\x02"`), Zoom (`\x02z`), Copy (`\x02[` — scroll mode), and Kill (`\x02x`) buttons work unchanged
+- Stock zellij ships a tmux-compat mode on Ctrl-B (`\x02`): the Prefix drawer button and the `+ Win` (`\x02c`), Split (`\x02%`/`\x02"`), Zoom (`\x02z`), Copy (`\x02[` — scroll mode), and Kill (`\x02x`) buttons work unchanged; swipe gestures (`\x02n`/`\x02p` — next/previous tab) work once enabled (default off)
 - Replace the three drawer buttons zellij doesn't bind (`tmux-sessions`, `tmux-windows`, `tmux-help`) — see the [zellij example config](#zellij--modal-tmux-alternative) and [Composing zellij key sequences](#composing-zellij-key-sequences)
 - Custom keybindings live in `~/.config/zellij/config.kdl` under `keybinds` — inspect it if present; if it uses `clear-defaults=true` without a `tmux` mode block, the Ctrl-B compat bindings are gone and the drawer needs zellij-native sequences throughout
 - For small screens, suggest `default_layout "compact"` and `pane_frames false` in `config.kdl` to reclaim rows from zellij's UI chrome
@@ -86,7 +86,7 @@ remobi serve -- herdr --session main
 `herdr --session <name>` attaches or creates, like `tmux new-session -A`. On the herdr path:
 
 - **Skip the tmux inspection and mouse-mode steps entirely** — herdr captures mouse input by default, so touch scroll and tap-to-focus work with no multiplexer config
-- herdr's default prefix is Ctrl-B (`\x02`), the same as tmux: the Prefix button, swipe gestures (`\x02n`/`\x02p` — next/previous tab), and the `+ Win` (`\x02c`), Zoom (`\x02z`), Kill (`\x02x`), and Help (`\x02?`) buttons work unchanged
+- herdr's default prefix is Ctrl-B (`\x02`), the same as tmux: the Prefix drawer button and the `+ Win` (`\x02c`), Zoom (`\x02z`), Kill (`\x02x`), and Help (`\x02?`) buttons work unchanged; swipe gestures (`\x02n`/`\x02p`) work once enabled (default off)
 - Replace the drawer buttons herdr doesn't bind — see the [herdr example config](#herdr--agent-multiplexer) and [Composing herdr key sequences](#composing-herdr-key-sequences)
 - herdr has a built-in single-column layout for narrow terminals (`ui.mobile_width_threshold` in herdr's `config.toml`); no status-bar or popup tuning needed
 - Custom keybindings live in `~/.config/herdr/config.toml` under `[keys]` — inspect it if present, and translate any remapped prefix or bindings the same way as a custom tmux prefix
@@ -384,24 +384,22 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 
 ### Default button IDs
 
-**Toolbar row 1** (10 buttons — the only row by default; moshi-style single row):
+**Toolbar row 1** (8 buttons — the only row by default; moshi-style single row):
 
 | `id` | `label` | `action` |
 |------|---------|----------|
 | `esc` | Esc | `send` `\x1b` |
-| `ctrl` | Ctrl | `ctrl-modifier` (sticky Ctrl for the next key) |
+| `ctrl-c` | C-c | `send` `\x03` (dedicated — tap twice to quit coding agents) |
 | `tab` | Tab | `send` `\t` |
-| `tmux-prefix` | Prefix | `prefix` `\x02` (sends prefix then opens combo picker for follow-up key) |
 | `up` | up arrow | `send` `\x1b[A` |
 | `down` | down arrow | `send` `\x1b[B` |
 | `enter` | enter | `send` `\r` |
-| `paste` | Paste | `paste` |
 | `keyboard-toggle` | keyboard ⌨ | `keyboard-toggle` |
 | `drawer-toggle` | hamburger More | `drawer-toggle` |
 
 **Toolbar row 2**: empty by default (single-row toolbar). Set `toolbar.row2` to opt into a second row.
 
-**Drawer** (24 buttons — includes the keys removed from the toolbar: `shift-tab`, `left`, `right`, `ctrl-c`, `ctrl-d`, `q`, `alt-enter`, `space`, `backspace`):
+**Drawer** (27 buttons — includes the keys removed from the toolbar: `shift-tab`, `left`, `right`, `ctrl-c`, `ctrl-d`, `q`, `alt-enter`, `space`, `backspace`, `ctrl`, `tmux-prefix`, `paste`):
 
 | `id` | `label` | `action` |
 |------|---------|----------|

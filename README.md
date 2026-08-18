@@ -83,7 +83,7 @@ remobi serve -- zellij attach --create main
 zellij needs no extra setup for mobile:
 
 - Mouse mode is on by default, so touch scroll and tap-to-focus just work — no `set -g mouse on` equivalent to remember
-- Stock zellij ships a tmux-compat mode on `Ctrl-B`, so remobi's Prefix button and the default swipe gestures (`prefix+n`/`prefix+p` — next/previous tab) work unchanged, as do the New Window (`prefix+c`), Split (`prefix+%`/`prefix+"`), Zoom (`prefix+z`), Copy/scrollback (`prefix+[`), and Kill (`prefix+x`) drawer buttons
+- Stock zellij ships a tmux-compat mode on `Ctrl-B`, so remobi's Prefix drawer button works unchanged, as do the New Window (`prefix+c`), Split (`prefix+%`/`prefix+"`), Zoom (`prefix+z`), Copy/scrollback (`prefix+[`), and Kill (`prefix+x`) drawer buttons; the swipe gestures (`prefix+n`/`prefix+p` — next/previous tab) work once enabled (they default to off)
 - Its native modal shortcuts (`Ctrl+t` for tabs, `Ctrl+p` for panes, …) also pass through fine
 
 Only three drawer buttons send sequences zellij doesn't bind. A `remobi.config.ts` with zellij equivalents:
@@ -116,7 +116,7 @@ remobi serve -- herdr --session main
 herdr needs no extra setup for mobile:
 
 - Mouse capture is on by default, so touch scroll and tap-to-focus just work — no `set -g mouse on` equivalent to remember
-- Its default prefix is `Ctrl-B`, the same as tmux, so remobi's Prefix button and the default swipe gestures (`prefix+n`/`prefix+p` — next/previous tab) work unchanged, as do the New Window (`prefix+c`), Zoom (`prefix+z`), Kill (`prefix+x`), and Help (`prefix+?`) drawer buttons
+- Its default prefix is `Ctrl-B`, the same as tmux, so remobi's Prefix drawer button works unchanged, as do the New Window (`prefix+c`), Zoom (`prefix+z`), Kill (`prefix+x`), and Help (`prefix+?`) drawer buttons; the swipe gestures (`prefix+n`/`prefix+p`) work once enabled (they default to off)
 - It has a built-in single-column mobile layout for narrow terminals (`ui.mobile_width_threshold` in herdr's config)
 
 Only a few drawer buttons send sequences herdr doesn't bind. A `remobi.config.ts` with herdr equivalents:
@@ -229,12 +229,12 @@ export default {
     sizeRange: [8, 32],
   },
   toolbar: {
-    // Single row by default (10 keys): Esc, Ctrl, Tab, Prefix, up, down, Enter,
-    // Paste, keyboard-toggle, drawer-toggle. row2 defaults to empty — set it to
-    // opt into a second row.
+    // Single row by default (8 keys): Esc, C-c, Tab, up, down, Enter,
+    // keyboard-toggle, drawer-toggle. row2 defaults to empty — set it to
+    // opt into a second row. Ctrl/Prefix/Paste live in the drawer.
     row1: [
       { id: 'esc', label: 'Esc', description: 'Send Escape key', action: { type: 'send', data: '\x1b' } },
-      { id: 'ctrl', label: 'Ctrl', description: 'Sticky Ctrl modifier', action: { type: 'ctrl-modifier' } },
+      { id: 'ctrl-c', label: 'C-c', description: 'Send Ctrl-C interrupt', action: { type: 'send', data: '\x03' } },
       // ...
     ],
     row2: [],

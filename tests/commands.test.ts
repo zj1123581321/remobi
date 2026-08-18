@@ -2,8 +2,8 @@ import { describe, expect, test } from 'vitest'
 import { defaultDrawerButtons } from '../src/drawer/commands'
 
 describe('defaultDrawerButtons', () => {
-	test('has 24 commands', () => {
-		expect(defaultDrawerButtons).toHaveLength(24)
+	test('has 27 commands', () => {
+		expect(defaultDrawerButtons).toHaveLength(27)
 	})
 
 	test('all commands have id, label, description, and action', () => {
@@ -108,5 +108,8 @@ describe('defaultDrawerButtons', () => {
 			data: '\x7f',
 			keyLabel: 'Backspace',
 		})
+		expect(byId.get('ctrl')?.action).toEqual({ type: 'ctrl-modifier' })
+		expect(byId.get('tmux-prefix')?.action).toEqual({ type: 'prefix', data: '\x02' })
+		expect(byId.get('paste')?.action).toEqual({ type: 'paste' })
 	})
 })

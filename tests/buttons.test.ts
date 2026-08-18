@@ -3,16 +3,14 @@ import { keyboardToggleButton } from '../src/controls/keyboard-controller'
 import { defaultRow1, defaultRow2 } from '../src/toolbar/buttons'
 
 describe('defaultRow1 (moshi-style single row)', () => {
-	test('is exactly the 10-key high-frequency set in render order', () => {
+	test('is exactly the 8-key high-frequency set in render order', () => {
 		expect(defaultRow1.map((b) => b.id)).toEqual([
 			'esc',
-			'ctrl',
+			'ctrl-c',
 			'tab',
-			'tmux-prefix',
 			'up',
 			'down',
 			'enter',
-			'paste',
 			'keyboard-toggle',
 			'drawer-toggle',
 		])
@@ -23,15 +21,9 @@ describe('defaultRow1 (moshi-style single row)', () => {
 		expect(defaultRow1[0]?.action).toEqual({ type: 'send', data: '\x1b' })
 	})
 
-	test('has the sticky Ctrl modifier second', () => {
-		expect(defaultRow1[1]?.id).toBe('ctrl')
-		expect(defaultRow1[1]?.action).toEqual({ type: 'ctrl-modifier' })
-	})
-
-	test('has tmux Prefix button', () => {
-		const prefix = defaultRow1.find((b) => b.id === 'tmux-prefix')
-		expect(prefix).toBeDefined()
-		expect(prefix?.action).toEqual({ type: 'prefix', data: '\x02' })
+	test('has a dedicated C-c second — double-tap quits coding agents', () => {
+		expect(defaultRow1[1]?.id).toBe('ctrl-c')
+		expect(defaultRow1[1]?.action).toEqual({ type: 'send', data: '\x03' })
 	})
 
 	test('has only the Up/Down arrow keys', () => {
@@ -42,13 +34,17 @@ describe('defaultRow1 (moshi-style single row)', () => {
 		expect(arrows.map((b) => b.id)).toEqual(['up', 'down'])
 	})
 
-	test('has Paste and ends with ⌨ then ☰ More', () => {
-		const paste = defaultRow1.find((b) => b.action.type === 'paste')
-		expect(paste?.label).toBe('Paste')
+	test('ends with ⌨ then ☰ More', () => {
 		expect(defaultRow1[defaultRow1.length - 2]).toEqual(keyboardToggleButton)
 		const last = defaultRow1[defaultRow1.length - 1]
 		expect(last?.action).toEqual({ type: 'drawer-toggle' })
 		expect(last?.label).toContain('More')
+	})
+
+	test('keeps the sticky Ctrl, Prefix and Paste off the row', () => {
+		expect(defaultRow1.find((b) => b.action.type === 'ctrl-modifier')).toBeUndefined()
+		expect(defaultRow1.find((b) => b.action.type === 'prefix')).toBeUndefined()
+		expect(defaultRow1.find((b) => b.action.type === 'paste')).toBeUndefined()
 	})
 })
 

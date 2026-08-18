@@ -46,18 +46,14 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 		action: { type: 'send', data: '\x1b' },
 	},
 	{
-		id: 'ctrl',
-		label: 'Ctrl',
-		description: 'Sticky Ctrl modifier (applies to the next key)',
-		action: { type: 'ctrl-modifier' },
+		// Dedicated C-c: coding agents need double Ctrl-C to quit, which neither
+		// the one-shot sticky Ctrl nor the auto-closing drawer can express.
+		id: 'ctrl-c',
+		label: 'C-c',
+		description: 'Send Ctrl-C interrupt (tap twice to quit agents)',
+		action: { type: 'send', data: '\x03' },
 	},
 	{ id: 'tab', label: 'Tab', description: 'Send Tab key', action: { type: 'send', data: '\t' } },
-	{
-		id: 'tmux-prefix',
-		label: 'Prefix',
-		description: 'Send tmux prefix key (Ctrl-B)',
-		action: { type: 'prefix', data: '\x02' },
-	},
 	{
 		id: 'up',
 		label: '\u2191',
@@ -76,7 +72,6 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 		description: 'Send Enter/Return key',
 		action: { type: 'send', data: '\r' },
 	},
-	{ id: 'paste', label: 'Paste', description: 'Paste from clipboard', action: { type: 'paste' } },
 	keyboardToggleButton,
 	{
 		id: 'drawer-toggle',
@@ -240,6 +235,20 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 		description: 'Send Backspace key',
 		action: { type: 'send', data: '\x7f', keyLabel: 'Backspace' },
 	},
+	// Second single-row cut (8-key row): Ctrl modifier / Prefix / Paste stay reachable here
+	{
+		id: 'ctrl',
+		label: 'Ctrl',
+		description: 'Sticky Ctrl modifier (applies to the next key)',
+		action: { type: 'ctrl-modifier' },
+	},
+	{
+		id: 'tmux-prefix',
+		label: 'Prefix',
+		description: 'Send tmux prefix key (Ctrl-B)',
+		action: { type: 'prefix', data: '\x02' },
+	},
+	{ id: 'paste', label: 'Paste', description: 'Paste from clipboard', action: { type: 'paste' } },
 ]
 
 /** Default mobile configuration */
