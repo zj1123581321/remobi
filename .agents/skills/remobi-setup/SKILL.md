@@ -298,7 +298,8 @@ Tell the user:
    - **Scroll buttons**: Opt-in floating arrow buttons on the right edge — off by default, enable with `scrollButtons.enabled: true`. Long-press for rapid repeat (300ms delay, 100ms interval). Auto-fade after 2s. Strategy follows `gestures.scroll.strategy` (`wheel` sends mouse events, `keys` sends PageUp/PageDown)
    - **Combo picker**: Modal for arbitrary key combos — type `C-s`, `M-Enter`, `Alt-x`, `C-[`. Supports Ctrl, Alt, Shift modifiers + named keys (PageUp, Escape, etc.). Opened via drawer "Combo" button
    - **Help overlay**: `Guide` button in the command drawer. Shows all configured buttons, gestures, and floating buttons in tables. Config-driven, updates when you change buttons
-   - **Landscape + keyboard**: When on-screen keyboard opens in landscape, row 2 auto-hides and buttons shrink. No config needed
+   - **Landscape + keyboard**: When on-screen keyboard opens in landscape, row 2 auto-hides (except the ⌨ button) and buttons shrink. No config needed
+   - **Keyboard sovereignty**: `mobile.keyboardMode` — `'auto'` (default): tapping the terminal opens the soft keyboard, ⌨ is momentary focus/blur. `'manual'`: the keyboard never pops up on terminal taps — only the ⌨ button (toolbar row2, far right) grants/revokes input permission. If a manual-mode config has no ⌨ button anywhere, remobi injects one into row2 so the keyboard stays reachable
 6. PWA: enabled by default. On mobile Safari/Chrome, tap Share then "Add to Home Screen" for standalone app experience. Config options:
    - `pwa.enabled` (default `true`) — set `false` to disable manifest + icons
    - `pwa.themeColor` (default `'#1e1e2e'`) — status bar colour on mobile
@@ -329,6 +330,7 @@ name  theme  font  toolbar  drawer  gestures  mobile  floatingButtons  scrollBut
 | `drawer-toggle`  | (none)              | Opens/closes command drawer |
 | `font-size`      | `delta: number`     | Adjust terminal font size, clamped to `font.sizeRange` |
 | `help`           | (none)              | Opens the help overlay |
+| `keyboard-toggle` | (none)             | Toggles the soft keyboard. Default on toolbar row2 (far right). In `mobile.keyboardMode: 'manual'` it is the only way to summon the keyboard; remobi injects one into row2 if the config has none |
 
 Non-`send`/`prefix` actions must NOT have `data` or `keyLabel` — the validator rejects them.
 
@@ -397,7 +399,7 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `ctrl-c` | C-c | `send` `\x03` |
 | `enter` | enter | `send` `\r` |
 
-**Toolbar row 2** (7 buttons):
+**Toolbar row 2** (8 buttons):
 
 | `id` | `label` | `action` |
 |------|---------|----------|
@@ -408,6 +410,7 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `paste` | Paste | `paste` |
 | `backspace` | backspace | `send` `\x7f` |
 | `space` | Space | `send` `' '` |
+| `keyboard-toggle` | keyboard ⌨ | `keyboard-toggle` |
 
 **Drawer** (15 buttons):
 
@@ -452,6 +455,14 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | Field | Default | Notes |
 |-------|---------|-------|
 | `scrollButtons.enabled` | `false` | Floating PgUp/PgDn arrows on the right edge. Off by default — finger-drag scroll covers them |
+
+### Mobile
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `mobile.initData` | `null` | Data sent once on mobile load when viewport < `widthThreshold` |
+| `mobile.widthThreshold` | `768` | px — phone/tablet breakpoint for `initData` |
+| `mobile.keyboardMode` | `'auto'` | `'auto'`: terminal taps open the soft keyboard; ⌨ is momentary focus/blur. `'manual'`: keyboard stays suppressed (`inputmode="none"`); only the ⌨ button toggles input permission |
 
 ### Font
 
