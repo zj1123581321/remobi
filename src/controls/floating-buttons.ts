@@ -63,6 +63,7 @@ function createGroupButton(
 			})
 			.catch((error) => {
 				console.error('remobi: floating button action failed', error)
+				button.classList.add('wt-action-error')
 				conditionalFocus(term, kbWasOpen)
 			})
 	})

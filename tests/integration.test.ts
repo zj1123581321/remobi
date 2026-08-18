@@ -1,5 +1,5 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createDefaultActionRegistry } from '../src/actions/registry'
 import { defaultConfig } from '../src/config'
 import { createFloatingButtons } from '../src/controls/floating-buttons'
@@ -187,6 +187,35 @@ describe('help overlay integration', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0))
 
 		expect(overlay.style.display).toBe('block')
+	})
+
+	test('failed action marks the drawer button with an error state', async () => {
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+		const term = mockTerminal()
+		// No openHelp dep — executing the help action must fail loud
+		const actions = createDefaultActionRegistry({ font: defaultConfig.font })
+		const guideButton: ControlButton = {
+			id: 'guide',
+			label: 'Guide',
+			description: 'Open the remobi help guide',
+			action: { type: 'help' },
+		}
+		const { backdrop, drawer } = createDrawer(term, [guideButton], {
+			hooks: createHookRegistry(),
+			appConfig: defaultConfig,
+			actions,
+		})
+		document.body.appendChild(backdrop)
+		document.body.appendChild(drawer)
+
+		const button = drawer.querySelector('#wt-drawer-grid button')
+		expect(button?.classList.contains('wt-action-error')).toBe(false)
+		button?.dispatchEvent(new Event('touchend', { bubbles: true }))
+		await new Promise((resolve) => setTimeout(resolve, 0))
+
+		expect(errorSpy).toHaveBeenCalled()
+		expect(button?.classList.contains('wt-action-error')).toBe(true)
+		errorSpy.mockRestore()
 	})
 
 	test('synthesised click after touchend does not immediately close overlay', async () => {

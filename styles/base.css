@@ -172,6 +172,14 @@ body {
 	background: #585b70;
 }
 
+/* Action failure marker — fail-loud, never a silent dead button */
+#wt-toolbar button.wt-action-error,
+#wt-drawer-grid button.wt-action-error,
+.wt-floating-group button.wt-action-error {
+	outline: 2px solid #f38ba8;
+	outline-offset: -2px;
+}
+
 /* Swipe indicator */
 #wt-swipe-indicator {
 	position: fixed;

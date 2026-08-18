@@ -147,6 +147,7 @@ function wireButton(
 			})
 			.catch((error) => {
 				console.error('remobi: toolbar action execution failed', error)
+				button.classList.add('wt-action-error')
 				conditionalFocus(term, kbWasOpen)
 			})
 	})
