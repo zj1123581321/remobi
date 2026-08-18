@@ -322,11 +322,35 @@ describe('escape hatch (V2)', () => {
 		expect(withKeyboardEscapeHatch(config)).toBe(config)
 	})
 
-	test('keyboard-toggle anywhere (drawer, floating) counts as covered', () => {
+	test('floating-buttons keyboard-toggle is directly reachable — no injection', () => {
 		const config = defineConfig({
 			mobile: { keyboardMode: 'manual' },
 			toolbar: { row2: (defaults) => defaults.filter((b) => b.id !== 'keyboard-toggle') },
-			drawer: { buttons: (defaults) => [...defaults, keyboardToggleButton] },
+			floatingButtons: [{ position: 'top-left', buttons: [keyboardToggleButton] }],
+		})
+		expect(withKeyboardEscapeHatch(config)).toBe(config)
+	})
+
+	test('drawer-only ⌨ without a drawer-toggle is unreachable — inject into row2', () => {
+		const config = defineConfig({
+			mobile: { keyboardMode: 'manual' },
+			toolbar: {
+				row2: (defaults) =>
+					defaults.filter((b) => b.id !== 'keyboard-toggle' && b.action.type !== 'drawer-toggle'),
+			},
+			drawer: { buttons: [keyboardToggleButton] },
+		})
+		const patched = withKeyboardEscapeHatch(config)
+		expect(patched).not.toBe(config)
+		expect(patched.toolbar.row2[patched.toolbar.row2.length - 1]).toEqual(keyboardToggleButton)
+	})
+
+	test('drawer-only ⌨ with a reachable drawer-toggle counts as covered', () => {
+		const config = defineConfig({
+			mobile: { keyboardMode: 'manual' },
+			// default row2 keeps drawer-toggle; drop only the ⌨
+			toolbar: { row2: (defaults) => defaults.filter((b) => b.id !== 'keyboard-toggle') },
+			drawer: { buttons: [keyboardToggleButton] },
 		})
 		expect(withKeyboardEscapeHatch(config)).toBe(config)
 	})

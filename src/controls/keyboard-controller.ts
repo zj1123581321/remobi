@@ -161,27 +161,35 @@ export function createKeyboardController(term: XTerminal, mode: KeyboardMode): K
 	}
 }
 
-/** All button arrays that may carry a keyboard-toggle button */
-function allButtons(config: RemobiConfig): readonly ControlButton[] {
-	return [
-		...config.toolbar.row1,
-		...config.toolbar.row2,
-		...config.drawer.buttons,
-		...config.floatingButtons.flatMap((group) => group.buttons),
-	]
-}
-
 /**
- * Escape hatch (V2): in manual mode there must always be a reachable
- * keyboard-toggle, or the user can never summon the keyboard. If the resolved
- * config has none, inject the default button at the end of toolbar row2
- * (the toolbar always renders). Pure — returns a new config.
+ * Escape hatch (V2): in manual mode there must always be a *reachable*
+ * keyboard-toggle, or the user can never summon the keyboard. Reachability:
+ * toolbar row1/row2 and floatingButtons are directly reachable; a
+ * drawer-only ⌨ counts only when a reachable drawer-toggle exists to open it
+ * (the drawer starts hidden). Otherwise inject the default button at the end
+ * of toolbar row2 (the toolbar always renders). Pure — returns a new config.
  */
 export function withKeyboardEscapeHatch(config: RemobiConfig): RemobiConfig {
 	if (config.mobile.keyboardMode !== 'manual') return config
-	if (allButtons(config).some((button) => button.action.type === 'keyboard-toggle')) {
+
+	// Directly reachable buttons: always rendered without any intermediate step
+	const direct: readonly ControlButton[] = [
+		...config.toolbar.row1,
+		...config.toolbar.row2,
+		...config.floatingButtons.flatMap((group) => group.buttons),
+	]
+	if (direct.some((button) => button.action.type === 'keyboard-toggle')) {
 		return config
 	}
+
+	const drawerHasToggle = config.drawer.buttons.some(
+		(button) => button.action.type === 'keyboard-toggle',
+	)
+	const drawerReachable = direct.some((button) => button.action.type === 'drawer-toggle')
+	if (drawerHasToggle && drawerReachable) {
+		return config
+	}
+
 	return {
 		...config,
 		toolbar: {
