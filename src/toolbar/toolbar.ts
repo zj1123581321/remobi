@@ -1,5 +1,6 @@
 import { createDefaultActionRegistry } from '../actions/registry'
 import type { ActionRegistry } from '../actions/registry'
+import type { KeyboardController } from '../controls/keyboard-controller'
 import type { HookRegistry } from '../hooks/registry'
 import type { ControlButton, RemobiConfig, XTerminal } from '../types'
 import { el } from '../util/dom'
@@ -175,6 +176,9 @@ function buildRow(
 		if (def.action.type === 'ctrl-modifier') {
 			ctrlState.buttonEl = button
 		}
+		if (def.action.type === 'keyboard-toggle') {
+			button.classList.add('wt-keyboard-toggle')
+		}
 		wireButton(button, def, term, ctrlState, config, registry, hooks, openDrawer, openComboPicker)
 		row.appendChild(button)
 	}
@@ -198,6 +202,7 @@ export function createToolbar(
 		readonly sendText: (data: string) => Promise<void>
 		readonly focusIfNeeded: () => void
 	}) => void,
+	keyboard?: KeyboardController,
 ): ToolbarResult {
 	const toolbar = el('div', { id: 'wt-toolbar' })
 	const ctrlState = createCtrlState()
@@ -225,6 +230,19 @@ export function createToolbar(
 
 	toolbar.appendChild(row1)
 	toolbar.appendChild(row2)
+
+	// Keyboard indicator (V1): auto follows keyboard visibility, manual follows
+	// input permission — the controller decides; the toolbar just reflects it.
+	if (keyboard) {
+		const toggleButtons = toolbar.querySelectorAll('.wt-keyboard-toggle')
+		const syncIndicator = (): void => {
+			for (const button of toggleButtons) {
+				button.classList.toggle('wt-kb-active', keyboard.indicatorOn())
+			}
+		}
+		syncIndicator()
+		keyboard.subscribe(syncIndicator)
+	}
 
 	return { element: toolbar, ctrlState }
 }

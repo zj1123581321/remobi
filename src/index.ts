@@ -164,6 +164,7 @@ export function init(
 					hooks,
 					actions,
 					comboPicker.open,
+					keyboard,
 				)
 				document.body.appendChild(toolbar)
 				await hooks.runToolbarCreated({ term, config, toolbar })
