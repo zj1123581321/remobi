@@ -247,6 +247,26 @@ describe('help overlay integration', () => {
 		expect(element.innerHTML).toContain('&lt;Esc&gt;')
 		expect(element.innerHTML).not.toContain('Claude Drawer Commands')
 	})
+
+	test('no longer renders a Top-Right Controls section', () => {
+		const term = mockTerminal()
+		const { element } = createHelpOverlay(term, defaultConfig)
+
+		expect(element.innerHTML).not.toContain('Top-Right Controls')
+		// The drawer table covers the moved controls instead
+		expect(element.innerHTML).toContain('Guide')
+		expect(element.innerHTML).toContain('Decrease font size')
+	})
+
+	test('side scroll button rows follow scrollButtons.enabled', () => {
+		const term = mockTerminal()
+
+		const off = createHelpOverlay(term, defaultConfig)
+		expect(off.element.innerHTML).not.toContain('Side')
+
+		const on = createHelpOverlay(term, { ...defaultConfig, scrollButtons: { enabled: true } })
+		expect(on.element.innerHTML).toContain('Side')
+	})
 })
 
 describe('build output', () => {

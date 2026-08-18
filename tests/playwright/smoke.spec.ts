@@ -45,14 +45,32 @@ test('terminal accepts keyboard input after tapping the screen', async ({ page }
 	await expect(page.locator('body')).toContainText('keyboard-smoke')
 })
 
+test('no floating controls overlay the terminal content', async ({ page }) => {
+	await page.goto('/')
+	await page.waitForSelector('#wt-toolbar', { timeout: 10_000 })
+
+	// The old #-/+/? floating cluster is gone; controls live in the drawer
+	await expect(page.locator('#wt-font-controls')).toHaveCount(0)
+	// Scroll buttons are opt-in and off by default
+	await expect(page.locator('#wt-scroll-buttons')).toHaveCount(0)
+})
+
 test('help overlay shows version', async ({ page }) => {
 	await page.goto('/')
 	await page.waitForSelector('#wt-toolbar', { timeout: 10_000 })
 
 	// Open help via touchend — simulates iOS Safari not firing click on dynamic elements
-	const helpBtn = page.locator('#wt-font-controls button', { hasText: '?' })
-	await expect(helpBtn).toBeVisible()
-	await helpBtn.dispatchEvent('touchend', {
+	const moreBtn = page.locator('#wt-toolbar button', { hasText: 'More' })
+	await expect(moreBtn).toBeVisible()
+	await moreBtn.dispatchEvent('touchend', {
+		touches: [],
+		changedTouches: [],
+		targetTouches: [],
+	})
+
+	const guideBtn = page.locator('#wt-drawer-grid button', { hasText: 'Guide' })
+	await expect(guideBtn).toBeVisible()
+	await guideBtn.dispatchEvent('touchend', {
 		touches: [],
 		changedTouches: [],
 		targetTouches: [],

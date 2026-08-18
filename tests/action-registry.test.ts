@@ -1,7 +1,8 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createActionRegistry, createDefaultActionRegistry } from '../src/actions/registry'
-import type { ButtonAction } from '../src/types'
+import { defaultConfig } from '../src/config'
+import type { ButtonAction, XTerminal } from '../src/types'
 import { mockTerminal } from './fixtures'
 
 beforeEach(() => {
@@ -502,5 +503,165 @@ describe('createDefaultActionRegistry', () => {
 		await first
 
 		expect(sent).toEqual(['q', 'x'])
+	})
+})
+
+describe('font-size action', () => {
+	function makeContext(term: XTerminal, focused: { value: boolean }) {
+		return {
+			term,
+			kbWasOpen: true,
+			focusIfNeeded() {
+				focused.value = true
+			},
+			async sendText(_data: string) {},
+		}
+	}
+
+	test('applies delta, resizes and restores focus', async () => {
+		const registry = createDefaultActionRegistry({ font: defaultConfig.font })
+		const term = mockTerminal()
+		const focused = { value: false }
+		const resizeSpy = vi.fn()
+		window.__remobiResize = resizeSpy
+
+		const executed = await registry.execute(
+			{ type: 'font-size', delta: 2 },
+			makeContext(term, focused),
+		)
+
+		expect(executed).toBe(true)
+		expect(term.options.fontSize).toBe(16)
+		expect(resizeSpy).toHaveBeenCalledTimes(1)
+		expect(focused.value).toBe(true)
+
+		delete window.__remobiResize
+	})
+
+	test('clamps at sizeRange upper bound and stops resizing at the cap', async () => {
+		const registry = createDefaultActionRegistry({ font: defaultConfig.font })
+		const term = mockTerminal()
+		term.options.fontSize = 31
+		const focused = { value: false }
+		const resizeSpy = vi.fn()
+		window.__remobiResize = resizeSpy
+
+		await registry.execute({ type: 'font-size', delta: 2 }, makeContext(term, focused))
+		expect(term.options.fontSize).toBe(32)
+		expect(resizeSpy).toHaveBeenCalledTimes(1)
+
+		await registry.execute({ type: 'font-size', delta: 2 }, makeContext(term, focused))
+		expect(term.options.fontSize).toBe(32)
+		expect(resizeSpy).toHaveBeenCalledTimes(1)
+
+		delete window.__remobiResize
+	})
+
+	test('clamps at sizeRange lower bound and stops resizing at the floor', async () => {
+		const registry = createDefaultActionRegistry({ font: defaultConfig.font })
+		const term = mockTerminal()
+		term.options.fontSize = 9
+		const focused = { value: false }
+		const resizeSpy = vi.fn()
+		window.__remobiResize = resizeSpy
+
+		await registry.execute({ type: 'font-size', delta: -2 }, makeContext(term, focused))
+		expect(term.options.fontSize).toBe(8)
+		expect(resizeSpy).toHaveBeenCalledTimes(1)
+
+		await registry.execute({ type: 'font-size', delta: -2 }, makeContext(term, focused))
+		expect(term.options.fontSize).toBe(8)
+		expect(resizeSpy).toHaveBeenCalledTimes(1)
+
+		delete window.__remobiResize
+	})
+
+	test('context.font takes precedence over registry deps', async () => {
+		const depsFont = { ...defaultConfig.font, sizeRange: [20, 24] as readonly [number, number] }
+		const registry = createDefaultActionRegistry({ font: depsFont })
+		const term = mockTerminal()
+		term.options.fontSize = 10
+		const focused = { value: false }
+		window.__remobiResize = () => {}
+
+		await registry.execute(
+			{ type: 'font-size', delta: 2 },
+			{ ...makeContext(term, focused), font: defaultConfig.font },
+		)
+
+		// context.font range [8, 32] applies — deps range [20, 24] would clamp to 20
+		expect(term.options.fontSize).toBe(12)
+
+		delete window.__remobiResize
+	})
+
+	test('fails loud when no font config is available', async () => {
+		const registry = createDefaultActionRegistry()
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+		const focused = { value: false }
+
+		await expect(
+			registry.execute({ type: 'font-size', delta: 2 }, makeContext(mockTerminal(), focused)),
+		).rejects.toThrow('remobi: font-size action requires a FontConfig')
+		expect(errorSpy).toHaveBeenCalled()
+		expect(focused.value).toBe(false)
+	})
+})
+
+describe('help action', () => {
+	test('calls the injected openHelp callback', async () => {
+		const openHelp = vi.fn()
+		const registry = createDefaultActionRegistry({ openHelp })
+
+		const executed = await registry.execute(
+			{ type: 'help' },
+			{
+				term: mockTerminal(),
+				kbWasOpen: false,
+				focusIfNeeded() {},
+				async sendText(_data: string) {},
+			},
+		)
+
+		expect(executed).toBe(true)
+		expect(openHelp).toHaveBeenCalledTimes(1)
+	})
+
+	test('context.openHelp takes precedence over registry deps', async () => {
+		const depsOpenHelp = vi.fn()
+		const contextOpenHelp = vi.fn()
+		const registry = createDefaultActionRegistry({ openHelp: depsOpenHelp })
+
+		await registry.execute(
+			{ type: 'help' },
+			{
+				term: mockTerminal(),
+				kbWasOpen: false,
+				focusIfNeeded() {},
+				async sendText(_data: string) {},
+				openHelp: contextOpenHelp,
+			},
+		)
+
+		expect(contextOpenHelp).toHaveBeenCalledTimes(1)
+		expect(depsOpenHelp).not.toHaveBeenCalled()
+	})
+
+	test('fails loud when no openHelp callback is available', async () => {
+		const registry = createDefaultActionRegistry()
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+		await expect(
+			registry.execute(
+				{ type: 'help' },
+				{
+					term: mockTerminal(),
+					kbWasOpen: false,
+					focusIfNeeded() {},
+					async sendText(_data: string) {},
+				},
+			),
+		).rejects.toThrow('remobi: help action requires an openHelp callback')
+		expect(errorSpy).toHaveBeenCalled()
 	})
 })

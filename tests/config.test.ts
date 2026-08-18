@@ -164,6 +164,15 @@ describe('defaultConfig', () => {
 		expect(defaultConfig.floatingButtons).toEqual([])
 	})
 
+	test('scroll buttons default to disabled', () => {
+		expect(defaultConfig.scrollButtons.enabled).toBe(false)
+	})
+
+	test('scroll buttons can be enabled via defineConfig', () => {
+		const config = defineConfig({ scrollButtons: { enabled: true } })
+		expect(config.scrollButtons.enabled).toBe(true)
+	})
+
 	test('has default name', () => {
 		expect(defaultConfig.name).toBe('remobi')
 	})

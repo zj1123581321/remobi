@@ -124,11 +124,19 @@ test('synthesised click from tap() hits backdrop (regression guard)', async ({ p
 	await expect(page.locator('#wt-drawer')).toHaveClass(/open/)
 })
 
-test('help button responds to touchend-only', async ({ page }) => {
-	const helpBtn = page.locator('#wt-font-controls button', { hasText: '?' })
-	await expect(helpBtn).toBeVisible()
+test('guide button responds to touchend-only', async ({ page }) => {
+	// Open the drawer via touchend (no click follows on affected iOS Safari)
+	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	await toggle.dispatchEvent('touchend', {
+		touches: [],
+		changedTouches: [],
+		targetTouches: [],
+	})
+	await expect(page.locator('#wt-drawer')).toHaveClass(/open/)
 
-	await helpBtn.dispatchEvent('touchend', {
+	const guideBtn = page.locator('#wt-drawer-grid button', { hasText: 'Guide' })
+	await expect(guideBtn).toBeVisible()
+	await guideBtn.dispatchEvent('touchend', {
 		touches: [],
 		changedTouches: [],
 		targetTouches: [],
@@ -136,4 +144,8 @@ test('help button responds to touchend-only', async ({ page }) => {
 
 	const overlay = page.locator('#wt-help')
 	await expect(overlay).toBeVisible()
+})
+
+test('scroll buttons are not rendered by default', async ({ page }) => {
+	await expect(page.locator('#wt-scroll-buttons')).toHaveCount(0)
 })
