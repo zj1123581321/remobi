@@ -303,6 +303,90 @@ describe('assertValidConfigOverrides', () => {
 			}),
 		).toThrow(ConfigValidationError)
 	})
+
+	test('accepts font-size and help actions', () => {
+		expect(() =>
+			assertValidConfigOverrides({
+				drawer: {
+					buttons: [
+						{
+							id: 'font-decrease',
+							label: 'Font −',
+							description: 'Decrease font size',
+							action: { type: 'font-size', delta: -2 },
+						},
+						{
+							id: 'guide',
+							label: 'Guide',
+							description: 'Open the remobi help guide',
+							action: { type: 'help' },
+						},
+					],
+				},
+			}),
+		).not.toThrow()
+	})
+
+	test('rejects font-size action without a numeric delta', () => {
+		expect(() =>
+			assertValidConfigOverrides({
+				drawer: {
+					buttons: [
+						{
+							id: 'font-decrease',
+							label: 'Font −',
+							description: 'Decrease font size',
+							action: { type: 'font-size' },
+						},
+					],
+				},
+			}),
+		).toThrow(ConfigValidationError)
+
+		expect(() =>
+			assertValidConfigOverrides({
+				drawer: {
+					buttons: [
+						{
+							id: 'font-decrease',
+							label: 'Font −',
+							description: 'Decrease font size',
+							action: { type: 'font-size', delta: '2' },
+						},
+					],
+				},
+			}),
+		).toThrow(ConfigValidationError)
+	})
+
+	test('rejects help action with unknown fields', () => {
+		expect(() =>
+			assertValidConfigOverrides({
+				drawer: {
+					buttons: [
+						{
+							id: 'guide',
+							label: 'Guide',
+							description: 'Open the remobi help guide',
+							action: { type: 'help', data: 'x' },
+						},
+					],
+				},
+			}),
+		).toThrow(ConfigValidationError)
+	})
+
+	test('accepts scrollButtons override', () => {
+		expect(() => assertValidConfigOverrides({ scrollButtons: { enabled: true } })).not.toThrow()
+	})
+
+	test('rejects unknown scrollButtons keys', () => {
+		const message = getValidationMessage(
+			{ scrollButtons: { position: 'left' } },
+			assertValidConfigOverrides,
+		)
+		expect(message).toContain('config.scrollButtons.position')
+	})
 })
 
 describe('assertValidResolvedConfig', () => {

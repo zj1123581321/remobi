@@ -84,6 +84,7 @@ export function createDrawer(
 				})
 				.catch((error) => {
 					console.error('remobi: drawer action execution failed', error)
+					button.classList.add('wt-action-error')
 					conditionalFocus(term, kbWasOpen)
 				})
 		})

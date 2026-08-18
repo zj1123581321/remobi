@@ -247,6 +247,8 @@ export default {
       { id: 'tmux-new-window', label: '+ Win', description: 'Create tmux window', action: { type: 'send', data: '\x02c' } },
       { id: 'tmux-split-vertical', label: 'Split |', description: 'Split pane vertically', action: { type: 'send', data: '\x02%' } },
       { id: 'combo-picker', label: 'Combo', description: 'Open combo sender (Ctrl/Alt + key)', action: { type: 'combo-picker' } },
+      { id: 'font-increase', label: 'Font +', description: 'Increase font size', action: { type: 'font-size', delta: 2 } },
+      { id: 'guide', label: 'Guide', description: 'Open the remobi help guide', action: { type: 'help' } },
       // ...
     ],
   },
@@ -278,6 +280,10 @@ export default {
       ],
     },
   ],
+  scrollButtons: {
+    enabled: false,      // floating PgUp/PgDn arrows on the right edge (default off —
+                         // finger-drag scroll already covers them)
+  },
 }
 ```
 
@@ -352,7 +358,7 @@ Key modules:
 | `src/toolbar/` | Two-row touch toolbar |
 | `src/drawer/` | Command drawer with grid layout |
 | `src/gestures/` | Swipe, pinch, scroll detection |
-| `src/controls/` | Font size, help overlay, scroll buttons |
+| `src/controls/` | Help overlay, combo picker, scroll buttons |
 | `src/theme/` | Catppuccin Mocha + theme application |
 | `src/viewport/` | Height management, landscape detection |
 | `src/util/` | DOM helpers, terminal, keyboard, haptics |

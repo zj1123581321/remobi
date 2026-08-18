@@ -24,6 +24,11 @@ const ctrlModifierActionSchema = v.strictObject({ type: v.literal('ctrl-modifier
 const pasteActionSchema = v.strictObject({ type: v.literal('paste') })
 const comboPickerActionSchema = v.strictObject({ type: v.literal('combo-picker') })
 const drawerToggleActionSchema = v.strictObject({ type: v.literal('drawer-toggle') })
+const fontSizeActionSchema = v.strictObject({
+	type: v.literal('font-size'),
+	delta: finiteNumber,
+})
+const helpActionSchema = v.strictObject({ type: v.literal('help') })
 
 const buttonActionSchema = v.variant('type', [
 	sendActionSchema,
@@ -32,6 +37,8 @@ const buttonActionSchema = v.variant('type', [
 	pasteActionSchema,
 	comboPickerActionSchema,
 	drawerToggleActionSchema,
+	fontSizeActionSchema,
+	helpActionSchema,
 ])
 
 // --- Control button ---
@@ -61,7 +68,9 @@ const buttonArrayInputSchema = v.pipe(
 				for (const issue of result.issues) {
 					addIssue({
 						message: issue.message,
-						expected: issue.expected,
+						// The widened action-variant union types expected as string | null;
+						// addIssue takes string | undefined
+						expected: issue.expected ?? undefined,
 						received: issue.received,
 						path: [
 							{
@@ -254,6 +263,16 @@ const floatingButtonGroupSchema = v.strictObject({
 	buttons: v.array(controlButtonSchema),
 })
 
+// --- Scroll buttons ---
+
+const scrollButtonsOverridesSchema = v.strictObject({
+	enabled: v.optional(v.boolean()),
+})
+
+const scrollButtonsResolvedSchema = v.strictObject({
+	enabled: v.boolean(),
+})
+
 // --- PWA ---
 
 const pwaOverridesSchema = v.strictObject({
@@ -299,6 +318,7 @@ export const remobiConfigOverridesSchema = v.strictObject({
 	gestures: v.optional(gestureOverridesSchema),
 	mobile: v.optional(mobileOverridesSchema),
 	floatingButtons: v.optional(v.array(floatingButtonGroupSchema)),
+	scrollButtons: v.optional(scrollButtonsOverridesSchema),
 	pwa: v.optional(pwaOverridesSchema),
 	reconnect: v.optional(reconnectOverridesSchema),
 })
@@ -318,6 +338,7 @@ export const remobiConfigResolvedSchema = v.strictObject({
 	gestures: gestureResolvedSchema,
 	mobile: mobileResolvedSchema,
 	floatingButtons: v.array(floatingButtonGroupSchema),
+	scrollButtons: scrollButtonsResolvedSchema,
 	pwa: pwaResolvedSchema,
 	reconnect: reconnectResolvedSchema,
 })

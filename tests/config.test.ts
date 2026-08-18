@@ -122,8 +122,8 @@ describe('defaultConfig', () => {
 		expect(defaultConfig.toolbar.row2).toHaveLength(7)
 	})
 
-	test('has 12 drawer buttons', () => {
-		expect(defaultConfig.drawer.buttons).toHaveLength(12)
+	test('has 15 drawer buttons', () => {
+		expect(defaultConfig.drawer.buttons).toHaveLength(15)
 	})
 
 	test('default drawer uses stock tmux bindings only', () => {
@@ -162,6 +162,15 @@ describe('defaultConfig', () => {
 
 	test('defaults to empty floatingButtons groups', () => {
 		expect(defaultConfig.floatingButtons).toEqual([])
+	})
+
+	test('scroll buttons default to disabled', () => {
+		expect(defaultConfig.scrollButtons.enabled).toBe(false)
+	})
+
+	test('scroll buttons can be enabled via defineConfig', () => {
+		const config = defineConfig({ scrollButtons: { enabled: true } })
+		expect(config.scrollButtons.enabled).toBe(true)
 	})
 
 	test('has default name', () => {

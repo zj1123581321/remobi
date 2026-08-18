@@ -83,7 +83,7 @@ Browser overlay (bundled to the client via esbuild):
 - `src/drawer/drawer.ts` — command drawer with flat grid
 - `src/drawer/commands.ts` — re-exports defaultDrawerButtons from config
 - `src/gestures/` — swipe, pinch, scroll detection + gesture lock
-- `src/controls/` — font size, help overlay, combo picker, floating buttons, scroll buttons
+- `src/controls/` — help overlay, combo picker, floating buttons, scroll buttons
 - `src/theme/` — catppuccin-mocha + apply
 - `src/viewport/` — height management, landscape detection
 - `src/startup-resize.ts` — schedules the initial terminal resize on load (rAF + fonts-ready)

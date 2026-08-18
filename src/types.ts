@@ -6,6 +6,8 @@ export type ButtonAction =
 	| { readonly type: 'prefix'; readonly data: string }
 	| { readonly type: 'combo-picker' }
 	| { readonly type: 'drawer-toggle' }
+	| { readonly type: 'font-size'; readonly delta: number }
+	| { readonly type: 'help' }
 
 /** A generic control button definition used by toolbar and drawer */
 export interface ControlButton {
@@ -119,6 +121,12 @@ export interface FloatingButtonGroup {
 	readonly buttons: readonly ControlButton[]
 }
 
+/** Floating scroll buttons (PgUp/PgDn arrows on the right edge) */
+export interface ScrollButtonsConfig {
+	/** Off by default — finger-drag scroll gesture already covers this */
+	readonly enabled: boolean
+}
+
 /** Reconnect overlay configuration */
 export interface ReconnectConfig {
 	readonly enabled: boolean
@@ -146,6 +154,7 @@ export interface RemobiConfig {
 	readonly gestures: GestureConfig
 	readonly mobile: MobileConfig
 	readonly floatingButtons: readonly FloatingButtonGroup[]
+	readonly scrollButtons: ScrollButtonsConfig
 	readonly pwa: PwaConfig
 	readonly reconnect: ReconnectConfig
 }

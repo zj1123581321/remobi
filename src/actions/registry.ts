@@ -1,4 +1,5 @@
-import type { ButtonAction, XTerminal } from '../types'
+import type { ButtonAction, FontConfig, XTerminal } from '../types'
+import { resizeTerm } from '../util/terminal'
 
 export interface ActionExecutionContext {
 	readonly term: XTerminal
@@ -14,6 +15,10 @@ export interface ActionExecutionContext {
 		readonly description?: string
 	}) => void
 	readonly toggleCtrlModifier?: () => void
+	/** Font config for the font-size action — supplied per call or via registry deps */
+	readonly font?: FontConfig
+	/** Opens the help overlay — supplied per call or via registry deps */
+	readonly openHelp?: () => void
 }
 
 type ActionHandler = (action: ButtonAction, context: ActionExecutionContext) => void | Promise<void>
@@ -33,7 +38,12 @@ export function createActionRegistry(): ActionRegistry {
 
 	async function execute(action: ButtonAction, context: ActionExecutionContext): Promise<boolean> {
 		const handler = handlers.get(action.type)
-		if (!handler) return false
+		if (!handler) {
+			// Fail loud: an unregistered action must never become a silent dead button.
+			const error = new Error(`remobi: no handler registered for action type "${action.type}"`)
+			console.error(error)
+			throw error
+		}
 
 		if (action.type === 'send' || action.type === 'prefix') {
 			const current = sendQueue.then(async () => {
@@ -68,7 +78,23 @@ function describePrefixByte(data: string): string | null {
 	return null
 }
 
-export function createDefaultActionRegistry(): ActionRegistry {
+/** Change terminal font size by delta, clamped to config range */
+function changeFontSize(term: XTerminal, delta: number, font: FontConfig): void {
+	const current = term.options.fontSize
+	const next = Math.max(font.sizeRange[0], Math.min(font.sizeRange[1], current + delta))
+	if (next !== current) {
+		term.options.fontSize = next
+		resizeTerm()
+	}
+}
+
+/** Dependencies for the default handlers that need app-level wiring */
+interface DefaultActionDeps {
+	readonly font?: FontConfig
+	readonly openHelp?: () => void
+}
+
+export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): ActionRegistry {
 	const registry = createActionRegistry()
 	let pasteQueue: Promise<void> = Promise.resolve()
 
@@ -160,6 +186,34 @@ export function createDefaultActionRegistry(): ActionRegistry {
 		} else {
 			context.focusIfNeeded()
 		}
+	})
+
+	registry.register('font-size', (action, context) => {
+		if (action.type !== 'font-size') return
+		const font = context.font ?? deps.font
+		if (!font) {
+			// Fail loud: a font-size button without font config is a wiring bug.
+			const error = new Error(
+				'remobi: font-size action requires a FontConfig (context.font or registry deps)',
+			)
+			console.error(error)
+			throw error
+		}
+		changeFontSize(context.term, action.delta, font)
+		context.focusIfNeeded()
+	})
+
+	registry.register('help', (_action, context) => {
+		const openHelp = context.openHelp ?? deps.openHelp
+		if (!openHelp) {
+			// Fail loud: a help button without an openHelp callback is a wiring bug.
+			const error = new Error(
+				'remobi: help action requires an openHelp callback (context.openHelp or registry deps)',
+			)
+			console.error(error)
+			throw error
+		}
+		openHelp()
 	})
 
 	return registry

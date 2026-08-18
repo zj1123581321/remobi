@@ -39,10 +39,16 @@ function renderGestures(config: RemobiConfig): DocumentFragment {
 	if (config.gestures.scroll.enabled) {
 		if (config.gestures.scroll.strategy === 'wheel') {
 			table.appendChild(row('Finger drag', 'Send wheel scroll events to terminal apps'))
-			table.appendChild(row('Side \u25B2 \u25BC', 'Send wheel-up / wheel-down at terminal centre'))
+			if (config.scrollButtons.enabled) {
+				table.appendChild(
+					row('Side \u25B2 \u25BC', 'Send wheel-up / wheel-down at terminal centre'),
+				)
+			}
 		} else {
 			table.appendChild(row('Finger drag', 'Send PageUp / PageDown keys'))
-			table.appendChild(row('Side \u25B2 \u25BC', 'Send PageUp / PageDown keys'))
+			if (config.scrollButtons.enabled) {
+				table.appendChild(row('Side \u25B2 \u25BC', 'Send PageUp / PageDown keys'))
+			}
 		}
 	}
 
@@ -60,21 +66,6 @@ function renderGestures(config: RemobiConfig): DocumentFragment {
 
 /** Build the help overlay content as a DocumentFragment — no innerHTML */
 function buildHelpContent(config: RemobiConfig, version?: string): DocumentFragment {
-	const topRightButtons: readonly ControlButton[] = [
-		{
-			id: 'font-size',
-			label: '\u2212 / +',
-			description: 'Decrease / increase font size',
-			action: { type: 'send', data: '' },
-		},
-		{
-			id: 'help',
-			label: '?',
-			description: 'Open this help screen',
-			action: { type: 'send', data: '' },
-		},
-	]
-
 	const frag = document.createDocumentFragment()
 
 	const closeBtn = el('button', { class: 'wt-help-close' }, '\u00D7')
@@ -84,7 +75,6 @@ function buildHelpContent(config: RemobiConfig, version?: string): DocumentFragm
 	frag.appendChild(renderButtonTable('Toolbar \u2014 Row 2', config.toolbar.row2))
 	frag.appendChild(renderButtonTable('Drawer Buttons', config.drawer.buttons))
 	frag.appendChild(renderGestures(config))
-	frag.appendChild(renderButtonTable('Top-Right Controls', topRightButtons))
 
 	if (config.floatingButtons.length > 0) {
 		const groups: readonly FloatingButtonGroup[] = config.floatingButtons
@@ -110,10 +100,9 @@ interface HelpOverlayResult {
 	readonly close: () => void
 }
 
-/** Create the help overlay and wire the help button */
+/** Create the help overlay — opened via the `help` button action */
 export function createHelpOverlay(
 	term: XTerminal,
-	helpButton: HTMLButtonElement,
 	config: RemobiConfig,
 	version?: string,
 ): HelpOverlayResult {
@@ -137,11 +126,6 @@ export function createHelpOverlay(
 			close()
 			conditionalFocus(term, kbWasOpen)
 		}
-	})
-
-	onTap(helpButton, () => {
-		haptic()
-		open()
 	})
 
 	return { element: overlay, open, close }

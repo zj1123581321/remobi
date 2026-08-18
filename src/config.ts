@@ -207,6 +207,24 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 		description: 'Open combo sender (Ctrl/Alt + key)',
 		action: { type: 'combo-picker' },
 	},
+	{
+		id: 'font-decrease',
+		label: 'Font −',
+		description: 'Decrease font size',
+		action: { type: 'font-size', delta: -2 },
+	},
+	{
+		id: 'font-increase',
+		label: 'Font +',
+		description: 'Increase font size',
+		action: { type: 'font-size', delta: 2 },
+	},
+	{
+		id: 'guide',
+		label: 'Guide',
+		description: 'Open the remobi help guide',
+		action: { type: 'help' },
+	},
 ]
 
 /** Default mobile configuration */
@@ -231,6 +249,7 @@ export const defaultConfig: RemobiConfig = {
 	gestures: defaultGestures,
 	mobile: defaultMobile,
 	floatingButtons: [],
+	scrollButtons: { enabled: false },
 	pwa: defaultPwa,
 	reconnect: { enabled: true },
 }

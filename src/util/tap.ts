@@ -17,7 +17,7 @@
  * (d40fa46) because without synthesised mousedown, focus stays on the
  * terminal textarea and Android re-shows the keyboard when toolbar buttons
  * are pressed. Restoring it would require blur() + reworking keyboard state
- * preservation (isKeyboardOpen/conditionalFocus) across 13 call sites.
+ * preservation (isKeyboardOpen/conditionalFocus) across 11 call sites.
  *
  * ## Why not Pointer Events (pointerup)
  *

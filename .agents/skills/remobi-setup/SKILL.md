@@ -294,10 +294,10 @@ Tell the user:
 3. How to access from their phone (URL from deployment choice)
 4. PWA install: on mobile, tap "Add to Home Screen" for a standalone app experience
 5. Built-in mobile controls (these work out of the box, no config needed):
-   - **Font size**: `+`/`-` buttons in top-right. Config: `font.mobileSizeDefault` (default 16px), `font.sizeRange` (default [8, 32]), steps by 2
-   - **Scroll buttons**: Floating arrow buttons on the sides. Long-press for rapid repeat (300ms delay, 100ms interval). Auto-fade after 2s. Strategy follows `gestures.scroll.strategy` (`wheel` sends mouse events, `keys` sends PageUp/PageDown)
+   - **Font size**: `Font -`/`Font +` buttons in the command drawer (`☰ More`). Config: `font.mobileSizeDefault` (default 16px), `font.sizeRange` (default [8, 32]), steps by 2
+   - **Scroll buttons**: Opt-in floating arrow buttons on the right edge — off by default, enable with `scrollButtons.enabled: true`. Long-press for rapid repeat (300ms delay, 100ms interval). Auto-fade after 2s. Strategy follows `gestures.scroll.strategy` (`wheel` sends mouse events, `keys` sends PageUp/PageDown)
    - **Combo picker**: Modal for arbitrary key combos — type `C-s`, `M-Enter`, `Alt-x`, `C-[`. Supports Ctrl, Alt, Shift modifiers + named keys (PageUp, Escape, etc.). Opened via drawer "Combo" button
-   - **Help overlay**: `?` button in top-right. Shows all configured buttons, gestures, and floating buttons in tables. Config-driven, updates when you change buttons
+   - **Help overlay**: `Guide` button in the command drawer. Shows all configured buttons, gestures, and floating buttons in tables. Config-driven, updates when you change buttons
    - **Landscape + keyboard**: When on-screen keyboard opens in landscape, row 2 auto-hides and buttons shrink. No config needed
 6. PWA: enabled by default. On mobile Safari/Chrome, tap Share then "Add to Home Screen" for standalone app experience. Config options:
    - `pwa.enabled` (default `true`) — set `false` to disable manifest + icons
@@ -314,7 +314,7 @@ Tell the user:
 Exactly these — validation rejects anything else:
 
 ```
-name  theme  font  toolbar  drawer  gestures  mobile  floatingButtons  pwa  reconnect
+name  theme  font  toolbar  drawer  gestures  mobile  floatingButtons  scrollButtons  pwa  reconnect
 ```
 
 ### ButtonAction union
@@ -327,6 +327,8 @@ name  theme  font  toolbar  drawer  gestures  mobile  floatingButtons  pwa  reco
 | `paste`          | (none)              | Paste from clipboard |
 | `combo-picker`   | (none)              | Opens Ctrl/Alt + key modal |
 | `drawer-toggle`  | (none)              | Opens/closes command drawer |
+| `font-size`      | `delta: number`     | Adjust terminal font size, clamped to `font.sizeRange` |
+| `help`           | (none)              | Opens the help overlay |
 
 Non-`send`/`prefix` actions must NOT have `data` or `keyLabel` — the validator rejects them.
 
@@ -407,7 +409,7 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `backspace` | backspace | `send` `\x7f` |
 | `space` | Space | `send` `' '` |
 
-**Drawer** (12 buttons):
+**Drawer** (15 buttons):
 
 | `id` | `label` | `action` |
 |------|---------|----------|
@@ -423,6 +425,9 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `tmux-help` | Help | `send` `\x02?` |
 | `tmux-kill-pane` | Kill | `send` `\x02x` |
 | `combo-picker` | Combo | `combo-picker` |
+| `font-decrease` | Font - | `font-size` `delta: -2` |
+| `font-increase` | Font + | `font-size` `delta: 2` |
+| `guide` | Guide | `help` |
 
 ### Gestures
 
@@ -442,6 +447,12 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `gestures.doubleTap.data` | `'\x02z'` | Data to send on double-tap (default: tmux zoom toggle) |
 | `gestures.doubleTap.maxInterval` | `300` | Max milliseconds between taps |
 
+### Scroll buttons
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `scrollButtons.enabled` | `false` | Floating PgUp/PgDn arrows on the right edge. Off by default — finger-drag scroll covers them |
+
 ### Font
 
 | Field | Default | Notes |
@@ -449,7 +460,7 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `font.family` | `'JetBrainsMono NFM, monospace'` | CSS font-family |
 | `font.cdnUrl` | jsdelivr nerdfont URL | CSS file for web font |
 | `font.mobileSizeDefault` | `16` | px, applied on mobile |
-| `font.sizeRange` | `[8, 32]` | Min/max for +/- buttons |
+| `font.sizeRange` | `[8, 32]` | Min/max for the Font −/+ drawer buttons |
 
 ### PWA
 

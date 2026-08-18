@@ -2,7 +2,6 @@ import { createDefaultActionRegistry } from './actions/registry'
 import { defaultConfig } from './config'
 import { createComboPicker } from './controls/combo-picker'
 import { createFloatingButtons } from './controls/floating-buttons'
-import { createFontControls } from './controls/font-size'
 import { createHelpOverlay } from './controls/help'
 import { createScrollButtons } from './controls/scroll-buttons'
 import { createDrawer } from './drawer/drawer'
@@ -17,7 +16,7 @@ import { setupReconnect } from './reconnect'
 import { createStartupResizeScheduler } from './startup-resize'
 import { applyTheme } from './theme/apply'
 import { createToolbar } from './toolbar/toolbar'
-import type { RemobiConfig } from './types'
+import type { RemobiConfig, XTerminal } from './types'
 import { resizeTerm, sendData, waitForTerm } from './util/terminal'
 import { initHeightManager } from './viewport/height'
 
@@ -44,6 +43,25 @@ function isMobile(): boolean {
 }
 
 /**
+ * Initialise the help overlay and return its opener.
+ * Fail-safe: a help failure must never break the core controls.
+ */
+function setupHelpOverlay(
+	term: XTerminal,
+	config: RemobiConfig,
+	version?: string,
+): (() => void) | undefined {
+	try {
+		const helpOverlay = createHelpOverlay(term, config, version)
+		document.body.appendChild(helpOverlay.element)
+		return helpOverlay.open
+	} catch (error) {
+		console.error('remobi: failed to initialise help overlay', error)
+		return undefined
+	}
+}
+
+/**
  * Initialise the remobi overlay.
  * Called automatically when loaded in a browser (via the IIFE in build output).
  * Config is embedded at build time.
@@ -63,7 +81,6 @@ export function init(
 			})
 
 			const mobile = isMobile()
-			const actions = createDefaultActionRegistry()
 			let disposed = false
 			const disposeOverlayReadyResize = hooks.on('overlayReady', () => {
 				startupResize.scheduleAfterLayout()
@@ -107,6 +124,12 @@ export function init(
 				const comboPicker = createComboPicker()
 				document.body.appendChild(comboPicker.element)
 
+				// Help overlay first — the drawer's Guide button opens it via the
+				// action registry.
+				const openHelp = setupHelpOverlay(term, config, version)
+
+				const actions = createDefaultActionRegistry({ font: config.font, openHelp })
+
 				// Create drawer (needed by toolbar for toggle)
 				const drawer = createDrawer(term, config.drawer.buttons, {
 					hooks,
@@ -135,10 +158,6 @@ export function init(
 				document.body.appendChild(toolbar)
 				await hooks.runToolbarCreated({ term, config, toolbar })
 
-				// Font controls + help
-				const { element: fontControls, helpButton } = createFontControls(term, config.font)
-				document.body.appendChild(fontControls)
-
 				// Floating button groups (always visible on touch devices)
 				if (config.floatingButtons.length > 0) {
 					const { elements: floatingEls } = createFloatingButtons(
@@ -155,9 +174,11 @@ export function init(
 					}
 				}
 
-				// Scroll buttons
-				const { element: scrollButtons } = createScrollButtons(term, config.gestures.scroll)
-				document.body.appendChild(scrollButtons)
+				// Scroll buttons (opt-in — finger-drag scroll covers this by default)
+				if (config.scrollButtons.enabled) {
+					const { element: scrollButtons } = createScrollButtons(term, config.gestures.scroll)
+					document.body.appendChild(scrollButtons)
+				}
 
 				// Gestures
 				const gestureLock = createGestureLock()
@@ -203,14 +224,6 @@ export function init(
 							data: before.data,
 						})
 					}
-				}
-
-				// Help overlay should never break core controls.
-				try {
-					const { element: helpOverlay } = createHelpOverlay(term, helpButton, config, version)
-					document.body.appendChild(helpOverlay)
-				} catch (error) {
-					console.error('remobi: failed to initialise help overlay', error)
 				}
 
 				await hooks.runOverlayReady({ term, config, mobile })
