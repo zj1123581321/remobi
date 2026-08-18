@@ -218,6 +218,17 @@ export interface XTerminal {
 	}
 	input(data: string, wasUserInput: boolean): void
 	focus(): void
+	/** Remove focus from the terminal textarea (dismisses the soft keyboard) */
+	blur?(): void
+	/**
+	 * Suppress or restore the soft keyboard. The client bridge implements this
+	 * via `inputmode="none"` on the terminal textarea (spike 增量0 定案).
+	 * Locking blurs first — changing the attribute alone cannot dismiss an
+	 * already-open keyboard.
+	 */
+	setKeyboardSuppressed?(suppressed: boolean): void
+	/** Track terminal textarea focus/blur events */
+	onFocusChange?(handler: (focused: boolean) => void): { dispose(): void }
 	onData(handler: (data: string) => void): { dispose(): void }
 }
 

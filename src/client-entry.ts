@@ -88,6 +88,39 @@ function createTermBridge(term: Terminal, send: (message: ClientMessage) => void
 		focus() {
 			term.focus()
 		},
+		blur() {
+			term.blur()
+		},
+		setKeyboardSuppressed(suppressed: boolean) {
+			const textarea = term.textarea
+			if (!textarea) {
+				throw new Error('remobi: terminal textarea unavailable (terminal not open)')
+			}
+			if (suppressed) {
+				// Spike 增量0 探针⑤: blur first — flipping the attribute alone does
+				// not dismiss an already-open soft keyboard.
+				textarea.blur()
+				textarea.setAttribute('inputmode', 'none')
+			} else {
+				textarea.removeAttribute('inputmode')
+			}
+		},
+		onFocusChange(handler: (focused: boolean) => void) {
+			const textarea = term.textarea
+			if (!textarea) {
+				throw new Error('remobi: terminal textarea unavailable (terminal not open)')
+			}
+			const onFocus = (): void => handler(true)
+			const onBlur = (): void => handler(false)
+			textarea.addEventListener('focus', onFocus)
+			textarea.addEventListener('blur', onBlur)
+			return {
+				dispose() {
+					textarea.removeEventListener('focus', onFocus)
+					textarea.removeEventListener('blur', onBlur)
+				},
+			}
+		},
 		onData(handler: (data: string) => void) {
 			return term.onData(handler)
 		},
