@@ -3,6 +3,7 @@ import { defaultConfig } from './config'
 import { createComboPicker } from './controls/combo-picker'
 import { createFloatingButtons } from './controls/floating-buttons'
 import { createHelpOverlay } from './controls/help'
+import { createKeyboardController } from './controls/keyboard-controller'
 import { createScrollButtons } from './controls/scroll-buttons'
 import { createDrawer } from './drawer/drawer'
 import { attachDoubleTapGesture } from './gestures/double-tap'
@@ -29,6 +30,7 @@ export type {
 	ButtonAction,
 	ButtonArrayInput,
 	ControlButton,
+	KeyboardMode,
 	TermTheme,
 	FloatingButtonGroup,
 	FloatingPosition,
@@ -128,7 +130,15 @@ export function init(
 				// action registry.
 				const openHelp = setupHelpOverlay(term, config, version)
 
-				const actions = createDefaultActionRegistry({ font: config.font, openHelp })
+				// Keyboard sovereignty controller — must exist before the action
+				// registry so keyboard-toggle can be wired via DI.
+				const keyboard = createKeyboardController(term, config.mobile.keyboardMode)
+
+				const actions = createDefaultActionRegistry({
+					font: config.font,
+					openHelp,
+					toggleKeyboard: () => keyboard.toggle(),
+				})
 
 				// Create drawer (needed by toolbar for toggle)
 				const drawer = createDrawer(term, config.drawer.buttons, {
