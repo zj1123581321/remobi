@@ -16,7 +16,7 @@ import { setupReconnect } from './reconnect'
 import { createStartupResizeScheduler } from './startup-resize'
 import { applyTheme } from './theme/apply'
 import { createToolbar } from './toolbar/toolbar'
-import type { RemobiConfig } from './types'
+import type { RemobiConfig, XTerminal } from './types'
 import { resizeTerm, sendData, waitForTerm } from './util/terminal'
 import { initHeightManager } from './viewport/height'
 
@@ -40,6 +40,25 @@ export type { HookRegistry, SendSource } from './hooks/registry'
 /** Detect touch device */
 function isMobile(): boolean {
 	return 'ontouchstart' in window || navigator.maxTouchPoints > 0
+}
+
+/**
+ * Initialise the help overlay and return its opener.
+ * Fail-safe: a help failure must never break the core controls.
+ */
+function setupHelpOverlay(
+	term: XTerminal,
+	config: RemobiConfig,
+	version?: string,
+): (() => void) | undefined {
+	try {
+		const helpOverlay = createHelpOverlay(term, config, version)
+		document.body.appendChild(helpOverlay.element)
+		return helpOverlay.open
+	} catch (error) {
+		console.error('remobi: failed to initialise help overlay', error)
+		return undefined
+	}
 }
 
 /**
@@ -106,16 +125,8 @@ export function init(
 				document.body.appendChild(comboPicker.element)
 
 				// Help overlay first — the drawer's Guide button opens it via the
-				// action registry. Fail-safe: a help failure must never break the
-				// core controls created below.
-				let openHelp: (() => void) | undefined
-				try {
-					const helpOverlay = createHelpOverlay(term, config, version)
-					document.body.appendChild(helpOverlay.element)
-					openHelp = helpOverlay.open
-				} catch (error) {
-					console.error('remobi: failed to initialise help overlay', error)
-				}
+				// action registry.
+				const openHelp = setupHelpOverlay(term, config, version)
 
 				const actions = createDefaultActionRegistry({ font: config.font, openHelp })
 

@@ -377,9 +377,7 @@ describe('assertValidConfigOverrides', () => {
 	})
 
 	test('accepts scrollButtons override', () => {
-		expect(() =>
-			assertValidConfigOverrides({ scrollButtons: { enabled: true } }),
-		).not.toThrow()
+		expect(() => assertValidConfigOverrides({ scrollButtons: { enabled: true } })).not.toThrow()
 	})
 
 	test('rejects unknown scrollButtons keys', () => {

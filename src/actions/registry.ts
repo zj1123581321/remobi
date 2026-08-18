@@ -193,7 +193,9 @@ export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): Actio
 		const font = context.font ?? deps.font
 		if (!font) {
 			// Fail loud: a font-size button without font config is a wiring bug.
-			const error = new Error('remobi: font-size action requires a FontConfig (context.font or registry deps)')
+			const error = new Error(
+				'remobi: font-size action requires a FontConfig (context.font or registry deps)',
+			)
 			console.error(error)
 			throw error
 		}
@@ -205,7 +207,9 @@ export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): Actio
 		const openHelp = context.openHelp ?? deps.openHelp
 		if (!openHelp) {
 			// Fail loud: a help button without an openHelp callback is a wiring bug.
-			const error = new Error('remobi: help action requires an openHelp callback (context.openHelp or registry deps)')
+			const error = new Error(
+				'remobi: help action requires an openHelp callback (context.openHelp or registry deps)',
+			)
 			console.error(error)
 			throw error
 		}

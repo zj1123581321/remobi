@@ -535,7 +535,7 @@ describe('font-size action', () => {
 		expect(resizeSpy).toHaveBeenCalledTimes(1)
 		expect(focused.value).toBe(true)
 
-		delete window.__remobiResize
+		window.__remobiResize = undefined
 	})
 
 	test('clamps at sizeRange upper bound and stops resizing at the cap', async () => {
@@ -554,7 +554,7 @@ describe('font-size action', () => {
 		expect(term.options.fontSize).toBe(32)
 		expect(resizeSpy).toHaveBeenCalledTimes(1)
 
-		delete window.__remobiResize
+		window.__remobiResize = undefined
 	})
 
 	test('clamps at sizeRange lower bound and stops resizing at the floor', async () => {
@@ -573,7 +573,7 @@ describe('font-size action', () => {
 		expect(term.options.fontSize).toBe(8)
 		expect(resizeSpy).toHaveBeenCalledTimes(1)
 
-		delete window.__remobiResize
+		window.__remobiResize = undefined
 	})
 
 	test('context.font takes precedence over registry deps', async () => {
@@ -592,7 +592,7 @@ describe('font-size action', () => {
 		// context.font range [8, 32] applies — deps range [20, 24] would clamp to 20
 		expect(term.options.fontSize).toBe(12)
 
-		delete window.__remobiResize
+		window.__remobiResize = undefined
 	})
 
 	test('fails loud when no font config is available', async () => {

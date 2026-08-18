@@ -30,7 +30,11 @@ describe('base.css safe-area coverage', () => {
 	})
 
 	test('left/right-positioned floating groups respect the side insets', () => {
-		for (const selector of ['.wt-floating-top-left', '.wt-floating-bottom-left', '.wt-floating-centre-left']) {
+		for (const selector of [
+			'.wt-floating-top-left',
+			'.wt-floating-bottom-left',
+			'.wt-floating-centre-left',
+		]) {
 			expect(blockFor(selector)).toContain('env(safe-area-inset-left, 0px)')
 		}
 		for (const selector of [
