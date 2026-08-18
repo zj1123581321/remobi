@@ -58,7 +58,8 @@ body {
 .wt-row {
 	display: flex;
 	gap: 4px;
-	justify-content: center;
+	/* safe: keep leftmost buttons reachable when the row overflows (narrow screens) */
+	justify-content: safe center;
 }
 
 #wt-toolbar button {
@@ -79,12 +80,25 @@ body {
 	min-width: 38px;
 }
 
+/* Row 2 may overflow on narrow screens — scroll horizontally instead of
+   shrinking buttons below the 44px touch target (V2 窄屏修复) */
+#wt-toolbar .wt-row:last-child {
+	overflow-x: auto;
+}
+
 #wt-toolbar .wt-row:last-child button {
-	flex: 1;
+	flex: 1 0 auto;
+	min-width: 44px;
 }
 
 #wt-toolbar button:active {
 	background: #585b70;
+}
+
+/* Keyboard-toggle indicator: highlighted while the keyboard is summonable/open */
+#wt-toolbar button.wt-keyboard-toggle.wt-kb-active {
+	background: #89b4fa;
+	color: #1e1e2e;
 }
 
 /* Tmux drawer */
@@ -464,9 +478,11 @@ body {
 	background: #585b70;
 }
 
-/* Landscape + keyboard: hide row 2, shrink buttons */
+/* Landscape + keyboard: hide row 2 buttons, shrink buttons.
+   The keyboard-toggle is exempt — it must stay reachable so the user can
+   dismiss the keyboard (F1). */
 @media (orientation: landscape) {
-	#wt-toolbar.wt-kb-open .wt-row:last-child {
+	#wt-toolbar.wt-kb-open .wt-row:last-child button:not(.wt-keyboard-toggle) {
 		display: none;
 	}
 	#wt-toolbar.wt-kb-open button {

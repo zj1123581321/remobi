@@ -118,8 +118,8 @@ describe('defaultConfig', () => {
 		expect(defaultConfig.toolbar.row1).toHaveLength(10)
 	})
 
-	test('has 7 row2 buttons', () => {
-		expect(defaultConfig.toolbar.row2).toHaveLength(7)
+	test('has 8 row2 buttons', () => {
+		expect(defaultConfig.toolbar.row2).toHaveLength(8)
 	})
 
 	test('has 15 drawer buttons', () => {
@@ -146,9 +146,9 @@ describe('defaultConfig', () => {
 		expect(sTabIdx).toBe(tabIdx + 1)
 	})
 
-	test('row2 has q, Alt+Enter, C-d, More, Paste, Backspace, Space', () => {
+	test('row2 has q, Alt+Enter, C-d, More, Paste, Backspace, Space, ⌨', () => {
 		const labels = defaultConfig.toolbar.row2.map((b) => b.label)
-		expect(labels).toEqual(['q', 'M-↵', 'C-d', '\u2630 More', 'Paste', '⌫', 'Space'])
+		expect(labels).toEqual(['q', 'M-↵', 'C-d', '\u2630 More', 'Paste', '⌫', 'Space', '⌨'])
 	})
 
 	test('font size range is [8, 32]', () => {

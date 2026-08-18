@@ -19,6 +19,8 @@ export interface ActionExecutionContext {
 	readonly font?: FontConfig
 	/** Opens the help overlay — supplied per call or via registry deps */
 	readonly openHelp?: () => void
+	/** Toggles the soft keyboard — supplied per call or via registry deps */
+	readonly toggleKeyboard?: () => void
 }
 
 type ActionHandler = (action: ButtonAction, context: ActionExecutionContext) => void | Promise<void>
@@ -92,6 +94,7 @@ function changeFontSize(term: XTerminal, delta: number, font: FontConfig): void 
 interface DefaultActionDeps {
 	readonly font?: FontConfig
 	readonly openHelp?: () => void
+	readonly toggleKeyboard?: () => void
 }
 
 export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): ActionRegistry {
@@ -214,6 +217,20 @@ export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): Actio
 			throw error
 		}
 		openHelp()
+	})
+
+	registry.register('keyboard-toggle', (_action, context) => {
+		const toggleKeyboard = context.toggleKeyboard ?? deps.toggleKeyboard
+		if (!toggleKeyboard) {
+			// Fail loud: a keyboard-toggle button without a toggleKeyboard callback is a wiring bug.
+			const error = new Error(
+				'remobi: keyboard-toggle action requires a toggleKeyboard callback ' +
+					'(context.toggleKeyboard or registry deps)',
+			)
+			console.error(error)
+			throw error
+		}
+		toggleKeyboard()
 	})
 
 	return registry

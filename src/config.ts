@@ -1,4 +1,5 @@
 import { resolveButtonArray } from './config-resolve'
+import { keyboardToggleButton } from './controls/keyboard-controller'
 import { catppuccinMocha } from './theme/catppuccin-mocha'
 import type {
 	ControlButton,
@@ -131,6 +132,7 @@ const defaultRow2: RemobiConfig['toolbar']['row2'] = [
 		description: 'Send Space key',
 		action: { type: 'send', data: ' ' },
 	},
+	keyboardToggleButton,
 ]
 
 /** Default drawer commands */
@@ -231,6 +233,7 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 const defaultMobile: RemobiConfig['mobile'] = {
 	initData: null,
 	widthThreshold: 768,
+	keyboardMode: 'auto',
 }
 
 /** Default PWA configuration */

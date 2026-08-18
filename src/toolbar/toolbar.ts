@@ -1,5 +1,6 @@
 import { createDefaultActionRegistry } from '../actions/registry'
 import type { ActionRegistry } from '../actions/registry'
+import { decorateKeyboardToggleButton } from '../controls/keyboard-controller'
 import type { HookRegistry } from '../hooks/registry'
 import type { ControlButton, RemobiConfig, XTerminal } from '../types'
 import { el } from '../util/dom'
@@ -174,6 +175,9 @@ function buildRow(
 		button.textContent = def.label
 		if (def.action.type === 'ctrl-modifier') {
 			ctrlState.buttonEl = button
+		}
+		if (def.action.type === 'keyboard-toggle') {
+			decorateKeyboardToggleButton(button)
 		}
 		wireButton(button, def, term, ctrlState, config, registry, hooks, openDrawer, openComboPicker)
 		row.appendChild(button)

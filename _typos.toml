@@ -1,2 +1,4 @@
 [files]
-extend-exclude = ["CHANGELOG.md"]
+# docs/sessions holds session handoffs/cards/review verdicts — full of commit SHAs
+# and branch names (H0 freeze mandates SHAs), not user-facing prose.
+extend-exclude = ["CHANGELOG.md", "docs/sessions/**"]

@@ -29,6 +29,7 @@ const fontSizeActionSchema = v.strictObject({
 	delta: finiteNumber,
 })
 const helpActionSchema = v.strictObject({ type: v.literal('help') })
+const keyboardToggleActionSchema = v.strictObject({ type: v.literal('keyboard-toggle') })
 
 const buttonActionSchema = v.variant('type', [
 	sendActionSchema,
@@ -39,6 +40,7 @@ const buttonActionSchema = v.variant('type', [
 	drawerToggleActionSchema,
 	fontSizeActionSchema,
 	helpActionSchema,
+	keyboardToggleActionSchema,
 ])
 
 // --- Control button ---
@@ -232,14 +234,18 @@ const gestureResolvedSchema = v.strictObject({
 
 // --- Mobile ---
 
+const keyboardModeSchema = v.picklist(['auto', 'manual'])
+
 const mobileOverridesSchema = v.strictObject({
 	initData: v.optional(v.nullable(v.string())),
 	widthThreshold: v.optional(finiteNumber),
+	keyboardMode: v.optional(keyboardModeSchema),
 })
 
 const mobileResolvedSchema = v.strictObject({
 	initData: v.nullable(v.string()),
 	widthThreshold: finiteNumber,
+	keyboardMode: keyboardModeSchema,
 })
 
 // --- Floating buttons ---

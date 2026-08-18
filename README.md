@@ -239,6 +239,7 @@ export default {
       { id: 'drawer-toggle', label: '☰ More', description: 'Open command drawer', action: { type: 'drawer-toggle' } },
       { id: 'paste', label: 'Paste', description: 'Paste from clipboard', action: { type: 'paste' } },
       { id: 'backspace', label: '⌫', description: 'Send Backspace key', action: { type: 'send', data: '\x7f' } },
+      { id: 'keyboard-toggle', label: '⌨', description: 'Toggle the soft keyboard', action: { type: 'keyboard-toggle' } },
       // ...
     ],
   },
@@ -271,6 +272,10 @@ export default {
   mobile: {
     initData: '\x02z',     // send on mobile load when viewport < widthThreshold
     widthThreshold: 768,   // px — default matches common phone/tablet breakpoint
+    keyboardMode: 'auto',  // 'auto': tapping the terminal opens the soft keyboard.
+                           // 'manual': the keyboard stays suppressed — only the ⌨
+                           // button (toolbar row2) summons/dismisses it. In manual
+                           // mode remobi injects a ⌨ button if your config has none.
   },
   floatingButtons: [
     {

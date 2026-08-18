@@ -6,6 +6,7 @@ import { haptic } from '../util/haptic'
 import { conditionalFocus, isKeyboardOpen } from '../util/keyboard'
 import { onTap } from '../util/tap'
 import { sendData } from '../util/terminal'
+import { decorateKeyboardToggleButton } from './keyboard-controller'
 
 function createGroupButton(
 	term: XTerminal,
@@ -24,6 +25,9 @@ function createGroupButton(
 	const button = el('button')
 	button.textContent = def.label
 	button.setAttribute('aria-label', def.description)
+	if (def.action.type === 'keyboard-toggle') {
+		decorateKeyboardToggleButton(button)
+	}
 
 	onTap(button, () => {
 		const kbWasOpen = isKeyboardOpen()
