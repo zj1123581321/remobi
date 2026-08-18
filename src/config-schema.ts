@@ -68,7 +68,9 @@ const buttonArrayInputSchema = v.pipe(
 				for (const issue of result.issues) {
 					addIssue({
 						message: issue.message,
-						expected: issue.expected,
+						// The widened action-variant union types expected as string | null;
+						// addIssue takes string | undefined
+						expected: issue.expected ?? undefined,
 						received: issue.received,
 						path: [
 							{
