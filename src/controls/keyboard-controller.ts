@@ -5,6 +5,27 @@ import { isKeyboardOpen } from '../util/keyboard'
 /** Debounce window for rapid keyboard-toggle taps */
 export const KEYBOARD_TOGGLE_DEBOUNCE_MS = 300
 
+/**
+ * Decorate a keyboard-toggle button: marker class (indicator + error-state
+ * wiring) and the touchend guard against the synthesised-mousedown focus
+ * steal (探针③). Shared by the toolbar, drawer, and floating renderers.
+ */
+export function decorateKeyboardToggleButton(button: HTMLButtonElement): void {
+	button.classList.add('wt-keyboard-toggle')
+	// onTap fires on touchend, then the synthesised mousedown steals focus back
+	// to the button — an unlock focus() would be lost and the keyboard would
+	// never open. preventDefault suppresses the synthesised mouse events for
+	// this button only. Locking is unaffected (it blurs anyway).
+	button.addEventListener('touchend', (e) => e.preventDefault())
+}
+
+/** Reflect the controller's indicator state on every keyboard-toggle button */
+export function syncKeyboardIndicators(keyboard: KeyboardController, root: ParentNode): void {
+	for (const button of root.querySelectorAll('.wt-keyboard-toggle')) {
+		button.classList.toggle('wt-kb-active', keyboard.indicatorOn())
+	}
+}
+
 /** Default keyboard-toggle button (toolbar row2, far right) */
 export const keyboardToggleButton: ControlButton = {
 	id: 'keyboard-toggle',

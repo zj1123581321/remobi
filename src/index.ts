@@ -7,6 +7,7 @@ import type { KeyboardController } from './controls/keyboard-controller'
 import {
 	createKeyboardController,
 	reportKeyboardUnavailable,
+	syncKeyboardIndicators,
 	withKeyboardEscapeHatch,
 } from './controls/keyboard-controller'
 import { createScrollButtons } from './controls/scroll-buttons'
@@ -157,11 +158,12 @@ export function init(
 				const setup = setupKeyboard(term, config)
 				keyboard = setup.keyboard
 				const effectiveConfig = setup.effectiveConfig
+				const keyboardController = setup.keyboard
 
 				const actions = createDefaultActionRegistry({
 					font: config.font,
 					openHelp,
-					toggleKeyboard: () => keyboard.toggle(),
+					toggleKeyboard: () => keyboardController.toggle(),
 				})
 
 				// Create drawer (needed by toolbar for toggle)
@@ -188,13 +190,9 @@ export function init(
 					hooks,
 					actions,
 					comboPicker.open,
-					keyboard,
 				)
 				document.body.appendChild(toolbar)
 				await hooks.runToolbarCreated({ term, config: effectiveConfig, toolbar })
-
-				// Fail loud (T-E#6) when the keyboard mechanism is unavailable.
-				reportKeyboardUnavailable(keyboard)
 
 				// Floating button groups (always visible on touch devices)
 				if (effectiveConfig.floatingButtons.length > 0) {
@@ -211,6 +209,14 @@ export function init(
 						document.body.appendChild(floatingEl)
 					}
 				}
+
+				// Keyboard indicator (V1) — document-level so drawer and floating
+				// ⌨ buttons reflect the state too, not just the toolbar's.
+				syncKeyboardIndicators(keyboardController, document)
+				keyboardController.subscribe(() => syncKeyboardIndicators(keyboardController, document))
+
+				// Fail loud (T-E#6) when the keyboard mechanism is unavailable.
+				reportKeyboardUnavailable(keyboardController)
 
 				// Scroll buttons (opt-in — finger-drag scroll covers this by default)
 				if (config.scrollButtons.enabled) {

@@ -9,8 +9,11 @@ import {
 	createKeyboardController,
 	keyboardToggleButton,
 	reportKeyboardUnavailable,
+	syncKeyboardIndicators,
 	withKeyboardEscapeHatch,
 } from '../src/controls/keyboard-controller'
+import { createFloatingButtons } from '../src/controls/floating-buttons'
+import { createDrawer } from '../src/drawer/drawer'
 import { createHookRegistry } from '../src/hooks/registry'
 import { createToolbar } from '../src/toolbar/toolbar'
 import type { XTerminal } from '../src/types'
@@ -344,7 +347,7 @@ describe('escape hatch (V2)', () => {
 	})
 })
 
-describe('toolbar integration', () => {
+describe('renderer wiring (toolbar / drawer / floating)', () => {
 	function manualConfig() {
 		return defineConfig({
 			mobile: { keyboardMode: 'manual' },
@@ -352,85 +355,107 @@ describe('toolbar integration', () => {
 		})
 	}
 
-	test('keyboard-toggle button carries the wt-keyboard-toggle class', () => {
+	function drawerWithToggle() {
 		const config = manualConfig()
-		const { term } = mockSuppressionTerm()
-		const keyboard = createKeyboardController(term, 'manual')
-		const { element } = createToolbar(
-			term,
-			config,
-			() => {},
-			createHookRegistry(),
-			undefined,
-			undefined,
-			keyboard,
-		)
-		expect(element.querySelector('.wt-keyboard-toggle')).not.toBeNull()
-		keyboard.dispose()
-	})
+		const { drawer } = createDrawer(mockTerminal(), [keyboardToggleButton], {
+			hooks: createHookRegistry(),
+			appConfig: config,
+		})
+		return drawer
+	}
 
-	test('indicator reflects manual permission through the subscription', () => {
+	function floatingWithToggle() {
 		const config = manualConfig()
-		const { term } = mockSuppressionTerm()
-		const keyboard = createKeyboardController(term, 'manual')
-		const { element } = createToolbar(
-			term,
-			config,
-			() => {},
-			createHookRegistry(),
-			undefined,
-			undefined,
-			keyboard,
-		)
-		const button = element.querySelector('.wt-keyboard-toggle')
-		expect(button?.classList.contains('wt-kb-active')).toBe(false)
-		keyboard.toggle()
-		expect(button?.classList.contains('wt-kb-active')).toBe(true)
-		keyboard.dispose()
-	})
-
-	test('fail-loud: unavailable controller marks buttons and shows an overlay', () => {
-		const config = manualConfig()
-		const keyboard = createKeyboardController(mockTerminal(), 'manual')
-		const { element } = createToolbar(
+		const { elements } = createFloatingButtons(
 			mockTerminal(),
+			[{ position: 'top-left', buttons: [keyboardToggleButton] }],
 			config,
+			createHookRegistry(),
+			createDefaultActionRegistry({ toggleKeyboard: () => {} }),
+		)
+		return elements[0] as HTMLDivElement
+	}
+
+	test('all three renderers decorate keyboard-toggle buttons (class + touchend guard)', () => {
+		const { element: toolbar } = createToolbar(
+			mockTerminal(),
+			manualConfig(),
 			() => {},
 			createHookRegistry(),
-			undefined,
-			undefined,
-			keyboard,
 		)
-		document.body.appendChild(element)
-		reportKeyboardUnavailable(keyboard)
-		expect(document.getElementById('wt-keyboard-unavailable')).not.toBeNull()
-		expect(
-			document.querySelector('.wt-keyboard-toggle')?.classList.contains('wt-action-error'),
-		).toBe(true)
-		keyboard.dispose()
-	})
+		const drawer = drawerWithToggle()
+		const floating = floatingWithToggle()
 
-	test('keyboard-toggle prevents synthesised mouse events on touchend (探针③ race)', () => {
-		// Emulator-verified: without this, the synthesised mousedown after
-		// touchend steals the unlock focus back to the button and the soft
-		// keyboard never opens.
-		const config = defineConfig({
+		for (const root of [toolbar, drawer, floating]) {
+			const toggle = root.querySelector('.wt-keyboard-toggle')
+			expect(toggle, 'marker class missing').not.toBeNull()
+			// 探针③ race guard: synthesised mouse events must be suppressed so the
+			// unlock focus is not stolen back by the button.
+			const event = new Event('touchend', { cancelable: true })
+			toggle?.dispatchEvent(event)
+			expect(event.defaultPrevented).toBe(true)
+		}
+
+		// Plain buttons keep the default synthesised-mouse behaviour
+		const plainConfig = defineConfig({
 			toolbar: {
 				row1: [
 					{ id: 'q', label: 'q', description: 'Send q key', action: { type: 'send', data: 'q' } },
 				],
-				row2: [keyboardToggleButton],
 			},
 		})
-		const { element } = createToolbar(mockTerminal(), config, () => {}, createHookRegistry())
-		const toggle = element.querySelector('.wt-keyboard-toggle')
-		const plain = element.querySelector('button:not(.wt-keyboard-toggle)')
-		const toggleEvent = new Event('touchend', { cancelable: true })
-		toggle?.dispatchEvent(toggleEvent)
-		expect(toggleEvent.defaultPrevented).toBe(true)
+		const { element: plainToolbar } = createToolbar(
+			mockTerminal(),
+			plainConfig,
+			() => {},
+			createHookRegistry(),
+		)
+		const plain = plainToolbar.querySelector('button')
 		const plainEvent = new Event('touchend', { cancelable: true })
 		plain?.dispatchEvent(plainEvent)
 		expect(plainEvent.defaultPrevented).toBe(false)
+	})
+
+	test('indicator syncs across toolbar, drawer, and floating buttons', () => {
+		const { term } = mockSuppressionTerm()
+		const keyboard = createKeyboardController(term, 'manual')
+		document.body.appendChild(
+			createToolbar(mockTerminal(), manualConfig(), () => {}, createHookRegistry()).element,
+		)
+		document.body.appendChild(drawerWithToggle())
+		document.body.appendChild(floatingWithToggle())
+
+		// Mirrors the index.ts wiring
+		syncKeyboardIndicators(keyboard, document)
+		keyboard.subscribe(() => syncKeyboardIndicators(keyboard, document))
+
+		expect(document.querySelectorAll('.wt-keyboard-toggle')).toHaveLength(3)
+		for (const button of document.querySelectorAll('.wt-keyboard-toggle')) {
+			expect(button.classList.contains('wt-kb-active')).toBe(false)
+		}
+		keyboard.toggle()
+		for (const button of document.querySelectorAll('.wt-keyboard-toggle')) {
+			expect(button.classList.contains('wt-kb-active')).toBe(true)
+		}
+		keyboard.dispose()
+	})
+
+	test('fail-loud: unavailable controller marks every ⌨ button and shows an overlay', () => {
+		const keyboard = createKeyboardController(mockTerminal(), 'manual')
+		document.body.appendChild(
+			createToolbar(mockTerminal(), manualConfig(), () => {}, createHookRegistry()).element,
+		)
+		document.body.appendChild(drawerWithToggle())
+		document.body.appendChild(floatingWithToggle())
+
+		reportKeyboardUnavailable(keyboard)
+		expect(document.getElementById('wt-keyboard-unavailable')).not.toBeNull()
+		const toggles = document.querySelectorAll('.wt-keyboard-toggle')
+		expect(toggles).toHaveLength(3)
+		for (const button of toggles) {
+			expect(button.classList.contains('wt-action-error')).toBe(true)
+		}
+		keyboard.dispose()
 	})
 })
 

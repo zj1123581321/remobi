@@ -1,5 +1,6 @@
 import { createDefaultActionRegistry } from '../actions/registry'
 import type { ActionRegistry } from '../actions/registry'
+import { decorateKeyboardToggleButton } from '../controls/keyboard-controller'
 import type { HookRegistry } from '../hooks/registry'
 import type { ControlButton, RemobiConfig, XTerminal } from '../types'
 import { el } from '../util/dom'
@@ -46,6 +47,9 @@ export function createDrawer(
 	for (const buttonDef of buttons) {
 		const button = el('button')
 		button.textContent = buttonDef.label
+		if (buttonDef.action.type === 'keyboard-toggle') {
+			decorateKeyboardToggleButton(button)
+		}
 		onTap(button, () => {
 			const kbWasOpen = isKeyboardOpen()
 			haptic()

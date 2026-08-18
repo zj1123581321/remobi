@@ -1,5 +1,6 @@
 import type { ActionRegistry } from '../actions/registry'
 import type { HookRegistry } from '../hooks/registry'
+import { decorateKeyboardToggleButton } from './keyboard-controller'
 import type { ControlButton, FloatingButtonGroup, RemobiConfig, XTerminal } from '../types'
 import { el } from '../util/dom'
 import { haptic } from '../util/haptic'
@@ -24,6 +25,9 @@ function createGroupButton(
 	const button = el('button')
 	button.textContent = def.label
 	button.setAttribute('aria-label', def.description)
+	if (def.action.type === 'keyboard-toggle') {
+		decorateKeyboardToggleButton(button)
+	}
 
 	onTap(button, () => {
 		const kbWasOpen = isKeyboardOpen()
