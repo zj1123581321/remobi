@@ -309,6 +309,11 @@ async function main(): Promise<void> {
   //   // Always-visible top-left buttons (touch devices only)
   //   { position: 'top-left', buttons: [{ id: 'zoom', label: 'Zoom', description: 'Toggle pane zoom', action: { type: 'send', data: '\\x02z' } }] },
   // ],
+  // scrollButtons: {
+  //   enabled: false,             // floating PgUp/PgDn arrows on the right edge (default off — drag-to-scroll covers them)
+  // },
+  // Drawer also supports { type: 'font-size', delta: -2 } and { type: 'help' } actions
+  // (defaults include Font -/Font +/Guide buttons).
   // pwa: {
   //   enabled: true,              // enable PWA manifest + meta tags (used by remobi serve)
   //   shortName: 'remobi',        // short name for home screen icon (defaults to name)
