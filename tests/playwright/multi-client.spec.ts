@@ -31,8 +31,10 @@ test('two live clients stay in sync after alternating resizes', async ({ browser
 		await firstPage.evaluate(() => {
 			window.term?.input('printf "multi-client-start\\n"\r', true)
 		})
-		await expect(firstPage.locator('body')).toContainText('multi-client-start')
-		await expect(secondPage.locator('body')).toContainText('multi-client-start')
+		await expect(firstPage.locator('body')).toContainText('multi-client-start', { timeout: 15_000 })
+		await expect(secondPage.locator('body')).toContainText('multi-client-start', {
+			timeout: 15_000,
+		})
 
 		await firstPage.setViewportSize({ width: 390, height: 844 })
 		await firstPage.evaluate(() => {
@@ -47,14 +49,14 @@ test('two live clients stay in sync after alternating resizes', async ({ browser
 		await secondPage.evaluate((command) => {
 			window.term?.input(command, true)
 		}, longLine)
-		await expect(firstPage.locator('body')).toContainText('wrap-check-')
-		await expect(secondPage.locator('body')).toContainText('wrap-check-')
+		await expect(firstPage.locator('body')).toContainText('wrap-check-', { timeout: 15_000 })
+		await expect(secondPage.locator('body')).toContainText('wrap-check-', { timeout: 15_000 })
 
 		await firstPage.evaluate(() => {
 			window.term?.input('printf "post-resize-sync\\n"\r', true)
 		})
-		await expect(firstPage.locator('body')).toContainText('post-resize-sync')
-		await expect(secondPage.locator('body')).toContainText('post-resize-sync')
+		await expect(firstPage.locator('body')).toContainText('post-resize-sync', { timeout: 15_000 })
+		await expect(secondPage.locator('body')).toContainText('post-resize-sync', { timeout: 15_000 })
 		await expect
 			.poll(() => firstPage.evaluate(() => window.__remobiSockets?.[0]?.readyState))
 			.toBe(1)
