@@ -46,27 +46,20 @@ export type {
 export type { HookRegistry, SendSource } from './hooks/registry'
 
 /**
- * Read the persisted font size (localStorage `remobi:fontSize`).
- * Returns undefined when absent or unreadable (iOS private mode throws).
+ * Read the persisted font size (localStorage `remobi:fontSize`), falling back
+ * to the config default when absent or unreadable (iOS private mode throws).
  */
-function readPersistedFontSize(): number | undefined {
+function readPersistedFontSize(font: RemobiConfig['font']): number {
 	try {
 		const raw = localStorage.getItem('remobi:fontSize')
-		if (raw === null) return undefined
-		const size = Number(raw)
-		return Number.isFinite(size) ? size : undefined
+		if (raw !== null) {
+			const size = Number(raw)
+			if (Number.isFinite(size)) return size
+		}
 	} catch (error) {
 		console.error('remobi: failed to read persisted font size', error)
-		return undefined
 	}
-}
-
-/** Apply theme and font — a persisted font size (user-adjusted via the
- *  drawer's Font -/+ buttons) wins over the config default */
-function applyTermAppearance(term: XTerminal, config: RemobiConfig): void {
-	applyTheme(term, config.theme)
-	term.options.fontSize = readPersistedFontSize() ?? config.font.mobileSizeDefault
-	term.options.fontFamily = config.font.family
+	return font.mobileSizeDefault
 }
 
 /** Detect touch device */
@@ -161,8 +154,11 @@ export function init(
 					return
 				}
 
-				// Apply theme and font (persisted font size wins over config)
-				applyTermAppearance(term, config)
+				// Apply theme and font — a persisted font size (user-adjusted via
+				// the drawer's Font -/+ buttons) wins over the config default
+				applyTheme(term, config.theme)
+				term.options.fontSize = readPersistedFontSize(config.font)
+				term.options.fontFamily = config.font.family
 				startupResize.scheduleImmediate()
 
 				// CSS is injected as a <style> tag by the build script (build.ts)
