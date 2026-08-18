@@ -87,43 +87,6 @@ body {
 	background: #585b70;
 }
 
-/* Font controls + help button */
-#wt-font-controls {
-	display: none;
-	position: fixed;
-	top: 8px;
-	right: 8px;
-	z-index: 9999;
-	gap: 4px;
-	-webkit-user-select: none;
-	user-select: none;
-}
-
-@media (pointer: coarse) {
-	#wt-font-controls {
-		display: flex;
-	}
-}
-
-#wt-font-controls button {
-	background: #45475a;
-	color: #cdd6f4;
-	border: none;
-	border-radius: 6px;
-	min-width: 44px;
-	min-height: 44px;
-	font-size: 18px;
-	font-weight: 700;
-	cursor: pointer;
-	touch-action: manipulation;
-	opacity: 0.8;
-}
-
-#wt-font-controls button:active {
-	opacity: 1;
-	background: #585b70;
-}
-
 /* Tmux drawer */
 #wt-backdrop {
 	display: none;

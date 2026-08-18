@@ -110,10 +110,9 @@ interface HelpOverlayResult {
 	readonly close: () => void
 }
 
-/** Create the help overlay and wire the help button */
+/** Create the help overlay — opened via the `help` button action */
 export function createHelpOverlay(
 	term: XTerminal,
-	helpButton: HTMLButtonElement,
 	config: RemobiConfig,
 	version?: string,
 ): HelpOverlayResult {
@@ -137,11 +136,6 @@ export function createHelpOverlay(
 			close()
 			conditionalFocus(term, kbWasOpen)
 		}
-	})
-
-	onTap(helpButton, () => {
-		haptic()
-		open()
 	})
 
 	return { element: overlay, open, close }

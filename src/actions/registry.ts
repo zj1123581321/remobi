@@ -1,4 +1,5 @@
 import type { ButtonAction, FontConfig, XTerminal } from '../types'
+import { resizeTerm } from '../util/terminal'
 
 export interface ActionExecutionContext {
 	readonly term: XTerminal
@@ -77,7 +78,23 @@ function describePrefixByte(data: string): string | null {
 	return null
 }
 
-export function createDefaultActionRegistry(): ActionRegistry {
+/** Change terminal font size by delta, clamped to config range */
+function changeFontSize(term: XTerminal, delta: number, font: FontConfig): void {
+	const current = term.options.fontSize
+	const next = Math.max(font.sizeRange[0], Math.min(font.sizeRange[1], current + delta))
+	if (next !== current) {
+		term.options.fontSize = next
+		resizeTerm()
+	}
+}
+
+/** Dependencies for the default handlers that need app-level wiring */
+export interface DefaultActionDeps {
+	readonly font?: FontConfig
+	readonly openHelp?: () => void
+}
+
+export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): ActionRegistry {
 	const registry = createActionRegistry()
 	let pasteQueue: Promise<void> = Promise.resolve()
 
@@ -169,6 +186,30 @@ export function createDefaultActionRegistry(): ActionRegistry {
 		} else {
 			context.focusIfNeeded()
 		}
+	})
+
+	registry.register('font-size', (action, context) => {
+		if (action.type !== 'font-size') return
+		const font = context.font ?? deps.font
+		if (!font) {
+			// Fail loud: a font-size button without font config is a wiring bug.
+			const error = new Error('remobi: font-size action requires a FontConfig (context.font or registry deps)')
+			console.error(error)
+			throw error
+		}
+		changeFontSize(context.term, action.delta, font)
+		context.focusIfNeeded()
+	})
+
+	registry.register('help', (_action, context) => {
+		const openHelp = context.openHelp ?? deps.openHelp
+		if (!openHelp) {
+			// Fail loud: a help button without an openHelp callback is a wiring bug.
+			const error = new Error('remobi: help action requires an openHelp callback (context.openHelp or registry deps)')
+			console.error(error)
+			throw error
+		}
+		openHelp()
 	})
 
 	return registry

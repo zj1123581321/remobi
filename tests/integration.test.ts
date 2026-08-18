@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { createDefaultActionRegistry } from '../src/actions/registry'
 import { defaultConfig } from '../src/config'
 import { createFloatingButtons } from '../src/controls/floating-buttons'
-import { createFontControls } from '../src/controls/font-size'
 import { createHelpOverlay } from '../src/controls/help'
 import { createDrawer } from '../src/drawer/drawer'
 import { createHookRegistry } from '../src/hooks/registry'
 import { createToolbar } from '../src/toolbar/toolbar'
+import type { ControlButton } from '../src/types'
 import { _resetTouchGuard } from '../src/util/tap'
 import { mockTerminal } from './fixtures'
 
@@ -120,24 +120,6 @@ describe('drawer integration', () => {
 	})
 })
 
-describe('font controls integration', () => {
-	test('creates three buttons (-, +, ?)', () => {
-		const term = mockTerminal()
-		const { element } = createFontControls(term, defaultConfig.font)
-
-		document.body.appendChild(element)
-
-		const buttons = element.querySelectorAll('button')
-		expect(buttons).toHaveLength(3)
-	})
-
-	test('returns help button reference', () => {
-		const term = mockTerminal()
-		const { helpButton } = createFontControls(term, defaultConfig.font)
-		expect(helpButton.textContent).toBe('?')
-	})
-})
-
 describe('help overlay integration', () => {
 	beforeEach(() => {
 		_resetTouchGuard()
@@ -145,8 +127,7 @@ describe('help overlay integration', () => {
 
 	test('creates help overlay', () => {
 		const term = mockTerminal()
-		const { helpButton } = createFontControls(term, defaultConfig.font)
-		const { element } = createHelpOverlay(term, helpButton, defaultConfig)
+		const { element } = createHelpOverlay(term, defaultConfig)
 
 		document.body.appendChild(element)
 
@@ -157,8 +138,7 @@ describe('help overlay integration', () => {
 
 	test('shows version when provided', () => {
 		const term = mockTerminal()
-		const { helpButton } = createFontControls(term, defaultConfig.font)
-		const { element } = createHelpOverlay(term, helpButton, defaultConfig, '1.2.3')
+		const { element } = createHelpOverlay(term, defaultConfig, '1.2.3')
 
 		document.body.appendChild(element)
 
@@ -169,34 +149,74 @@ describe('help overlay integration', () => {
 
 	test('shows dev version with hash', () => {
 		const term = mockTerminal()
-		const { helpButton } = createFontControls(term, defaultConfig.font)
-		const { element } = createHelpOverlay(term, helpButton, defaultConfig, '0.2.6-dev+abc1234')
+		const { element } = createHelpOverlay(term, defaultConfig, '0.2.6-dev+abc1234')
 
 		expect(element.innerHTML).toContain('remobi v0.2.6-dev+abc1234')
 	})
 
 	test('omits version when not provided', () => {
 		const term = mockTerminal()
-		const { helpButton } = createFontControls(term, defaultConfig.font)
-		const { element } = createHelpOverlay(term, helpButton, defaultConfig)
+		const { element } = createHelpOverlay(term, defaultConfig)
 
 		expect(element.querySelector('.wt-help-version')).toBeNull()
 	})
 
-	test('synthesised click after touchend does not immediately close overlay', () => {
+	test('help action in drawer opens the overlay', async () => {
 		const term = mockTerminal()
-		const { element: fontControls, helpButton } = createFontControls(term, defaultConfig.font)
-		const { element: overlay } = createHelpOverlay(term, helpButton, defaultConfig)
-
-		document.body.appendChild(fontControls)
+		const { element: overlay, open } = createHelpOverlay(term, defaultConfig)
 		document.body.appendChild(overlay)
 
-		// Simulate touch on ? button — touchend opens the overlay
-		helpButton.dispatchEvent(new Event('touchend', { bubbles: true }))
+		const actions = createDefaultActionRegistry({ font: defaultConfig.font, openHelp: open })
+		const guideButton: ControlButton = {
+			id: 'guide',
+			label: 'Guide',
+			description: 'Open the remobi help guide',
+			action: { type: 'help' },
+		}
+		const { backdrop, drawer } = createDrawer(term, [guideButton], {
+			hooks: createHookRegistry(),
+			appConfig: defaultConfig,
+			actions,
+		})
+		document.body.appendChild(backdrop)
+		document.body.appendChild(drawer)
+
+		const button = drawer.querySelector('#wt-drawer-grid button')
+		expect(button?.textContent).toBe('Guide')
+		button?.dispatchEvent(new Event('touchend', { bubbles: true }))
+		await new Promise((resolve) => setTimeout(resolve, 0))
+
+		expect(overlay.style.display).toBe('block')
+	})
+
+	test('synthesised click after touchend does not immediately close overlay', async () => {
+		const term = mockTerminal()
+		const { element: overlay, open } = createHelpOverlay(term, defaultConfig)
+		document.body.appendChild(overlay)
+
+		const actions = createDefaultActionRegistry({ font: defaultConfig.font, openHelp: open })
+		const guideButton: ControlButton = {
+			id: 'guide',
+			label: 'Guide',
+			description: 'Open the remobi help guide',
+			action: { type: 'help' },
+		}
+		const { backdrop, drawer } = createDrawer(term, [guideButton], {
+			hooks: createHookRegistry(),
+			appConfig: defaultConfig,
+			actions,
+		})
+		document.body.appendChild(backdrop)
+		document.body.appendChild(drawer)
+
+		// Simulate touch on the Guide button — touchend opens the overlay
+		const button = drawer.querySelector('#wt-drawer-grid button')
+		button?.dispatchEvent(new Event('touchend', { bubbles: true }))
+		await new Promise((resolve) => setTimeout(resolve, 0))
 		expect(overlay.style.display).toBe('block')
 
 		// Browser synthesises click ~4ms later. On a real device the overlay
-		// (higher z-index) now covers the ? button area, so hit-testing targets
+		// (higher z-index) now covers the Guide button area, so hit-testing targets
 		// the overlay element itself. Simulate this by dispatching click on the
 		// overlay with target === overlay.
 		overlay.dispatchEvent(new Event('click', { bubbles: true }))
@@ -207,7 +227,6 @@ describe('help overlay integration', () => {
 
 	test('renders configured button descriptions and no stale Claude section', () => {
 		const term = mockTerminal()
-		const { helpButton } = createFontControls(term, defaultConfig.font)
 		const config = {
 			...defaultConfig,
 			toolbar: {
@@ -222,7 +241,7 @@ describe('help overlay integration', () => {
 				],
 			},
 		}
-		const { element } = createHelpOverlay(term, helpButton, config)
+		const { element } = createHelpOverlay(term, config)
 
 		expect(element.innerHTML).toContain('Custom escape label')
 		expect(element.innerHTML).toContain('&lt;Esc&gt;')
@@ -442,7 +461,6 @@ describe('floating buttons integration', () => {
 
 	test('single group shows "Floating Buttons" in help overlay', () => {
 		const term = mockTerminal()
-		const { helpButton } = createFontControls(term, defaultConfig.font)
 		const config = {
 			...defaultConfig,
 			floatingButtons: [
@@ -459,7 +477,7 @@ describe('floating buttons integration', () => {
 				},
 			],
 		}
-		const { element } = createHelpOverlay(term, helpButton, config)
+		const { element } = createHelpOverlay(term, config)
 
 		expect(element.innerHTML).toContain('Floating Buttons')
 		expect(element.innerHTML).not.toContain('(top-left)')
@@ -468,7 +486,6 @@ describe('floating buttons integration', () => {
 
 	test('multiple groups show position label in help overlay', () => {
 		const term = mockTerminal()
-		const { helpButton } = createFontControls(term, defaultConfig.font)
 		const config = {
 			...defaultConfig,
 			floatingButtons: [
@@ -496,7 +513,7 @@ describe('floating buttons integration', () => {
 				},
 			],
 		}
-		const { element } = createHelpOverlay(term, helpButton, config)
+		const { element } = createHelpOverlay(term, config)
 
 		expect(element.innerHTML).toContain('Floating Buttons (top-left)')
 		expect(element.innerHTML).toContain('Floating Buttons (bottom-right)')
@@ -504,8 +521,7 @@ describe('floating buttons integration', () => {
 
 	test('help overlay has no floating buttons section when unconfigured', () => {
 		const term = mockTerminal()
-		const { helpButton } = createFontControls(term, defaultConfig.font)
-		const { element } = createHelpOverlay(term, helpButton, defaultConfig)
+		const { element } = createHelpOverlay(term, defaultConfig)
 
 		expect(element.innerHTML).not.toContain('Floating Buttons')
 	})
