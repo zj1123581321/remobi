@@ -53,7 +53,11 @@ export function createDrawer(
 		onTap(button, () => {
 			const kbWasOpen = isKeyboardOpen()
 			haptic()
-			close()
+			// Adjust/lookup actions stay open so they can be tapped repeatedly
+			// (font sizing, consulting the guide); everything else closes.
+			const keepsDrawerOpen =
+				buttonDef.action.type === 'font-size' || buttonDef.action.type === 'help'
+			if (!keepsDrawerOpen) close()
 
 			async function sendWithHooks(data: string): Promise<void> {
 				const before = await hooks.runBeforeSendData({
