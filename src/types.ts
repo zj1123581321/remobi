@@ -6,6 +6,8 @@ export type ButtonAction =
 	| { readonly type: 'prefix'; readonly data: string }
 	| { readonly type: 'combo-picker' }
 	| { readonly type: 'drawer-toggle' }
+	| { readonly type: 'font-size'; readonly delta: number }
+	| { readonly type: 'help' }
 
 /** A generic control button definition used by toolbar and drawer */
 export interface ControlButton {

@@ -1,5 +1,5 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createActionRegistry, createDefaultActionRegistry } from '../src/actions/registry'
 import type { ButtonAction } from '../src/types'
 import { mockTerminal } from './fixtures'
@@ -9,22 +9,27 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+	vi.restoreAllMocks()
 	GlobalRegistrator.unregister()
 })
 
 describe('createActionRegistry', () => {
-	test('returns false for unregistered action', async () => {
+	test('fails loud for unregistered action', async () => {
 		const registry = createActionRegistry()
-		const executed = await registry.execute(
-			{ type: 'send', data: 'x' },
-			{
-				term: mockTerminal(),
-				kbWasOpen: false,
-				focusIfNeeded() {},
-				async sendText(_data: string) {},
-			},
-		)
-		expect(executed).toBe(false)
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+		await expect(
+			registry.execute(
+				{ type: 'send', data: 'x' },
+				{
+					term: mockTerminal(),
+					kbWasOpen: false,
+					focusIfNeeded() {},
+					async sendText(_data: string) {},
+				},
+			),
+		).rejects.toThrow('remobi: no handler registered for action type "send"')
+		expect(errorSpy).toHaveBeenCalled()
 	})
 
 	test('runs registered handler', async () => {

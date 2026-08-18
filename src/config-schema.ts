@@ -24,6 +24,11 @@ const ctrlModifierActionSchema = v.strictObject({ type: v.literal('ctrl-modifier
 const pasteActionSchema = v.strictObject({ type: v.literal('paste') })
 const comboPickerActionSchema = v.strictObject({ type: v.literal('combo-picker') })
 const drawerToggleActionSchema = v.strictObject({ type: v.literal('drawer-toggle') })
+const fontSizeActionSchema = v.strictObject({
+	type: v.literal('font-size'),
+	delta: finiteNumber,
+})
+const helpActionSchema = v.strictObject({ type: v.literal('help') })
 
 const buttonActionSchema = v.variant('type', [
 	sendActionSchema,
@@ -32,6 +37,8 @@ const buttonActionSchema = v.variant('type', [
 	pasteActionSchema,
 	comboPickerActionSchema,
 	drawerToggleActionSchema,
+	fontSizeActionSchema,
+	helpActionSchema,
 ])
 
 // --- Control button ---

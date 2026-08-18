@@ -1,4 +1,4 @@
-import type { ButtonAction, XTerminal } from '../types'
+import type { ButtonAction, FontConfig, XTerminal } from '../types'
 
 export interface ActionExecutionContext {
 	readonly term: XTerminal
@@ -14,6 +14,10 @@ export interface ActionExecutionContext {
 		readonly description?: string
 	}) => void
 	readonly toggleCtrlModifier?: () => void
+	/** Font config for the font-size action — supplied per call or via registry deps */
+	readonly font?: FontConfig
+	/** Opens the help overlay — supplied per call or via registry deps */
+	readonly openHelp?: () => void
 }
 
 type ActionHandler = (action: ButtonAction, context: ActionExecutionContext) => void | Promise<void>
@@ -33,7 +37,12 @@ export function createActionRegistry(): ActionRegistry {
 
 	async function execute(action: ButtonAction, context: ActionExecutionContext): Promise<boolean> {
 		const handler = handlers.get(action.type)
-		if (!handler) return false
+		if (!handler) {
+			// Fail loud: an unregistered action must never become a silent dead button.
+			const error = new Error(`remobi: no handler registered for action type "${action.type}"`)
+			console.error(error)
+			throw error
+		}
 
 		if (action.type === 'send' || action.type === 'prefix') {
 			const current = sendQueue.then(async () => {
