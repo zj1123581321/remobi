@@ -265,11 +265,12 @@ async function main(): Promise<void> {
   // theme: 'catppuccin-mocha',
   // font: {
   //   family: 'JetBrainsMono NFM, monospace',
-  //   mobileSizeDefault: 16,
+  //   mobileSizeDefault: 13,   // drawer Font -/+ adjustments persist (localStorage)
   //   sizeRange: [8, 32],
   // },
   //
-  // Toolbar/drawer accept a plain array (replace) or a function (transform):
+  // Toolbar/drawer accept a plain array (replace) or a function (transform).
+  // The toolbar is a single row by default (row2 defaults to an empty array):
   //
   // toolbar: { row1: [{ id, label, description, action }], row2: [...] },
   //
@@ -280,7 +281,7 @@ async function main(): Promise<void> {
   // },
   //
   // toolbar: {
-  //   row2: (defaults) => defaults.filter((b) => b.id !== 'q'),
+  //   row1: (defaults) => defaults.filter((b) => b.id !== 'tab'),
   // },
   //
   // drawer: {
@@ -306,7 +307,7 @@ async function main(): Promise<void> {
   //   widthThreshold: 768,       // px — default matches phone/tablet breakpoint
   //   keyboardMode: 'auto',      // 'auto': tap terminal to open the soft keyboard (default).
   //                              // 'manual': keyboard stays suppressed; only the ⌨ button
-  //                              // (toolbar row2) toggles it. A ⌨ button is injected if none.
+  //                              // (toolbar row1) toggles it. A ⌨ button is injected if none.
   // },
   // floatingButtons: [
   //   // Always-visible top-left buttons (touch devices only)
@@ -316,8 +317,8 @@ async function main(): Promise<void> {
   //   enabled: false,             // floating PgUp/PgDn arrows on the right edge (default off — drag-to-scroll covers them)
   // },
   // Drawer also supports { type: 'font-size', delta: -2 } and { type: 'help' } actions
-  // (defaults include Font -/Font +/Guide buttons). { type: 'keyboard-toggle' } is the
-  // ⌨ button (default: toolbar row2, far right).
+  // (defaults include Font -/Font +/Guide buttons; these keep the drawer open for
+  // repeat taps). { type: 'keyboard-toggle' } is the ⌨ button (default: toolbar row1).
   // pwa: {
   //   enabled: true,              // enable PWA manifest + meta tags (used by remobi serve)
   //   shortName: 'remobi',        // short name for home screen icon (defaults to name)

@@ -294,12 +294,12 @@ Tell the user:
 3. How to access from their phone (URL from deployment choice)
 4. PWA install: on mobile, tap "Add to Home Screen" for a standalone app experience
 5. Built-in mobile controls (these work out of the box, no config needed):
-   - **Font size**: `Font -`/`Font +` buttons in the command drawer (`☰ More`). Config: `font.mobileSizeDefault` (default 16px), `font.sizeRange` (default [8, 32]), steps by 2
+   - **Font size**: `Font -`/`Font +` buttons in the command drawer (`☰ More`) — tapping them keeps the drawer open for repeat taps, and the adjusted size persists across reloads (localStorage `remobi:fontSize`). Config: `font.mobileSizeDefault` (default 13px), `font.sizeRange` (default [8, 32]), steps by 2
    - **Scroll buttons**: Opt-in floating arrow buttons on the right edge — off by default, enable with `scrollButtons.enabled: true`. Long-press for rapid repeat (300ms delay, 100ms interval). Auto-fade after 2s. Strategy follows `gestures.scroll.strategy` (`wheel` sends mouse events, `keys` sends PageUp/PageDown)
    - **Combo picker**: Modal for arbitrary key combos — type `C-s`, `M-Enter`, `Alt-x`, `C-[`. Supports Ctrl, Alt, Shift modifiers + named keys (PageUp, Escape, etc.). Opened via drawer "Combo" button
    - **Help overlay**: `Guide` button in the command drawer. Shows all configured buttons, gestures, and floating buttons in tables. Config-driven, updates when you change buttons
-   - **Landscape + keyboard**: When on-screen keyboard opens in landscape, row 2 auto-hides (except the ⌨ button) and buttons shrink. No config needed
-   - **Keyboard sovereignty**: `mobile.keyboardMode` — `'auto'` (default): tapping the terminal opens the soft keyboard, ⌨ is momentary focus/blur. `'manual'`: the keyboard never pops up on terminal taps — only the ⌨ button (toolbar row2, far right) grants/revokes input permission. If a manual-mode config has no ⌨ button anywhere, remobi injects one into row2 so the keyboard stays reachable
+   - **Landscape + keyboard**: When on-screen keyboard opens in landscape, row 2 auto-hides (except the ⌨ button) and buttons shrink — only if a second row exists; the default single-row toolbar stays fully visible. No config needed
+   - **Keyboard sovereignty**: `mobile.keyboardMode` — `'auto'` (default): tapping the terminal opens the soft keyboard, ⌨ is momentary focus/blur. `'manual'`: the keyboard never pops up on terminal taps — only the ⌨ button (toolbar row1, next to ☰ More) grants/revokes input permission. If a manual-mode config has no ⌨ button anywhere, remobi injects one into row1 so the keyboard stays reachable
 6. PWA: enabled by default. On mobile Safari/Chrome, tap Share then "Add to Home Screen" for standalone app experience. Config options:
    - `pwa.enabled` (default `true`) — set `false` to disable manifest + icons
    - `pwa.themeColor` (default `'#1e1e2e'`) — status bar colour on mobile
@@ -330,7 +330,7 @@ name  theme  font  toolbar  drawer  gestures  mobile  floatingButtons  scrollBut
 | `drawer-toggle`  | (none)              | Opens/closes command drawer |
 | `font-size`      | `delta: number`     | Adjust terminal font size, clamped to `font.sizeRange` |
 | `help`           | (none)              | Opens the help overlay |
-| `keyboard-toggle` | (none)             | Toggles the soft keyboard. Default on toolbar row2 (far right). In `mobile.keyboardMode: 'manual'` it is the only way to summon the keyboard; remobi injects one into row2 if the config has none |
+| `keyboard-toggle` | (none)             | Toggles the soft keyboard. Default on toolbar row1 (next to ☰ More). In `mobile.keyboardMode: 'manual'` it is the only way to summon the keyboard; remobi injects one into row1 if the config has none |
 
 Non-`send`/`prefix` actions must NOT have `data` or `keyLabel` — the validator rejects them.
 
@@ -356,7 +356,7 @@ Two forms — pick the least invasive:
 toolbar: { row1: [{ id, label, description, action }, ...] }
 
 // 2. Transform (function receives defaults, returns new array)
-toolbar: { row2: (defaults) => defaults.filter(b => b.id !== 'q') }
+toolbar: { row1: (defaults) => defaults.filter(b => b.id !== 'tab') }
 
 // Function form covers all operations via standard JS:
 // - Append:  (d) => [...d, newBtn]
@@ -384,35 +384,24 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 
 ### Default button IDs
 
-**Toolbar row 1** (10 buttons):
+**Toolbar row 1** (10 buttons — the only row by default; moshi-style single row):
 
 | `id` | `label` | `action` |
 |------|---------|----------|
 | `esc` | Esc | `send` `\x1b` |
-| `tmux-prefix` | Prefix | `prefix` `\x02` (sends prefix then opens combo picker for follow-up key) |
+| `ctrl` | Ctrl | `ctrl-modifier` (sticky Ctrl for the next key) |
 | `tab` | Tab | `send` `\t` |
-| `shift-tab` | S-Tab | `send` `\x1b[Z` |
-| `left` | <- | `send` `\x1b[D` |
+| `tmux-prefix` | Prefix | `prefix` `\x02` (sends prefix then opens combo picker for follow-up key) |
 | `up` | up arrow | `send` `\x1b[A` |
 | `down` | down arrow | `send` `\x1b[B` |
-| `right` | -> | `send` `\x1b[C` |
-| `ctrl-c` | C-c | `send` `\x03` |
 | `enter` | enter | `send` `\r` |
-
-**Toolbar row 2** (8 buttons):
-
-| `id` | `label` | `action` |
-|------|---------|----------|
-| `q` | q | `send` `q` |
-| `alt-enter` | M-enter | `send` `\x1b\r` |
-| `ctrl-d` | C-d | `send` `\x04` |
-| `drawer-toggle` | hamburger More | `drawer-toggle` |
 | `paste` | Paste | `paste` |
-| `backspace` | backspace | `send` `\x7f` |
-| `space` | Space | `send` `' '` |
 | `keyboard-toggle` | keyboard ⌨ | `keyboard-toggle` |
+| `drawer-toggle` | hamburger More | `drawer-toggle` |
 
-**Drawer** (15 buttons):
+**Toolbar row 2**: empty by default (single-row toolbar). Set `toolbar.row2` to opt into a second row.
+
+**Drawer** (24 buttons — includes the keys removed from the toolbar: `shift-tab`, `left`, `right`, `ctrl-c`, `ctrl-d`, `q`, `alt-enter`, `space`, `backspace`):
 
 | `id` | `label` | `action` |
 |------|---------|----------|
@@ -431,6 +420,15 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `font-decrease` | Font - | `font-size` `delta: -2` |
 | `font-increase` | Font + | `font-size` `delta: 2` |
 | `guide` | Guide | `help` |
+| `shift-tab` | S-Tab | `send` `\x1b[Z` |
+| `left` | <- | `send` `\x1b[D` |
+| `right` | -> | `send` `\x1b[C` |
+| `ctrl-c` | C-c | `send` `\x03` |
+| `ctrl-d` | C-d | `send` `\x04` |
+| `q` | q | `send` `q` |
+| `alt-enter` | M-enter | `send` `\x1b\r` |
+| `space` | Space | `send` `' '` |
+| `backspace` | backspace | `send` `\x7f` |
 
 ### Gestures
 
@@ -470,7 +468,7 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 |-------|---------|-------|
 | `font.family` | `'JetBrainsMono NFM, monospace'` | CSS font-family |
 | `font.cdnUrl` | jsdelivr nerdfont URL | CSS file for web font |
-| `font.mobileSizeDefault` | `16` | px, applied on mobile |
+| `font.mobileSizeDefault` | `13` | px, applied on mobile. User adjustments via the drawer Font −/+ buttons persist in localStorage (`remobi:fontSize`) and win over this default |
 | `font.sizeRange` | `[8, 32]` | Min/max for the Font −/+ drawer buttons |
 
 ### PWA

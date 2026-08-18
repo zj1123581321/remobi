@@ -225,23 +225,19 @@ Create `remobi.config.ts` (or run `remobi init`):
 export default {
   font: {
     family: 'JetBrainsMono NFM, monospace',
-    mobileSizeDefault: 16,
+    mobileSizeDefault: 13,   // adjusted sizes (drawer Font -/+) persist in localStorage
     sizeRange: [8, 32],
   },
   toolbar: {
+    // Single row by default (10 keys): Esc, Ctrl, Tab, Prefix, up, down, Enter,
+    // Paste, keyboard-toggle, drawer-toggle. row2 defaults to empty — set it to
+    // opt into a second row.
     row1: [
       { id: 'esc', label: 'Esc', description: 'Send Escape key', action: { type: 'send', data: '\x1b' } },
-      { id: 'tmux-prefix', label: 'Prefix', description: 'Send tmux prefix key (Ctrl-B)', action: { type: 'send', data: '\x02' } },
+      { id: 'ctrl', label: 'Ctrl', description: 'Sticky Ctrl modifier', action: { type: 'ctrl-modifier' } },
       // ...
     ],
-    row2: [
-      { id: 'alt-enter', label: 'M-↵', description: 'Send Alt+Enter (ESC + Enter)', action: { type: 'send', data: '\x1b\r' } },
-      { id: 'drawer-toggle', label: '☰ More', description: 'Open command drawer', action: { type: 'drawer-toggle' } },
-      { id: 'paste', label: 'Paste', description: 'Paste from clipboard', action: { type: 'paste' } },
-      { id: 'backspace', label: '⌫', description: 'Send Backspace key', action: { type: 'send', data: '\x7f' } },
-      { id: 'keyboard-toggle', label: '⌨', description: 'Toggle the soft keyboard', action: { type: 'keyboard-toggle' } },
-      // ...
-    ],
+    row2: [],
   },
   drawer: {
     buttons: [
@@ -274,7 +270,7 @@ export default {
     widthThreshold: 768,   // px — default matches common phone/tablet breakpoint
     keyboardMode: 'auto',  // 'auto': tapping the terminal opens the soft keyboard.
                            // 'manual': the keyboard stays suppressed — only the ⌨
-                           // button (toolbar row2) summons/dismisses it. In manual
+                           // button (toolbar row1) summons/dismisses it. In manual
                            // mode remobi injects a ⌨ button if your config has none.
   },
   floatingButtons: [
@@ -360,7 +356,7 @@ Key modules:
 
 | Module | Purpose |
 |--------|---------|
-| `src/toolbar/` | Two-row touch toolbar |
+| `src/toolbar/` | Touch toolbar (single row by default, optional second row) |
 | `src/drawer/` | Command drawer with grid layout |
 | `src/gestures/` | Swipe, pinch, scroll detection |
 | `src/controls/` | Help overlay, combo picker, scroll buttons |
