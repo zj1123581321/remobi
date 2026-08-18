@@ -249,6 +249,7 @@ export const defaultConfig: RemobiConfig = {
 	gestures: defaultGestures,
 	mobile: defaultMobile,
 	floatingButtons: [],
+	scrollButtons: { enabled: false },
 	pwa: defaultPwa,
 	reconnect: { enabled: true },
 }

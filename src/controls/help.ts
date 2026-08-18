@@ -39,10 +39,14 @@ function renderGestures(config: RemobiConfig): DocumentFragment {
 	if (config.gestures.scroll.enabled) {
 		if (config.gestures.scroll.strategy === 'wheel') {
 			table.appendChild(row('Finger drag', 'Send wheel scroll events to terminal apps'))
-			table.appendChild(row('Side \u25B2 \u25BC', 'Send wheel-up / wheel-down at terminal centre'))
+			if (config.scrollButtons.enabled) {
+				table.appendChild(row('Side \u25B2 \u25BC', 'Send wheel-up / wheel-down at terminal centre'))
+			}
 		} else {
 			table.appendChild(row('Finger drag', 'Send PageUp / PageDown keys'))
-			table.appendChild(row('Side \u25B2 \u25BC', 'Send PageUp / PageDown keys'))
+			if (config.scrollButtons.enabled) {
+				table.appendChild(row('Side \u25B2 \u25BC', 'Send PageUp / PageDown keys'))
+			}
 		}
 	}
 

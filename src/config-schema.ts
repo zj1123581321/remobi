@@ -261,6 +261,16 @@ const floatingButtonGroupSchema = v.strictObject({
 	buttons: v.array(controlButtonSchema),
 })
 
+// --- Scroll buttons ---
+
+const scrollButtonsOverridesSchema = v.strictObject({
+	enabled: v.optional(v.boolean()),
+})
+
+const scrollButtonsResolvedSchema = v.strictObject({
+	enabled: v.boolean(),
+})
+
 // --- PWA ---
 
 const pwaOverridesSchema = v.strictObject({
@@ -306,6 +316,7 @@ export const remobiConfigOverridesSchema = v.strictObject({
 	gestures: v.optional(gestureOverridesSchema),
 	mobile: v.optional(mobileOverridesSchema),
 	floatingButtons: v.optional(v.array(floatingButtonGroupSchema)),
+	scrollButtons: v.optional(scrollButtonsOverridesSchema),
 	pwa: v.optional(pwaOverridesSchema),
 	reconnect: v.optional(reconnectOverridesSchema),
 })
@@ -325,6 +336,7 @@ export const remobiConfigResolvedSchema = v.strictObject({
 	gestures: gestureResolvedSchema,
 	mobile: mobileResolvedSchema,
 	floatingButtons: v.array(floatingButtonGroupSchema),
+	scrollButtons: scrollButtonsResolvedSchema,
 	pwa: pwaResolvedSchema,
 	reconnect: reconnectResolvedSchema,
 })

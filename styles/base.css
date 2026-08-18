@@ -341,7 +341,7 @@ body {
 #wt-scroll-buttons {
 	display: none;
 	position: fixed;
-	right: 12px;
+	right: calc(12px + env(safe-area-inset-right, 0px));
 	bottom: 50%;
 	transform: translateY(50%);
 	flex-direction: column;
@@ -401,25 +401,25 @@ body {
 }
 
 .wt-floating-top-left {
-	top: 8px;
-	left: 8px;
+	top: calc(8px + env(safe-area-inset-top, 0px));
+	left: calc(8px + env(safe-area-inset-left, 0px));
 }
 .wt-floating-top-right {
-	top: 8px;
-	right: 8px;
+	top: calc(8px + env(safe-area-inset-top, 0px));
+	right: calc(8px + env(safe-area-inset-right, 0px));
 }
 .wt-floating-top-centre {
-	top: 8px;
+	top: calc(8px + env(safe-area-inset-top, 0px));
 	left: 50%;
 	transform: translateX(-50%);
 }
 .wt-floating-bottom-left {
 	bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-	left: 8px;
+	left: calc(8px + env(safe-area-inset-left, 0px));
 }
 .wt-floating-bottom-right {
 	bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-	right: 8px;
+	right: calc(8px + env(safe-area-inset-right, 0px));
 }
 .wt-floating-bottom-centre {
 	bottom: calc(8px + env(safe-area-inset-bottom, 0px));
@@ -428,12 +428,12 @@ body {
 }
 .wt-floating-centre-left {
 	top: 50%;
-	left: 8px;
+	left: calc(8px + env(safe-area-inset-left, 0px));
 	transform: translateY(-50%);
 }
 .wt-floating-centre-right {
 	top: 50%;
-	right: 8px;
+	right: calc(8px + env(safe-area-inset-right, 0px));
 	transform: translateY(-50%);
 }
 

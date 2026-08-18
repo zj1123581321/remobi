@@ -163,9 +163,11 @@ export function init(
 					}
 				}
 
-				// Scroll buttons
-				const { element: scrollButtons } = createScrollButtons(term, config.gestures.scroll)
-				document.body.appendChild(scrollButtons)
+				// Scroll buttons (opt-in — finger-drag scroll covers this by default)
+				if (config.scrollButtons.enabled) {
+					const { element: scrollButtons } = createScrollButtons(term, config.gestures.scroll)
+					document.body.appendChild(scrollButtons)
+				}
 
 				// Gestures
 				const gestureLock = createGestureLock()
