@@ -60,21 +60,6 @@ function renderGestures(config: RemobiConfig): DocumentFragment {
 
 /** Build the help overlay content as a DocumentFragment — no innerHTML */
 function buildHelpContent(config: RemobiConfig, version?: string): DocumentFragment {
-	const topRightButtons: readonly ControlButton[] = [
-		{
-			id: 'font-size',
-			label: '\u2212 / +',
-			description: 'Decrease / increase font size',
-			action: { type: 'send', data: '' },
-		},
-		{
-			id: 'help',
-			label: '?',
-			description: 'Open this help screen',
-			action: { type: 'send', data: '' },
-		},
-	]
-
 	const frag = document.createDocumentFragment()
 
 	const closeBtn = el('button', { class: 'wt-help-close' }, '\u00D7')
@@ -84,7 +69,6 @@ function buildHelpContent(config: RemobiConfig, version?: string): DocumentFragm
 	frag.appendChild(renderButtonTable('Toolbar \u2014 Row 2', config.toolbar.row2))
 	frag.appendChild(renderButtonTable('Drawer Buttons', config.drawer.buttons))
 	frag.appendChild(renderGestures(config))
-	frag.appendChild(renderButtonTable('Top-Right Controls', topRightButtons))
 
 	if (config.floatingButtons.length > 0) {
 		const groups: readonly FloatingButtonGroup[] = config.floatingButtons

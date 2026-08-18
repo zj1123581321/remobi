@@ -2,8 +2,8 @@ import { describe, expect, test } from 'vitest'
 import { defaultDrawerButtons } from '../src/drawer/commands'
 
 describe('defaultDrawerButtons', () => {
-	test('has 12 commands', () => {
-		expect(defaultDrawerButtons).toHaveLength(12)
+	test('has 15 commands', () => {
+		expect(defaultDrawerButtons).toHaveLength(15)
 	})
 
 	test('all commands have id, label, description, and action', () => {
@@ -68,5 +68,18 @@ describe('defaultDrawerButtons', () => {
 		const combo = defaultDrawerButtons.find((button) => button.id === 'combo-picker')
 		expect(combo).toBeDefined()
 		expect(combo?.action).toEqual({ type: 'combo-picker' })
+	})
+
+	test('includes font size and guide controls moved from the floating cluster', () => {
+		const byId = new Map(defaultDrawerButtons.map((button) => [button.id, button]))
+
+		expect(byId.get('font-decrease')?.label).toBe('Font −')
+		expect(byId.get('font-decrease')?.action).toEqual({ type: 'font-size', delta: -2 })
+		expect(byId.get('font-increase')?.label).toBe('Font +')
+		expect(byId.get('font-increase')?.action).toEqual({ type: 'font-size', delta: 2 })
+		// 'Guide' — must not clash with tmux-help's 'Help' label
+		expect(byId.get('guide')?.label).toBe('Guide')
+		expect(byId.get('guide')?.action).toEqual({ type: 'help' })
+		expect(byId.get('tmux-help')?.label).toBe('Help')
 	})
 })
