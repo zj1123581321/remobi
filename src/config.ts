@@ -231,6 +231,7 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 const defaultMobile: RemobiConfig['mobile'] = {
 	initData: null,
 	widthThreshold: 768,
+	keyboardMode: 'auto',
 }
 
 /** Default PWA configuration */

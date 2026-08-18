@@ -8,6 +8,7 @@ export type ButtonAction =
 	| { readonly type: 'drawer-toggle' }
 	| { readonly type: 'font-size'; readonly delta: number }
 	| { readonly type: 'help' }
+	| { readonly type: 'keyboard-toggle' }
 
 /** A generic control button definition used by toolbar and drawer */
 export interface ControlButton {
@@ -92,12 +93,21 @@ export interface GestureConfig {
 	readonly doubleTap: DoubleTapConfig
 }
 
+/** Soft keyboard behaviour on mobile */
+export type KeyboardMode = 'auto' | 'manual'
+
 /** Mobile-specific behaviour configuration */
 export interface MobileConfig {
 	/** Data to send to the terminal on mobile init, null = disabled */
 	readonly initData: string | null
 	/** Viewport width (px) below which mobile init behaviour triggers */
 	readonly widthThreshold: number
+	/**
+	 * 'auto': tapping the terminal opens the soft keyboard (browser default).
+	 * 'manual': the keyboard stays suppressed; only the keyboard-toggle button
+	 * grants or revokes input permission.
+	 */
+	readonly keyboardMode: KeyboardMode
 }
 
 /** Viewport position for a floating button group */

@@ -436,7 +436,7 @@ describe('assertValidResolvedConfig', () => {
 					scroll: { enabled: true, sensitivity: 40, strategy: 'wheel', wheelIntervalMs: 24 },
 					doubleTap: { enabled: false, data: '\x02z', maxInterval: 300 },
 				},
-				mobile: { initData: null, widthThreshold: 768 },
+				mobile: { initData: null, widthThreshold: 768, keyboardMode: 'auto' },
 				floatingButtons: [],
 			},
 			assertValidResolvedConfig,
