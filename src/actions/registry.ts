@@ -89,7 +89,7 @@ function changeFontSize(term: XTerminal, delta: number, font: FontConfig): void 
 }
 
 /** Dependencies for the default handlers that need app-level wiring */
-export interface DefaultActionDeps {
+interface DefaultActionDeps {
 	readonly font?: FontConfig
 	readonly openHelp?: () => void
 }
