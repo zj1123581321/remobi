@@ -45,6 +45,30 @@ export type {
 } from './types'
 export type { HookRegistry, SendSource } from './hooks/registry'
 
+/**
+ * Read the persisted font size (localStorage `remobi:fontSize`).
+ * Returns undefined when absent or unreadable (iOS private mode throws).
+ */
+function readPersistedFontSize(): number | undefined {
+	try {
+		const raw = localStorage.getItem('remobi:fontSize')
+		if (raw === null) return undefined
+		const size = Number(raw)
+		return Number.isFinite(size) ? size : undefined
+	} catch (error) {
+		console.error('remobi: failed to read persisted font size', error)
+		return undefined
+	}
+}
+
+/** Apply theme and font — a persisted font size (user-adjusted via the
+ *  drawer's Font -/+ buttons) wins over the config default */
+function applyTermAppearance(term: XTerminal, config: RemobiConfig): void {
+	applyTheme(term, config.theme)
+	term.options.fontSize = readPersistedFontSize() ?? config.font.mobileSizeDefault
+	term.options.fontFamily = config.font.family
+}
+
 /** Detect touch device */
 function isMobile(): boolean {
 	return 'ontouchstart' in window || navigator.maxTouchPoints > 0
@@ -72,7 +96,7 @@ function setupHelpOverlay(
 /**
  * Keyboard sovereignty setup: escape hatch (V2) + shared controller (T-B).
  * Returns the effective config — with the default ⌨ button injected into
- * toolbar row2 when manual mode has no keyboard-toggle anywhere.
+ * toolbar row1 when manual mode has no keyboard-toggle anywhere.
  */
 function setupKeyboard(
 	term: XTerminal,
@@ -137,10 +161,8 @@ export function init(
 					return
 				}
 
-				// Apply theme and font
-				applyTheme(term, config.theme)
-				term.options.fontSize = config.font.mobileSizeDefault
-				term.options.fontFamily = config.font.family
+				// Apply theme and font (persisted font size wins over config)
+				applyTermAppearance(term, config)
 				startupResize.scheduleImmediate()
 
 				// CSS is injected as a <style> tag by the build script (build.ts)
@@ -153,7 +175,7 @@ export function init(
 				const openHelp = setupHelpOverlay(term, config, version)
 
 				// Keyboard sovereignty: escape hatch (V2) injects a ⌨ button into
-				// row2 when manual mode lacks one; the controller must exist before
+				// row1 when manual mode lacks one; the controller must exist before
 				// the action registry so keyboard-toggle can be wired via DI.
 				const setup = setupKeyboard(term, config)
 				keyboard = setup.keyboard

@@ -14,7 +14,7 @@ const defaultFont: RemobiConfig['font'] = {
 	family: 'JetBrainsMono NFM, monospace',
 	cdnUrl:
 		'https://cdn.jsdelivr.net/gh/mshaugh/nerdfont-webfonts@latest/build/jetbrainsmono-nfm.css',
-	mobileSizeDefault: 16,
+	mobileSizeDefault: 13,
 	sizeRange: [8, 32],
 }
 
