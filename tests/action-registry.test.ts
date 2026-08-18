@@ -1,6 +1,10 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { createActionRegistry, createDefaultActionRegistry } from '../src/actions/registry'
+import {
+	FONT_SIZE_STORAGE_KEY,
+	createActionRegistry,
+	createDefaultActionRegistry,
+} from '../src/actions/registry'
 import { defaultConfig } from '../src/config'
 import type { ButtonAction, XTerminal } from '../src/types'
 import { mockTerminal } from './fixtures'
@@ -535,7 +539,7 @@ describe('font-size action', () => {
 		expect(resizeSpy).toHaveBeenCalledTimes(1)
 		expect(focused.value).toBe(true)
 		// Persisted so a reload keeps the adjusted size
-		expect(localStorage.getItem('remobi:fontSize')).toBe('16')
+		expect(localStorage.getItem(FONT_SIZE_STORAGE_KEY)).toBe('16')
 
 		window.__remobiResize = undefined
 	})
@@ -549,7 +553,7 @@ describe('font-size action', () => {
 
 		await registry.execute({ type: 'font-size', delta: 2 }, makeContext(term, focused))
 		expect(term.options.fontSize).toBe(32)
-		expect(localStorage.getItem('remobi:fontSize')).toBeNull()
+		expect(localStorage.getItem(FONT_SIZE_STORAGE_KEY)).toBeNull()
 
 		window.__remobiResize = undefined
 	})

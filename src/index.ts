@@ -1,4 +1,4 @@
-import { createDefaultActionRegistry } from './actions/registry'
+import { FONT_SIZE_STORAGE_KEY, createDefaultActionRegistry } from './actions/registry'
 import { defaultConfig } from './config'
 import { createComboPicker } from './controls/combo-picker'
 import { createFloatingButtons } from './controls/floating-buttons'
@@ -51,7 +51,7 @@ export type { HookRegistry, SendSource } from './hooks/registry'
  */
 function readPersistedFontSize(font: RemobiConfig['font']): number {
 	try {
-		const raw = localStorage.getItem('remobi:fontSize')
+		const raw = localStorage.getItem(FONT_SIZE_STORAGE_KEY)
 		if (raw !== null) {
 			const size = Number(raw)
 			if (Number.isFinite(size)) return size

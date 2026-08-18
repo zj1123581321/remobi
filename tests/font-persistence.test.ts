@@ -1,5 +1,6 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { FONT_SIZE_STORAGE_KEY } from '../src/actions/registry'
 import { defineConfig } from '../src/config'
 import type { XTerminal } from '../src/types'
 
@@ -64,13 +65,13 @@ describe('font size persistence (localStorage remobi:fontSize)', () => {
 	})
 
 	test('persisted value wins over the config default', async () => {
-		localStorage.setItem('remobi:fontSize', '20')
+		localStorage.setItem(FONT_SIZE_STORAGE_KEY, '20')
 		const term = await bootOverlay()
 		expect(term.options.fontSize).toBe(20)
 	})
 
 	test('corrupt persisted value falls back to the config default', async () => {
-		localStorage.setItem('remobi:fontSize', 'huge')
+		localStorage.setItem(FONT_SIZE_STORAGE_KEY, 'huge')
 		const term = await bootOverlay()
 		expect(term.options.fontSize).toBe(13)
 	})
