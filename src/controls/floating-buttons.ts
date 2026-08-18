@@ -1,12 +1,12 @@
 import type { ActionRegistry } from '../actions/registry'
 import type { HookRegistry } from '../hooks/registry'
-import { decorateKeyboardToggleButton } from './keyboard-controller'
 import type { ControlButton, FloatingButtonGroup, RemobiConfig, XTerminal } from '../types'
 import { el } from '../util/dom'
 import { haptic } from '../util/haptic'
 import { conditionalFocus, isKeyboardOpen } from '../util/keyboard'
 import { onTap } from '../util/tap'
 import { sendData } from '../util/terminal'
+import { decorateKeyboardToggleButton } from './keyboard-controller'
 
 function createGroupButton(
 	term: XTerminal,

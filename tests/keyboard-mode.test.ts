@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createDefaultActionRegistry } from '../src/actions/registry'
 import { defineConfig } from '../src/config'
 import { assertValidConfigOverrides } from '../src/config-validate'
+import { createFloatingButtons } from '../src/controls/floating-buttons'
 import {
 	createKeyboardController,
 	keyboardToggleButton,
@@ -12,7 +13,6 @@ import {
 	syncKeyboardIndicators,
 	withKeyboardEscapeHatch,
 } from '../src/controls/keyboard-controller'
-import { createFloatingButtons } from '../src/controls/floating-buttons'
 import { createDrawer } from '../src/drawer/drawer'
 import { createHookRegistry } from '../src/hooks/registry'
 import { createToolbar } from '../src/toolbar/toolbar'
