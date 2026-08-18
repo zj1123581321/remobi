@@ -3,7 +3,12 @@ import { defaultConfig } from './config'
 import { createComboPicker } from './controls/combo-picker'
 import { createFloatingButtons } from './controls/floating-buttons'
 import { createHelpOverlay } from './controls/help'
-import { createKeyboardController } from './controls/keyboard-controller'
+import type { KeyboardController } from './controls/keyboard-controller'
+import {
+	createKeyboardController,
+	reportKeyboardUnavailable,
+	withKeyboardEscapeHatch,
+} from './controls/keyboard-controller'
 import { createScrollButtons } from './controls/scroll-buttons'
 import { createDrawer } from './drawer/drawer'
 import { attachDoubleTapGesture } from './gestures/double-tap'
@@ -61,6 +66,20 @@ function setupHelpOverlay(
 		console.error('remobi: failed to initialise help overlay', error)
 		return undefined
 	}
+}
+
+/**
+ * Keyboard sovereignty setup: escape hatch (V2) + shared controller (T-B).
+ * Returns the effective config — with the default ⌨ button injected into
+ * toolbar row2 when manual mode has no keyboard-toggle anywhere.
+ */
+function setupKeyboard(
+	term: XTerminal,
+	config: RemobiConfig,
+): { readonly effectiveConfig: RemobiConfig; readonly keyboard: KeyboardController } {
+	const effectiveConfig = withKeyboardEscapeHatch(config)
+	const keyboard = createKeyboardController(term, effectiveConfig.mobile.keyboardMode)
+	return { effectiveConfig, keyboard }
 }
 
 /**
@@ -130,9 +149,10 @@ export function init(
 				// action registry.
 				const openHelp = setupHelpOverlay(term, config, version)
 
-				// Keyboard sovereignty controller — must exist before the action
-				// registry so keyboard-toggle can be wired via DI.
-				const keyboard = createKeyboardController(term, config.mobile.keyboardMode)
+				// Keyboard sovereignty: escape hatch (V2) injects a ⌨ button into
+				// row2 when manual mode lacks one; the controller must exist before
+				// the action registry so keyboard-toggle can be wired via DI.
+				const { effectiveConfig, keyboard } = setupKeyboard(term, config)
 
 				const actions = createDefaultActionRegistry({
 					font: config.font,
@@ -141,9 +161,9 @@ export function init(
 				})
 
 				// Create drawer (needed by toolbar for toggle)
-				const drawer = createDrawer(term, config.drawer.buttons, {
+				const drawer = createDrawer(term, effectiveConfig.drawer.buttons, {
 					hooks,
-					appConfig: config,
+					appConfig: effectiveConfig,
 					actions,
 					openComboPicker: comboPicker.open,
 				})
@@ -151,7 +171,7 @@ export function init(
 				document.body.appendChild(drawer.drawer)
 				await hooks.runDrawerCreated({
 					term,
-					config,
+					config: effectiveConfig,
 					drawer: drawer.drawer,
 					backdrop: drawer.backdrop,
 				})
@@ -159,7 +179,7 @@ export function init(
 				// Create toolbar
 				const { element: toolbar } = createToolbar(
 					term,
-					config,
+					effectiveConfig,
 					drawer.open,
 					hooks,
 					actions,
@@ -167,14 +187,17 @@ export function init(
 					keyboard,
 				)
 				document.body.appendChild(toolbar)
-				await hooks.runToolbarCreated({ term, config, toolbar })
+				await hooks.runToolbarCreated({ term, config: effectiveConfig, toolbar })
+
+				// Fail loud (T-E#6) when the keyboard mechanism is unavailable.
+				reportKeyboardUnavailable(keyboard)
 
 				// Floating button groups (always visible on touch devices)
-				if (config.floatingButtons.length > 0) {
+				if (effectiveConfig.floatingButtons.length > 0) {
 					const { elements: floatingEls } = createFloatingButtons(
 						term,
-						config.floatingButtons,
-						config,
+						effectiveConfig.floatingButtons,
+						effectiveConfig,
 						hooks,
 						actions,
 						drawer.open,

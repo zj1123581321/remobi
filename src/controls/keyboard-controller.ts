@@ -88,8 +88,7 @@ export function createKeyboardController(term: XTerminal, mode: KeyboardMode): K
 	function toggle(): void {
 		if (!available) {
 			throw new Error(
-				`remobi: keyboard-toggle unavailable — terminal bridge lacks ` +
-					(mode === 'manual' ? 'setKeyboardSuppressed' : 'blur'),
+				`remobi: keyboard-toggle unavailable — terminal bridge lacks ${mode === 'manual' ? 'setKeyboardSuppressed' : 'blur'}`,
 			)
 		}
 		const now = Date.now()
@@ -171,6 +170,15 @@ export function withKeyboardEscapeHatch(config: RemobiConfig): RemobiConfig {
 }
 
 /**
+ * Fail-loud (T-E#6) entry point: when the keyboard mechanism is unavailable,
+ * mark the buttons and show an overlay instead of silently degrading.
+ */
+export function reportKeyboardUnavailable(keyboard: KeyboardController): void {
+	if (keyboard.available) return
+	showKeyboardUnavailableOverlay(keyboard.mode)
+}
+
+/**
  * Fail-loud (T-E#6): the suppression mechanism is unavailable — mark every
  * keyboard-toggle button with the error state and show a reconnect-style
  * overlay. Never silently fall back to auto.
@@ -195,9 +203,7 @@ export function showKeyboardUnavailableOverlay(mode: KeyboardMode): void {
 	const message = el('div', {
 		style: 'font-size:1.2rem;font-weight:600;text-align:center;padding:0 24px',
 	})
-	message.textContent =
-		`Keyboard ${mode} mode is unavailable: this terminal does not support ` +
-		'soft-keyboard suppression. Remove the ⌨ button or switch mobile.keyboardMode.'
+	message.textContent = `Keyboard ${mode} mode is unavailable: this terminal does not support soft-keyboard suppression. Remove the ⌨ button or switch mobile.keyboardMode.`
 	overlay.appendChild(message)
 	document.body.appendChild(overlay)
 
