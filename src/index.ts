@@ -103,6 +103,7 @@ export function init(
 
 			const mobile = isMobile()
 			let disposed = false
+			let keyboard: KeyboardController | undefined
 			const disposeOverlayReadyResize = hooks.on('overlayReady', () => {
 				startupResize.scheduleAfterLayout()
 			})
@@ -110,6 +111,7 @@ export function init(
 			function dispose(): void {
 				if (disposed) return
 				disposed = true
+				keyboard?.dispose()
 				disposeOverlayReadyResize.dispose()
 				startupResize.dispose()
 				disposeReconnect()
@@ -152,7 +154,9 @@ export function init(
 				// Keyboard sovereignty: escape hatch (V2) injects a ⌨ button into
 				// row2 when manual mode lacks one; the controller must exist before
 				// the action registry so keyboard-toggle can be wired via DI.
-				const { effectiveConfig, keyboard } = setupKeyboard(term, config)
+				const setup = setupKeyboard(term, config)
+				keyboard = setup.keyboard
+				const effectiveConfig = setup.effectiveConfig
 
 				const actions = createDefaultActionRegistry({
 					font: config.font,

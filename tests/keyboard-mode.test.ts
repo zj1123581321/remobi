@@ -454,3 +454,50 @@ describe('base.css keyboard rules', () => {
 		expect(css).toContain('#wt-toolbar button.wt-keyboard-toggle.wt-kb-active')
 	})
 })
+
+describe('init lifecycle (P2-1)', () => {
+	test('dispose consumes keyboard.dispose — old controller stops receiving events', async () => {
+		Object.defineProperty(navigator, 'maxTouchPoints', { value: 1, configurable: true })
+		// happy-dom lacks document.fonts
+		Object.defineProperty(document, 'fonts', {
+			value: { ready: Promise.resolve() },
+			configurable: true,
+		})
+		setInnerHeight(800)
+		fakeVisualViewport(800)
+
+		const focusDispose = vi.fn()
+		let focusHandler: ((focused: boolean) => void) | null = null
+		const term: XTerminal = {
+			options: { fontSize: 14 },
+			input(_data: string, _wasUserInput: boolean) {},
+			focus() {},
+			blur() {},
+			setKeyboardSuppressed(_suppressed: boolean) {},
+			onFocusChange(handler: (focused: boolean) => void) {
+				focusHandler = handler
+				return { dispose: focusDispose }
+			},
+			onData(_handler: (data: string) => void) {
+				return { dispose() {} }
+			},
+		}
+		window.term = term
+
+		const { init } = await import('../src/index')
+		init(defineConfig({ mobile: { keyboardMode: 'manual' } }))
+
+		// Wait until init has rendered the toolbar (controller created before it)
+		await vi.waitFor(
+			() => {
+				expect(document.getElementById('wt-toolbar')).not.toBeNull()
+			},
+			{ timeout: 5000 },
+		)
+		expect(focusHandler).not.toBeNull()
+
+		// pagehide/beforeunload path → dispose → keyboard.dispose()
+		window.dispatchEvent(new Event('beforeunload'))
+		expect(focusDispose).toHaveBeenCalledTimes(1)
+	})
+})
