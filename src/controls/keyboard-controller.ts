@@ -96,8 +96,9 @@ export function createKeyboardController(term: XTerminal, mode: KeyboardMode): K
 		lastToggleAt = now
 
 		if (mode === 'auto') {
-			// Momentary control: dismiss when open/focused, summon otherwise.
-			if (keyboardVisible || textareaFocused) {
+			// Momentary control driven by focus semantics only. T-B: keyboardVisible
+			// never participates in transitions — it only drives the indicator.
+			if (textareaFocused) {
 				term.blur?.()
 			} else {
 				term.focus()

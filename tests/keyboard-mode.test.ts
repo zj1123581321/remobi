@@ -273,19 +273,29 @@ describe('keyboard controller — auto mode', () => {
 		controller.dispose()
 	})
 
-	test('momentary control: focus when closed, blur when open', () => {
+	test('momentary control: focus when unfocused, blur when focused', () => {
 		vi.useFakeTimers({ toFake: ['Date'] })
-		setInnerHeight(800)
-		const vv = fakeVisualViewport(800)
-		const { term, calls } = mockSuppressionTerm()
+		const { term, calls, emitFocus } = mockSuppressionTerm()
 		const controller = createKeyboardController(term, 'auto')
 		controller.toggle()
 		expect(calls).toEqual(['focus'])
-		vv.height = 400 // keyboard opened
-		vv.dispatchEvent(new Event('resize'))
+		emitFocus(true)
 		vi.setSystemTime(Date.now() + 400)
 		controller.toggle()
 		expect(calls).toEqual(['focus', 'blur'])
+		controller.dispose()
+	})
+
+	test('event disorder: stale keyboardVisible never steers the transition (T-B)', () => {
+		// Viewport says "open" (resize event delayed/lost) but the textarea is
+		// not focused — the toggle must still choose focus, not blur.
+		setInnerHeight(800)
+		fakeVisualViewport(400) // keyboardVisible=true, possibly stale
+		const { term, calls } = mockSuppressionTerm()
+		const controller = createKeyboardController(term, 'auto')
+		expect(controller.indicatorOn()).toBe(true) // indicator follows visibility
+		controller.toggle()
+		expect(calls).toEqual(['focus']) // transition follows focus semantics only
 		controller.dispose()
 	})
 
