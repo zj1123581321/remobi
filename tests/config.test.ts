@@ -13,7 +13,7 @@ describe('defineConfig', () => {
 		})
 		expect(config.font.family).toBe('Monaco, monospace')
 		// Other font defaults preserved
-		expect(config.font.mobileSizeDefault).toBe(16)
+		expect(config.font.mobileSizeDefault).toBe(13)
 		expect(config.font.sizeRange).toEqual([8, 32])
 	})
 
@@ -59,8 +59,8 @@ describe('defineConfig', () => {
 			toolbar: { row1: customRow },
 		})
 		expect(config.toolbar.row1).toEqual(customRow)
-		// row2 should still have defaults
-		expect(config.toolbar.row2.length).toBeGreaterThan(0)
+		// row2 should still have defaults (empty in the single-row layout)
+		expect(config.toolbar.row2).toEqual(defaultConfig.toolbar.row2)
 	})
 
 	test('replaces drawer buttons array', () => {
@@ -114,16 +114,16 @@ describe('defaultConfig', () => {
 		expect(defaultConfig.theme.foreground).toBe('#cdd6f4')
 	})
 
-	test('has 10 row1 buttons', () => {
+	test('has 10 row1 buttons (moshi-style single row)', () => {
 		expect(defaultConfig.toolbar.row1).toHaveLength(10)
 	})
 
-	test('has 8 row2 buttons', () => {
-		expect(defaultConfig.toolbar.row2).toHaveLength(8)
+	test('row2 defaults to empty — single-row toolbar', () => {
+		expect(defaultConfig.toolbar.row2).toEqual([])
 	})
 
-	test('has 15 drawer buttons', () => {
-		expect(defaultConfig.drawer.buttons).toHaveLength(15)
+	test('has 24 drawer buttons', () => {
+		expect(defaultConfig.drawer.buttons).toHaveLength(24)
 	})
 
 	test('default drawer uses stock tmux bindings only', () => {
@@ -140,15 +140,13 @@ describe('defaultConfig', () => {
 		expect(byId.has('tmux-links')).toBe(false)
 	})
 
-	test('row1 includes S-Tab after Tab', () => {
-		const tabIdx = defaultConfig.toolbar.row1.findIndex((b) => b.label === 'Tab')
-		const sTabIdx = defaultConfig.toolbar.row1.findIndex((b) => b.label === 'S-Tab')
-		expect(sTabIdx).toBe(tabIdx + 1)
+	test('row1 is Esc, Ctrl, Tab, Prefix, ↑, ↓, Enter, Paste, ⌨, ☰ More', () => {
+		const labels = defaultConfig.toolbar.row1.map((b) => b.label)
+		expect(labels).toEqual(['Esc', 'Ctrl', 'Tab', 'Prefix', '↑', '↓', '⏎', 'Paste', '⌨', '☰ More'])
 	})
 
-	test('row2 has q, Alt+Enter, C-d, More, Paste, Backspace, Space, ⌨', () => {
-		const labels = defaultConfig.toolbar.row2.map((b) => b.label)
-		expect(labels).toEqual(['q', 'M-↵', 'C-d', '\u2630 More', 'Paste', '⌫', 'Space', '⌨'])
+	test('default mobile font size is 13', () => {
+		expect(defaultConfig.font.mobileSizeDefault).toBe(13)
 	})
 
 	test('font size range is [8, 32]', () => {
@@ -198,15 +196,20 @@ describe('defineConfig with ButtonArrayInput', () => {
 		const config = defineConfig({ toolbar: { row1: custom } })
 		expect(config.toolbar.row1).toEqual(custom)
 		// row2 preserved
-		expect(config.toolbar.row2.length).toBeGreaterThan(0)
+		expect(config.toolbar.row2).toEqual(defaultConfig.toolbar.row2)
 	})
 
-	test('function form transforms toolbar row2', () => {
+	test('function form populates the empty default row2', () => {
+		const extra = {
+			id: 'q',
+			label: 'q',
+			description: 'Send q key',
+			action: { type: 'send' as const, data: 'q' },
+		}
 		const config = defineConfig({
-			toolbar: { row2: (defaults) => defaults.filter((b) => b.id !== 'q') },
+			toolbar: { row2: (defaults) => [...defaults, extra] },
 		})
-		expect(config.toolbar.row2.find((b) => b.id === 'q')).toBeUndefined()
-		expect(config.toolbar.row2.length).toBe(defaultConfig.toolbar.row2.length - 1)
+		expect(config.toolbar.row2).toEqual([extra])
 	})
 
 	test('function form appends to toolbar row1', () => {

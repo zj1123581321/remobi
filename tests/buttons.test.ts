@@ -1,10 +1,31 @@
 import { describe, expect, test } from 'vitest'
+import { keyboardToggleButton } from '../src/controls/keyboard-controller'
 import { defaultRow1, defaultRow2 } from '../src/toolbar/buttons'
 
-describe('defaultRow1', () => {
+describe('defaultRow1 (moshi-style single row)', () => {
+	test('is exactly the 10-key high-frequency set in render order', () => {
+		expect(defaultRow1.map((b) => b.id)).toEqual([
+			'esc',
+			'ctrl',
+			'tab',
+			'tmux-prefix',
+			'up',
+			'down',
+			'enter',
+			'paste',
+			'keyboard-toggle',
+			'drawer-toggle',
+		])
+	})
+
 	test('starts with Esc', () => {
 		expect(defaultRow1[0]?.label).toBe('Esc')
 		expect(defaultRow1[0]?.action).toEqual({ type: 'send', data: '\x1b' })
+	})
+
+	test('has the sticky Ctrl modifier second', () => {
+		expect(defaultRow1[1]?.id).toBe('ctrl')
+		expect(defaultRow1[1]?.action).toEqual({ type: 'ctrl-modifier' })
 	})
 
 	test('has tmux Prefix button', () => {
@@ -13,63 +34,26 @@ describe('defaultRow1', () => {
 		expect(prefix?.action).toEqual({ type: 'prefix', data: '\x02' })
 	})
 
-	test('has S-Tab after Tab', () => {
-		const tabIdx = defaultRow1.findIndex((b) => b.label === 'Tab')
-		const sTabIdx = defaultRow1.findIndex((b) => b.label === 'S-Tab')
-		expect(tabIdx).toBeGreaterThanOrEqual(0)
-		expect(sTabIdx).toBe(tabIdx + 1)
-		expect(defaultRow1[sTabIdx]?.action).toMatchObject({ type: 'send', data: '\x1b[Z' })
-	})
-
-	test('has arrow keys', () => {
+	test('has only the Up/Down arrow keys', () => {
 		const arrows = defaultRow1.filter(
 			(b) =>
 				b.action.type === 'send' && b.action.data.startsWith('\x1b[') && b.action.data !== '\x1b[Z',
 		)
-		expect(arrows).toHaveLength(4)
+		expect(arrows.map((b) => b.id)).toEqual(['up', 'down'])
 	})
 
-	test('ends with Enter', () => {
+	test('has Paste and ends with ⌨ then ☰ More', () => {
+		const paste = defaultRow1.find((b) => b.action.type === 'paste')
+		expect(paste?.label).toBe('Paste')
+		expect(defaultRow1[defaultRow1.length - 2]).toEqual(keyboardToggleButton)
 		const last = defaultRow1[defaultRow1.length - 1]
-		expect(last?.action).toEqual({ type: 'send', data: '\r' })
+		expect(last?.action).toEqual({ type: 'drawer-toggle' })
+		expect(last?.label).toContain('More')
 	})
 })
 
 describe('defaultRow2', () => {
-	test('has paste button', () => {
-		const paste = defaultRow2.find((b) => b.action.type === 'paste')
-		expect(paste).toBeDefined()
-		expect(paste?.label).toBe('Paste')
-	})
-
-	test('has backspace button', () => {
-		const backspace = defaultRow2.find((b) => b.id === 'backspace')
-		expect(backspace).toBeDefined()
-		expect(backspace?.label).toBe('⌫')
-		expect(backspace?.action).toEqual({ type: 'send', data: '\x7f', keyLabel: 'Backspace' })
-	})
-
-	test('has drawer-toggle button', () => {
-		const toggle = defaultRow2.find((b) => b.action.type === 'drawer-toggle')
-		expect(toggle).toBeDefined()
-		expect(toggle?.label).toContain('More')
-	})
-
-	test('has Alt+Enter button', () => {
-		const altEnter = defaultRow2.find((b) => b.id === 'alt-enter')
-		expect(altEnter).toBeDefined()
-		expect(altEnter?.action).toEqual({ type: 'send', data: '\x1b\r', keyLabel: 'Alt+Enter' })
-	})
-
-	test('has C-d button', () => {
-		const cd = defaultRow2.find((b) => b.label === 'C-d')
-		expect(cd).toBeDefined()
-		expect(cd?.action).toEqual({ type: 'send', data: '\x04' })
-	})
-
-	test('has Space button', () => {
-		const space = defaultRow2.find((b) => b.label === 'Space')
-		expect(space).toBeDefined()
-		expect(space?.action).toEqual({ type: 'send', data: ' ' })
+	test('is empty — the toolbar is a single row by default', () => {
+		expect(defaultRow2).toEqual([])
 	})
 })

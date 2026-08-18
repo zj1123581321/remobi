@@ -20,7 +20,7 @@ afterEach(() => {
 })
 
 describe('toolbar integration', () => {
-	test('creates toolbar with two rows', () => {
+	test('creates a single-row toolbar by default (empty row2 is not rendered)', () => {
 		const term = mockTerminal()
 		const hooks = createHookRegistry()
 		const drawer = createDrawer(term, defaultConfig.drawer.buttons, {
@@ -32,8 +32,12 @@ describe('toolbar integration', () => {
 		document.body.appendChild(toolbar)
 
 		expect(toolbar.id).toBe('wt-toolbar')
+		expect(defaultConfig.toolbar.row2).toHaveLength(0)
 		const rows = toolbar.querySelectorAll('.wt-row')
-		expect(rows).toHaveLength(2)
+		expect(rows).toHaveLength(1)
+		// The single row is both :first-child and :last-child — the landscape
+		// wt-kb-open hide rule must not match it (guarded by :not(:first-child))
+		expect(rows[0]?.matches('.wt-row:first-child:last-child')).toBe(true)
 	})
 
 	test('row1 has correct number of buttons', () => {
@@ -52,21 +56,35 @@ describe('toolbar integration', () => {
 		expect(buttons?.length).toBe(defaultConfig.toolbar.row1.length)
 	})
 
-	test('row2 has correct number of buttons', () => {
+	test('a non-empty row2 renders as a second row (empty rows are skipped)', () => {
 		const term = mockTerminal()
 		const hooks = createHookRegistry()
-		const drawer = createDrawer(term, defaultConfig.drawer.buttons, {
+		const config: typeof defaultConfig = {
+			...defaultConfig,
+			toolbar: {
+				...defaultConfig.toolbar,
+				row2: [
+					{
+						id: 'q',
+						label: 'q',
+						description: 'Send q key',
+						action: { type: 'send', data: 'q' },
+					},
+				],
+			},
+		}
+		const drawer = createDrawer(term, config.drawer.buttons, {
 			hooks,
-			appConfig: defaultConfig,
+			appConfig: config,
 		})
-		const { element: toolbar } = createToolbar(term, defaultConfig, drawer.open, hooks)
+		const { element: toolbar } = createToolbar(term, config, drawer.open, hooks)
 
 		document.body.appendChild(toolbar)
 
 		const rows = toolbar.querySelectorAll('.wt-row')
+		expect(rows).toHaveLength(2)
 		const row2 = rows[1]
-		const buttons = row2?.querySelectorAll('button')
-		expect(buttons?.length).toBe(defaultConfig.toolbar.row2.length)
+		expect(row2?.querySelectorAll('button')).toHaveLength(1)
 	})
 })
 
@@ -117,6 +135,89 @@ describe('drawer integration', () => {
 
 		const tabs = drawer.querySelector('#wt-drawer-tabs')
 		expect(tabs).toBeNull()
+	})
+})
+
+describe('drawer close behaviour', () => {
+	beforeEach(() => {
+		_resetTouchGuard()
+	})
+
+	function openDrawerWith(buttons: readonly ControlButton[]) {
+		const term = mockTerminal()
+		const actions = createDefaultActionRegistry({
+			font: defaultConfig.font,
+			openHelp: () => {},
+		})
+		const result = createDrawer(term, buttons, {
+			hooks: createHookRegistry(),
+			appConfig: defaultConfig,
+			actions,
+		})
+		document.body.appendChild(result.backdrop)
+		document.body.appendChild(result.drawer)
+		result.open()
+		expect(result.isOpen()).toBe(true)
+		return result
+	}
+
+	async function tapGridButton(drawer: HTMLElement, index: number): Promise<void> {
+		const button = drawer.querySelectorAll('#wt-drawer-grid button')[index]
+		button?.dispatchEvent(new Event('touchend', { bubbles: true }))
+		await new Promise((resolve) => setTimeout(resolve, 0))
+	}
+
+	test('font-size actions keep the drawer open (repeat taps)', async () => {
+		window.__remobiResize = () => {}
+		const result = openDrawerWith([
+			{
+				id: 'font-decrease',
+				label: 'Font −',
+				description: 'Decrease font size',
+				action: { type: 'font-size', delta: -2 },
+			},
+			{
+				id: 'font-increase',
+				label: 'Font +',
+				description: 'Increase font size',
+				action: { type: 'font-size', delta: 2 },
+			},
+		])
+
+		await tapGridButton(result.drawer, 0)
+		expect(result.isOpen()).toBe(true)
+		await tapGridButton(result.drawer, 1)
+		expect(result.isOpen()).toBe(true)
+
+		window.__remobiResize = undefined
+	})
+
+	test('help action keeps the drawer open', async () => {
+		const result = openDrawerWith([
+			{
+				id: 'guide',
+				label: 'Guide',
+				description: 'Open the remobi help guide',
+				action: { type: 'help' },
+			},
+		])
+
+		await tapGridButton(result.drawer, 0)
+		expect(result.isOpen()).toBe(true)
+	})
+
+	test('send actions still close the drawer', async () => {
+		const result = openDrawerWith([
+			{
+				id: 'zoom',
+				label: 'Zoom',
+				description: 'Toggle pane zoom',
+				action: { type: 'send', data: '\x02z' },
+			},
+		])
+
+		await tapGridButton(result.drawer, 0)
+		expect(result.isOpen()).toBe(false)
 	})
 })
 
