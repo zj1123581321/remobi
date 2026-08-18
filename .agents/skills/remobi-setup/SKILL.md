@@ -434,7 +434,7 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 
 | Field | Default | Notes |
 |-------|---------|-------|
-| `gestures.swipe.enabled` | `true` | |
+| `gestures.swipe.enabled` | `false` | Off by default — toolbar row owns horizontal swipes; window switching lives in the drawer |
 | `gestures.swipe.left` | `'\x02n'` | Next tmux window |
 | `gestures.swipe.right` | `'\x02p'` | Previous tmux window |
 | `gestures.swipe.threshold` | `80` | Pixels |

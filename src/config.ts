@@ -21,7 +21,10 @@ const defaultFont: RemobiConfig['font'] = {
 /** Default gesture configuration */
 const defaultGestures: RemobiConfig['gestures'] = {
 	swipe: {
-		enabled: true,
+		// Default off: horizontal swipes at the screen bottom now belong to the
+		// single-row toolbar scroll — a swipe starting just above it would fire
+		// a window switch. Window switching stays in the drawer (Win/Windows).
+		enabled: false,
 		threshold: 80,
 		maxDuration: 400,
 		left: '\x02n',

@@ -251,7 +251,7 @@ export default {
   },
   gestures: {
     swipe: {
-      enabled: true,
+      enabled: true,        // default: false — horizontal swipes scroll the toolbar row; opt in to swipe-to-switch-window
       left: '\x02n',         // data sent on swipe left (default: next tmux window)
       right: '\x02p',        // data sent on swipe right (default: prev tmux window)
       leftLabel: 'Next tmux window',    // shown in help overlay

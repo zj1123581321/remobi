@@ -293,7 +293,7 @@ async function main(): Promise<void> {
   //
   // gestures: {
   //   swipe: {
-  //     enabled: true,
+  //     enabled: false,        // default off — horizontal swipes scroll the toolbar row; opt in for swipe-to-switch-window
   //     left: '\\x02n',          // data sent on swipe left (default: next tmux window)
   //     right: '\\x02p',         // data sent on swipe right (default: prev tmux window)
   //     leftLabel: 'Next tmux window',

@@ -23,7 +23,7 @@ describe('defineConfig', () => {
 		})
 		expect(config.gestures.swipe.threshold).toBe(120)
 		// Other swipe defaults preserved
-		expect(config.gestures.swipe.enabled).toBe(true)
+		expect(config.gestures.swipe.enabled).toBe(false)
 		expect(config.gestures.swipe.maxDuration).toBe(400)
 		expect(config.gestures.swipe.left).toBe('\x02n')
 		expect(config.gestures.swipe.right).toBe('\x02p')
@@ -40,7 +40,7 @@ describe('defineConfig', () => {
 		expect(config.gestures.swipe.left).toBe('\x02]')
 		expect(config.gestures.swipe.right).toBe('\x02[')
 		// Other swipe defaults preserved
-		expect(config.gestures.swipe.enabled).toBe(true)
+		expect(config.gestures.swipe.enabled).toBe(false)
 		expect(config.gestures.swipe.threshold).toBe(80)
 		expect(config.gestures.swipe.leftLabel).toBe('Next tmux window')
 		expect(config.gestures.swipe.rightLabel).toBe('Previous tmux window')
@@ -181,6 +181,7 @@ describe('defaultConfig', () => {
 	})
 
 	test('swipe defaults to tmux next/prev window', () => {
+		expect(defaultConfig.gestures.swipe.enabled).toBe(false)
 		expect(defaultConfig.gestures.swipe.left).toBe('\x02n')
 		expect(defaultConfig.gestures.swipe.right).toBe('\x02p')
 		expect(defaultConfig.gestures.swipe.leftLabel).toBe('Next tmux window')
