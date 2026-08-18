@@ -2,7 +2,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { FONT_SIZE_STORAGE_KEY } from '../src/actions/registry'
 import { defineConfig } from '../src/config'
-import type { XTerminal } from '../src/types'
+import type { RemobiConfig, XTerminal } from '../src/types'
 
 beforeEach(() => {
 	GlobalRegistrator.register()
@@ -22,7 +22,7 @@ function setInnerHeight(height: number): void {
 }
 
 /** Boot the overlay on a mock mobile terminal and return it once rendered */
-async function bootOverlay(): Promise<XTerminal> {
+async function bootOverlay(config: RemobiConfig = defineConfig()): Promise<XTerminal> {
 	Object.defineProperty(navigator, 'maxTouchPoints', { value: 1, configurable: true })
 	// happy-dom lacks document.fonts
 	Object.defineProperty(document, 'fonts', {
@@ -47,7 +47,7 @@ async function bootOverlay(): Promise<XTerminal> {
 	window.term = term
 
 	const { init } = await import('../src/index')
-	init(defineConfig())
+	init(config)
 
 	await vi.waitFor(
 		() => {
@@ -74,6 +74,24 @@ describe('font size persistence (localStorage remobi:fontSize)', () => {
 		localStorage.setItem(FONT_SIZE_STORAGE_KEY, 'huge')
 		const term = await bootOverlay()
 		expect(term.options.fontSize).toBe(13)
+	})
+
+	test('empty string falls back to the config default (Number("") === 0 trap)', async () => {
+		localStorage.setItem(FONT_SIZE_STORAGE_KEY, '')
+		const term = await bootOverlay()
+		expect(term.options.fontSize).toBe(13)
+	})
+
+	test('persisted value above the current sizeRange clamps to the upper bound', async () => {
+		localStorage.setItem(FONT_SIZE_STORAGE_KEY, '30')
+		const term = await bootOverlay(defineConfig({ font: { sizeRange: [8, 20] } }))
+		expect(term.options.fontSize).toBe(20)
+	})
+
+	test('persisted value below the current sizeRange clamps to the lower bound', async () => {
+		localStorage.setItem(FONT_SIZE_STORAGE_KEY, '2')
+		const term = await bootOverlay()
+		expect(term.options.fontSize).toBe(8)
 	})
 
 	test('localStorage read failure (iOS private mode) — logs and uses the default', async () => {

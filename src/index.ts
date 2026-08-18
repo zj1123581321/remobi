@@ -14,7 +14,7 @@ import { createScrollButtons } from './controls/scroll-buttons'
 import { createDrawer } from './drawer/drawer'
 import { attachDoubleTapGesture } from './gestures/double-tap'
 import { createGestureLock } from './gestures/lock'
-import { attachPinchGestures } from './gestures/pinch'
+import { attachPinchGestures, clampFontSize } from './gestures/pinch'
 import { attachScrollGesture } from './gestures/scroll'
 import { attachSwipeGestures } from './gestures/swipe'
 import { createHookRegistry } from './hooks/registry'
@@ -48,13 +48,16 @@ export type { HookRegistry, SendSource } from './hooks/registry'
 /**
  * Read the persisted font size (localStorage `remobi:fontSize`), falling back
  * to the config default when absent or unreadable (iOS private mode throws).
+ * A usable value is clamped to the current `font.sizeRange` — the persisted
+ * range may be wider than today's config. An empty string is treated as
+ * absent (`Number('') === 0` would otherwise parse as a valid size).
  */
 function readPersistedFontSize(font: RemobiConfig['font']): number {
 	try {
 		const raw = localStorage.getItem(FONT_SIZE_STORAGE_KEY)
-		if (raw !== null) {
+		if (raw !== null && raw !== '') {
 			const size = Number(raw)
-			if (Number.isFinite(size)) return size
+			if (Number.isFinite(size)) return clampFontSize(size, font.sizeRange)
 		}
 	} catch (error) {
 		console.error('remobi: failed to read persisted font size', error)
