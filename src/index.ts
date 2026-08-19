@@ -4,6 +4,8 @@ import { createComboPicker } from './controls/combo-picker'
 import { createDpad } from './controls/dpad'
 import { createFloatingButtons } from './controls/floating-buttons'
 import { createHelpOverlay } from './controls/help'
+import { createMicController } from './controls/mic-controller'
+import type { MicController } from './controls/mic-controller'
 import type { KeyboardController } from './controls/keyboard-controller'
 import {
 	createKeyboardController,
@@ -126,6 +128,7 @@ export function init(
 			const mobile = isMobile()
 			let disposed = false
 			let keyboard: KeyboardController | undefined
+			let micController: MicController | undefined
 			const disposeOverlayReadyResize = hooks.on('overlayReady', () => {
 				startupResize.scheduleAfterLayout()
 			})
@@ -134,6 +137,7 @@ export function init(
 				if (disposed) return
 				disposed = true
 				keyboard?.dispose()
+				micController?.dispose()
 				disposeOverlayReadyResize.dispose()
 				startupResize.dispose()
 				disposeReconnect()
@@ -181,6 +185,11 @@ export function init(
 				keyboard = setup.keyboard
 				const effectiveConfig = setup.effectiveConfig
 				const keyboardController = setup.keyboard
+				micController = createMicController({
+					term,
+					config: effectiveConfig,
+					hooks,
+				})
 
 				// Floating d-pad — created before the action registry so
 				// dpad-toggle buttons wire up via DI (same pattern as ⌨).
@@ -218,6 +227,7 @@ export function init(
 					hooks,
 					actions,
 					comboPicker.open,
+					micController,
 				)
 				document.body.appendChild(toolbar)
 				await hooks.runToolbarCreated({ term, config: effectiveConfig, toolbar })

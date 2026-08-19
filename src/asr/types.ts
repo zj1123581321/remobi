@@ -17,7 +17,6 @@ export type AsrFinalHandler = (text: string, sequence?: number) => void
 export type AsrErrorHandler = (error: AsrErrorCode) => void
 export type AsrUnsubscribe = () => void
 
-/** Minimal provider-independent streaming ASR contract; final sequence is passed when present for consumer-side deduplication. */
 /**
  * Minimal provider-independent streaming ASR contract.
  * `audio-interrupted` is an external interruption, never a normal stop result.
