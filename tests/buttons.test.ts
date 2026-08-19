@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'vitest'
+import { dpadToggleButton } from '../src/controls/dpad'
 import { keyboardToggleButton } from '../src/controls/keyboard-controller'
 import { defaultRow1, defaultRow2 } from '../src/toolbar/buttons'
 
 describe('defaultRow1 (moshi-style single row)', () => {
-	test('is exactly the 8-key high-frequency set in render order', () => {
+	test('is exactly the 7-key high-frequency set in render order', () => {
 		expect(defaultRow1.map((b) => b.id)).toEqual([
 			'esc',
 			'ctrl-c',
 			'tab',
-			'up',
-			'down',
 			'enter',
+			'dpad-toggle',
 			'keyboard-toggle',
 			'drawer-toggle',
 		])
@@ -26,12 +26,19 @@ describe('defaultRow1 (moshi-style single row)', () => {
 		expect(defaultRow1[1]?.action).toEqual({ type: 'send', data: '\x03' })
 	})
 
-	test('has only the Up/Down arrow keys', () => {
+	test('keeps ⏎ on the row — the primary send key never moves into a submenu', () => {
+		const enter = defaultRow1.find((b) => b.id === 'enter')
+		expect(enter?.action).toEqual({ type: 'send', data: '\r' })
+	})
+
+	test('has no arrow keys — the floating d-pad (✥) owns them now', () => {
 		const arrows = defaultRow1.filter(
 			(b) =>
 				b.action.type === 'send' && b.action.data.startsWith('\x1b[') && b.action.data !== '\x1b[Z',
 		)
-		expect(arrows.map((b) => b.id)).toEqual(['up', 'down'])
+		expect(arrows).toEqual([])
+		const dpad = defaultRow1.find((b) => b.id === 'dpad-toggle')
+		expect(dpad).toEqual(dpadToggleButton)
 	})
 
 	test('ends with ⌨ then ☰ More', () => {
