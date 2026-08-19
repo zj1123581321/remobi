@@ -45,7 +45,7 @@ query 鉴权直连火山 `bigmodel_async`，识别事件（partial/final/error�
     无新增通道。
 - **任务类型**：backend-logic
 - **复杂度**：L
-- **Base commit**：608856d0edcdac5c751ef2c89526ebcbed6a78cc（origin/main，PR #6 合并后）
+- **Base commit**：eeec5a1（origin/main，PR #6 合并 + 本卡入库后）
 - **Branch**：由 delegate 分配（card/<worktree 名>），执行器不得另建分支
 - **Worktree**：由 delegate 分配
 - **当前唯一写入者**：本卡执行器（主脑只读验收）
