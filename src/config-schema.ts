@@ -35,6 +35,7 @@ const fontSizeActionSchema = v.strictObject({
 const helpActionSchema = v.strictObject({ type: v.literal('help') })
 const keyboardToggleActionSchema = v.strictObject({ type: v.literal('keyboard-toggle') })
 const dpadToggleActionSchema = v.strictObject({ type: v.literal('dpad-toggle') })
+const voiceInputActionSchema = v.strictObject({ type: v.literal('voice-input') })
 
 const buttonActionSchema = v.variant('type', [
 	sendActionSchema,
@@ -47,6 +48,7 @@ const buttonActionSchema = v.variant('type', [
 	helpActionSchema,
 	keyboardToggleActionSchema,
 	dpadToggleActionSchema,
+	voiceInputActionSchema,
 ])
 
 // --- Control button ---
@@ -366,8 +368,54 @@ const asrResolvedSchema = v.pipe(
 
 // --- Top-level schemas ---
 
-/** Schema for config overrides (all fields optional, button arrays accept array | function) */
-export const remobiConfigOverridesSchema = v.strictObject({
+function hasVoiceInputAction(value: unknown): boolean {
+	if (!Array.isArray(value)) return false
+	return value.some((button) => {
+		if (!isRecord(button) || !isRecord(button.action)) return false
+		return button.action.type === 'voice-input'
+	})
+}
+
+function voiceInputPlacementCheck<T extends Record<string, unknown>>() {
+	return v.rawCheck<T>(({ dataset, addIssue }) => {
+		if (!dataset.typed || !isRecord(dataset.value)) return
+		const value = dataset.value
+		const drawer = isRecord(value.drawer) ? value.drawer : undefined
+		if (drawer && hasVoiceInputAction(drawer.buttons)) {
+			addIssue({
+				message: 'voice-input action is only allowed in toolbar buttons',
+				path: [{ type: 'object', origin: 'value', input: value, key: 'drawer', value: drawer }],
+			})
+		}
+		const floatingButtons = value.floatingButtons
+		if (!Array.isArray(floatingButtons)) return
+		for (let index = 0; index < floatingButtons.length; index++) {
+			const group = floatingButtons[index]
+			if (!isRecord(group) || !hasVoiceInputAction(group.buttons)) continue
+			addIssue({
+				message: 'voice-input action is only allowed in toolbar buttons',
+				path: [
+					{
+						type: 'object',
+						origin: 'value',
+						input: value,
+						key: 'floatingButtons',
+						value: floatingButtons,
+					},
+					{
+						type: 'array',
+						origin: 'value',
+						input: floatingButtons,
+						key: index,
+						value: group,
+					},
+				],
+			})
+		}
+	})
+}
+
+const remobiConfigOverridesBaseSchema = v.strictObject({
 	name: v.optional(v.string()),
 	theme: v.optional(termThemeOverridesSchema),
 	font: v.optional(fontOverridesSchema),
@@ -391,8 +439,14 @@ export const remobiConfigOverridesSchema = v.strictObject({
 	asr: v.optional(asrOverridesSchema),
 })
 
+/** Schema for config overrides (all fields optional, button arrays accept array | function) */
+export const remobiConfigOverridesSchema = v.pipe(
+	remobiConfigOverridesBaseSchema,
+	voiceInputPlacementCheck<v.InferOutput<typeof remobiConfigOverridesBaseSchema>>(),
+)
+
 /** Schema for fully resolved config (all required fields, plain button arrays) */
-export const remobiConfigResolvedSchema = v.strictObject({
+const remobiConfigResolvedBaseSchema = v.strictObject({
 	name: v.string(),
 	theme: termThemeResolvedSchema,
 	font: fontResolvedSchema,
@@ -411,3 +465,8 @@ export const remobiConfigResolvedSchema = v.strictObject({
 	reconnect: reconnectResolvedSchema,
 	asr: asrResolvedSchema,
 })
+
+export const remobiConfigResolvedSchema = v.pipe(
+	remobiConfigResolvedBaseSchema,
+	voiceInputPlacementCheck<v.InferOutput<typeof remobiConfigResolvedBaseSchema>>(),
+)

@@ -1,6 +1,7 @@
 import { createDefaultActionRegistry } from '../actions/registry'
 import type { ActionRegistry } from '../actions/registry'
 import { decorateKeyboardToggleButton } from '../controls/keyboard-controller'
+import type { MicController } from '../controls/mic-controller'
 import type { HookRegistry } from '../hooks/registry'
 import type { ControlButton, RemobiConfig, XTerminal } from '../types'
 import { el } from '../util/dom'
@@ -64,11 +65,18 @@ function wireButton(
 	registry: ActionRegistry,
 	hooks: HookRegistry,
 	openDrawer: () => void,
+	micController: MicController | undefined,
 	openComboPicker?: (options: {
 		readonly sendText: (data: string) => Promise<void>
 		readonly focusIfNeeded: () => void
 	}) => void,
 ): void {
+	if (def.action.type === 'voice-input') {
+		if (!micController) throw new Error('remobi: voice-input action requires a mic controller')
+		micController.attach(button)
+		return
+	}
+
 	onTap(button, () => {
 		const kbWasOpen = isKeyboardOpen()
 		haptic()
@@ -163,6 +171,7 @@ function buildRow(
 	registry: ActionRegistry,
 	hooks: HookRegistry,
 	openDrawer: () => void,
+	micController: MicController | undefined,
 	openComboPicker?: (options: {
 		readonly sendText: (data: string) => Promise<void>
 		readonly focusIfNeeded: () => void
@@ -171,7 +180,10 @@ function buildRow(
 	const row = el('div', { class: 'wt-row' })
 
 	for (const def of buttons) {
+		if (def.action.type === 'voice-input' && !micController) continue
 		const button = el('button')
+		button.dataset.remobiAction = def.action.type
+		button.dataset.remobiButtonId = def.id
 		button.textContent = def.label
 		if (def.action.type === 'ctrl-modifier') {
 			ctrlState.buttonEl = button
@@ -179,7 +191,18 @@ function buildRow(
 		if (def.action.type === 'keyboard-toggle') {
 			decorateKeyboardToggleButton(button)
 		}
-		wireButton(button, def, term, ctrlState, config, registry, hooks, openDrawer, openComboPicker)
+		wireButton(
+			button,
+			def,
+			term,
+			ctrlState,
+			config,
+			registry,
+			hooks,
+			openDrawer,
+			micController,
+			openComboPicker,
+		)
 		row.appendChild(button)
 	}
 
@@ -202,6 +225,7 @@ export function createToolbar(
 		readonly sendText: (data: string) => Promise<void>
 		readonly focusIfNeeded: () => void
 	}) => void,
+	micController?: MicController,
 ): ToolbarResult {
 	const toolbar = el('div', { id: 'wt-toolbar' })
 	const ctrlState = createCtrlState()
@@ -209,7 +233,17 @@ export function createToolbar(
 	for (const buttons of [config.toolbar.row1, config.toolbar.row2]) {
 		if (buttons.length === 0) continue
 		toolbar.appendChild(
-			buildRow(buttons, term, ctrlState, config, actions, hooks, openDrawer, openComboPicker),
+			buildRow(
+				buttons,
+				term,
+				ctrlState,
+				config,
+				actions,
+				hooks,
+				openDrawer,
+				micController,
+				openComboPicker,
+			),
 		)
 	}
 

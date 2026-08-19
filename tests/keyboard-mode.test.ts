@@ -68,6 +68,12 @@ function mockSuppressionTerm(): {
 			onData(_handler: (data: string) => void) {
 				return { dispose() {} }
 			},
+			isConnected() {
+				return true
+			},
+			onConnectionChange(_handler: (connected: boolean) => void) {
+				return { dispose() {} }
+			},
 		},
 	}
 }
@@ -533,6 +539,12 @@ describe('init lifecycle (P2-1)', () => {
 				return { dispose: focusDispose }
 			},
 			onData(_handler: (data: string) => void) {
+				return { dispose() {} }
+			},
+			isConnected() {
+				return true
+			},
+			onConnectionChange(_handler: (connected: boolean) => void) {
 				return { dispose() {} }
 			},
 		}

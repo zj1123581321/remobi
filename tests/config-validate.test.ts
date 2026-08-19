@@ -89,6 +89,43 @@ describe('assertValidConfigOverrides', () => {
 		).not.toThrow()
 	})
 
+	test('accepts voice-input in either toolbar row', () => {
+		expect(() =>
+			assertValidConfigOverrides({
+				toolbar: {
+					row1: [{ id: 'voice', label: 'Mic', description: 'Hold to speak', action: { type: 'voice-input' } }],
+					row2: [{ id: 'voice-2', label: 'Mic 2', description: 'Hold to speak', action: { type: 'voice-input' } }],
+				},
+			}),
+		).not.toThrow()
+	})
+
+	test('rejects voice-input outside the toolbar', () => {
+		const voiceButton = {
+			id: 'voice',
+			label: 'Mic',
+			description: 'Hold to speak',
+			action: { type: 'voice-input' },
+		}
+		const drawerMessage = getValidationMessage(
+			{ drawer: { buttons: [voiceButton] } },
+			assertValidConfigOverrides,
+		)
+		expect(drawerMessage).toContain('only allowed in toolbar buttons')
+		const floatingMessage = getValidationMessage(
+			{
+				floatingButtons: [
+					{
+						position: 'top-left',
+						buttons: [voiceButton],
+					},
+				],
+			},
+			assertValidConfigOverrides,
+		)
+		expect(floatingMessage).toContain('only allowed in toolbar buttons')
+	})
+
 	test('rejects unknown root keys', () => {
 		const message = getValidationMessage({ mystery: true }, assertValidConfigOverrides)
 		expect(message).toContain('config.mystery')

@@ -10,14 +10,19 @@ export type AsrErrorCode =
 	| 'protocol-error'
 	| 'provider-error'
 	| 'network-too-slow'
-	| 'stopped'
 
 export type AsrTextHandler = (text: string) => void
+/** Final sequence is provider order; consumers must discard sequence <= their applied sequence. */
 export type AsrFinalHandler = (text: string, sequence?: number) => void
 export type AsrErrorHandler = (error: AsrErrorCode) => void
 export type AsrUnsubscribe = () => void
 
 /** Minimal provider-independent streaming ASR contract; final sequence is passed when present for consumer-side deduplication. */
+/**
+ * Minimal provider-independent streaming ASR contract.
+ * `audio-interrupted` is an external interruption, never a normal stop result.
+ * Providers report permission/provider/protocol failures through onError.
+ */
 export interface AsrEngine {
 	start(): Promise<void>
 	stop(): Promise<void>

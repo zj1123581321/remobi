@@ -6,7 +6,13 @@ export function mockTerminal(): XTerminal {
 		options: { fontSize: 14 },
 		input(_data: string, _wasUserInput: boolean) {},
 		focus() {},
-		onData(_handler: (data: string) => void) {
+	onData(_handler: (data: string) => void) {
+		return { dispose() {} }
+	},
+		isConnected() {
+			return true
+		},
+		onConnectionChange(_handler: (connected: boolean) => void) {
 			return { dispose() {} }
 		},
 	}
@@ -32,6 +38,12 @@ export function mockTerminalWithSent(): MockTermWithSent {
 		onData(_handler: (data: string) => void) {
 			return { dispose() {} }
 		},
+		isConnected() {
+			return true
+		},
+		onConnectionChange(_handler: (connected: boolean) => void) {
+			return { dispose() {} }
+		},
 	}
 }
 
@@ -44,6 +56,12 @@ export function mockTerminalWithFocus(): XTerminal & { focused: boolean } {
 			this.focused = true
 		},
 		onData(_handler: (data: string) => void) {
+			return { dispose() {} }
+		},
+		isConnected() {
+			return true
+		},
+		onConnectionChange(_handler: (connected: boolean) => void) {
 			return { dispose() {} }
 		},
 		focused: false,
