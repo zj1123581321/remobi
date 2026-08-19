@@ -1,0 +1,11 @@
+{
+  "mode": "query-seedasr-duration",
+  "at": "2026-08-19T05:28:30.810Z",
+  "handshake": "ok",
+  "detail": "收到 final 响应",
+  "target": {
+    "endpoint": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
+    "resourceId": "volc.seedasr.sauc.duration",
+    "authMode": "query"
+  }
+}

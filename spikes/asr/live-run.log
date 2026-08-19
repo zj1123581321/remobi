@@ -1,0 +1,21 @@
+ASR spike live-run evidence (2026-08-19)
+
+$ node_modules/.bin/tsx --no-cache spikes/asr/probe-auth.ts query-raw
+FATAL: 缺少 VOLC_APP_KEY / VOLC_ACCESS_KEY（环境变量或 spikes/asr/.env.local）
+$ echo $?
+2
+
+No fixture directory was generated because the probe fails before opening a socket.
+
+--- 2026-08-19 resumed run (key value omitted) ---
+
+$ node_modules/.bin/tsx --no-cache spikes/asr/probe-auth.ts all
+query-seedasr-duration: HTTP 101; server-partial 0x9 flags=0b0000 offset=8; server-final 0x9 flags=0b0011 offset=12
+query-seedasr-concurrent: HTTP 101; protocol-error 0xF code=45000292 (quota exceeded for types: concurrency)
+query-seedasr-duration-opus: HTTP 101; protocol-error 0xF code=45000151 (unsupported format opus)
+query-seedasr-duration-end-variant-neg-no-seq: HTTP 101; server-final 0x9 flags=0b0011 offset=12
+query-seedasr-duration-protocol-error: HTTP 101; protocol-error 0xF code=45000000
+query-seedasr-duration-business-error: HTTP 101; protocol-error 0xF code=45000151
+fixture directories: 19
+fixture files: 271
+fixture total bytes: 948065

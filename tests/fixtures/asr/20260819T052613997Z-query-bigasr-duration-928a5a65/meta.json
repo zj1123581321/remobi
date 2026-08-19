@@ -1,0 +1,11 @@
+{
+  "mode": "query-bigasr-duration",
+  "at": "2026-08-19T05:26:14.213Z",
+  "handshake": "ok",
+  "detail": "收到协议错误帧 0xF code=45000000",
+  "target": {
+    "endpoint": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
+    "resourceId": "volc.bigasr.sauc.duration",
+    "authMode": "query"
+  }
+}

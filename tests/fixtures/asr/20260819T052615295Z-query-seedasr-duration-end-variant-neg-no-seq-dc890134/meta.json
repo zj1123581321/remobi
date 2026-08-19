@@ -1,0 +1,12 @@
+{
+  "mode": "query-seedasr-duration-end-variant-neg-no-seq",
+  "at": "2026-08-19T05:26:15.588Z",
+  "handshake": "fail",
+  "detail": "WS close code=1000 reason=finish last sequence",
+  "target": {
+    "endpoint": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
+    "resourceId": "volc.seedasr.sauc.duration",
+    "authMode": "query"
+  },
+  "closeCode": 1000
+}

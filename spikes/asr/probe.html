@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#111827">
+  <title>remobi ASR 能力探针</title>
+  <style>
+    :root { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; }
+    body { margin: 0; background: #111827; color: #e5e7eb; }
+    main { max-width: 760px; margin: auto; padding: 20px 16px 40px; }
+    h1 { font-size: 1.35rem; margin: 0 0 8px; }
+    h2 { font-size: 1rem; margin: 24px 0 8px; }
+    p { color: #cbd5e1; }
+    code { color: #a7f3d0; }
+    .card { background: #1f2937; border: 1px solid #374151; border-radius: 12px; padding: 14px; margin-top: 12px; }
+    .warning { border-color: #f59e0b; }
+    button { min-height: 44px; border: 0; border-radius: 9px; padding: 10px 14px; margin: 4px 6px 4px 0; background: #10b981; color: #06281f; font-weight: 700; }
+    button.secondary { background: #475569; color: #f8fafc; }
+    button.danger { background: #f87171; color: #450a0a; }
+    button:disabled { opacity: .5; }
+    #status { white-space: pre-wrap; }
+    #log { box-sizing: border-box; width: 100%; min-height: 240px; padding: 10px; border-radius: 8px; border: 1px solid #475569; background: #020617; color: #d1fae5; font: 13px/1.45 ui-monospace, monospace; }
+    li { margin: 6px 0; }
+    .small { font-size: .88rem; color: #94a3b8; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>remobi ASR 浏览器能力探针</h1>
+  <p>本页只检测浏览器采集能力，不连接火山 ASR、不读取或保存任何密钥。</p>
+
+  <section class="card warning">
+    <strong>先确认 HTTPS</strong>
+    <p>麦克风与 AudioWorklet 通常要求 secure context。局域网 <code>http://IP:端口</code> 不满足前置条件；请使用 Tailscale Serve 或 HTTPS 反向代理后再打开本页。<code>localhost</code> 仅适合本机测试。</p>
+  </section>
+
+  <section class="card">
+    <h2>操作</h2>
+    <ol>
+      <li>分别在 iPhone Safari 标签页、iPhone 主屏 PWA、Android Chrome（如可用）打开本页。</li>
+      <li>点击“开始能力检测”，允许麦克风权限；确认日志中的实际采样率与能力结果。</li>
+      <li>保持页面可见，依次测试切后台、锁屏和来电/音频中断；回到页面后点“停止采集”。</li>
+      <li>点击“复制日志”，把当前环境标识、能力结果和中断事件发回结果文档维护者。日志不含音频和密钥。</li>
+    </ol>
+    <button id="start">开始能力检测</button>
+    <button id="stop" class="danger" disabled>停止采集</button>
+    <button id="copy" class="secondary">复制日志</button>
+    <button id="clear" class="secondary">清空日志</button>
+  </section>
+
+  <section class="card">
+    <h2>当前环境</h2>
+    <div id="status">尚未检测。</div>
+  </section>
+
+  <section class="card">
+    <h2>结构化日志</h2>
+    <textarea id="log" readonly aria-label="结构化日志"></textarea>
+    <p class="small">中断信号按事件顺序记录：track.onended、track.onmute、AudioContext.statechange、visibilitychange。</p>
+  </section>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const startButton = $('start');
+  const stopButton = $('stop');
+  const copyButton = $('copy');
+  const clearButton = $('clear');
+  const status = $('status');
+  const logArea = $('log');
+  let stream;
+  let audioContext;
+  const entries = [];
+
+  const now = () => new Date().toISOString();
+  const environment = () => {
+    const ua = navigator.userAgent;
+    const ios = /iPhone|iPad|iPod/i.test(ua);
+    const android = /Android/i.test(ua);
+    const standalone = Boolean(navigator.standalone) || window.matchMedia('(display-mode: standalone)').matches;
+    const safari = ios && /Safari/i.test(ua) && !/CriOS|FxiOS/i.test(ua);
+    return {
+      secureContext: window.isSecureContext,
+      platform: ios ? (standalone ? 'iOS 主屏 PWA' : 'iOS Safari 标签页') : android ? 'Android' : '其它浏览器',
+      likelyBrowser: safari ? 'Safari' : /CriOS|Chrome/i.test(ua) ? 'Chrome' : '其它',
+      standalone,
+      userAgent: ua
+    };
+  };
+  const append = (event, detail = {}) => {
+    const item = { at: now(), event, ...detail };
+    entries.push(item);
+    logArea.value = entries.map((entry) => JSON.stringify(entry)).join('\n');
+    logArea.scrollTop = logArea.scrollHeight;
+  };
+  const setStatus = (text) => { status.textContent = text; };
+
+  const onVisibilityChange = () => append('visibilitychange', { state: document.visibilityState });
+  document.addEventListener('visibilitychange', onVisibilityChange);
+
+  const stop = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      stream = undefined;
+    }
+    if (audioContext) {
+      void audioContext.close();
+      audioContext = undefined;
+    }
+    startButton.disabled = false;
+    stopButton.disabled = true;
+    append('capture-stop');
+  };
+
+  const workletProbe = async (context) => {
+    if (!context.audioWorklet || typeof context.audioWorklet.addModule !== 'function') {
+      append('audio-worklet-unavailable', { api: false });
+      return;
+    }
+    const source = 'registerProcessor("remobi-asr-probe", class extends AudioWorkletProcessor { process() { return true; } });';
+    const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+    try {
+      await context.audioWorklet.addModule(url);
+      append('audio-worklet-add-module', { api: true, result: 'ok' });
+    } catch (error) {
+      append('audio-worklet-add-module', { api: true, result: 'failed', reason: String(error) });
+    }
+    URL.revokeObjectURL(url);
+  };
+
+  const start = async () => {
+    stop();
+    const env = environment();
+    append('environment', env);
+    setStatus(JSON.stringify(env, null, 2));
+    if (!env.secureContext) {
+      append('secure-context', { result: 'failed', reason: '当前页面不是 secure context' });
+    }
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) {
+      append('audio-context', { result: 'unavailable' });
+    } else {
+      const context = new AudioContextCtor({ sampleRate: 16000 });
+      audioContext = context;
+      context.addEventListener('statechange', () => append('audio-context-statechange', { state: context.state }));
+      append('audio-context', { requestedSampleRate: 16000, actualSampleRate: context.sampleRate, state: context.state });
+      await workletProbe(context);
+    }
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      append('get-user-media', { result: 'unavailable' });
+      return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const tracks = stream.getAudioTracks();
+      tracks.forEach((track) => {
+        track.onended = () => append('track-ended', { track: track.label || 'audio' });
+        track.onmute = () => append('track-mute', { track: track.label || 'audio' });
+        track.onunmute = () => append('track-unmute', { track: track.label || 'audio' });
+      });
+      append('get-user-media', { result: 'ok', audioTracks: tracks.length, labelsPresent: tracks.some((track) => Boolean(track.label)) });
+      startButton.disabled = true;
+      stopButton.disabled = false;
+    } catch (error) {
+      append('get-user-media', { result: 'failed', reason: String(error) });
+    }
+  };
+
+  startButton.addEventListener('click', () => { void start(); });
+  stopButton.addEventListener('click', stop);
+  clearButton.addEventListener('click', () => { entries.length = 0; logArea.value = ''; });
+  copyButton.addEventListener('click', async () => {
+    const text = logArea.value || JSON.stringify({ at: now(), event: 'no-log' });
+    try {
+      await navigator.clipboard.writeText(text);
+      append('copy-log', { result: 'ok' });
+    } catch (error) {
+      append('copy-log', { result: 'failed', reason: String(error) });
+    }
+  });
+  append('page-ready', { hrefOrigin: location.origin, ...environment() });
+})();
+</script>
+</body>
+</html>
