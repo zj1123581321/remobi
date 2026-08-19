@@ -229,12 +229,12 @@ export default {
     sizeRange: [8, 32],
   },
   toolbar: {
-    // Single row by default (7 keys): Esc, C-c, Tab, Enter, ✥ dpad-toggle,
-    // keyboard-toggle, drawer-toggle. ✥ pops up a floating d-pad
-    // (← ↑ ↓ → ⌫ ⏎) above the toolbar — the arrow keys live there now
-    // (up/down also keep fallback buttons in the drawer). row2 defaults
-    // to empty — set it to opt into a second row. Ctrl/Prefix/Paste live
-    // in the drawer.
+    // Single row by default (7 keys): Esc, C-c, ⌫ Backspace, Enter,
+    // ✥ dpad-toggle, keyboard-toggle, drawer-toggle. ✥ pops up a floating
+    // d-pad (← ↑ ↓ → ⌫ ⏎) above the toolbar — the arrow keys live there
+    // now (up/down also keep fallback buttons in the drawer). row2
+    // defaults to empty — set it to opt into a second row.
+    // Ctrl/Prefix/Paste/Tab live in the drawer.
     row1: [
       { id: 'esc', label: 'Esc', description: 'Send Escape key', action: { type: 'send', data: '\x1b' } },
       { id: 'ctrl-c', label: 'C-c', description: 'Send Ctrl-C interrupt', action: { type: 'send', data: '\x03' } },
