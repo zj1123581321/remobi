@@ -1,4 +1,5 @@
 import { resolveButtonArray } from './config-resolve'
+import { dpadToggleButton } from './controls/dpad'
 import { keyboardToggleButton } from './controls/keyboard-controller'
 import { catppuccinMocha } from './theme/catppuccin-mocha'
 import type {
@@ -55,23 +56,15 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 	},
 	{ id: 'tab', label: 'Tab', description: 'Send Tab key', action: { type: 'send', data: '\t' } },
 	{
-		id: 'up',
-		label: '\u2191',
-		description: 'Send Up arrow key',
-		action: { type: 'send', data: '\x1b[A', keyLabel: 'Up' },
-	},
-	{
-		id: 'down',
-		label: '\u2193',
-		description: 'Send Down arrow key',
-		action: { type: 'send', data: '\x1b[B', keyLabel: 'Down' },
-	},
-	{
 		id: 'enter',
 		label: '\u23CE',
 		description: 'Send Enter/Return key',
 		action: { type: 'send', data: '\r' },
 	},
+	// ✥ toggles the floating d-pad — it owns the arrow keys now (up/down were
+	// on this row until the d-pad landed; all four arrows stay reachable via
+	// the d-pad, and up/down also keep drawer fallback entries below).
+	dpadToggleButton,
 	keyboardToggleButton,
 	{
 		id: 'drawer-toggle',
@@ -198,6 +191,19 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 		label: '\u2192',
 		description: 'Send Right arrow key',
 		action: { type: 'send', data: '\x1b[C', keyLabel: 'Right' },
+	},
+	// up/down left row1 when the d-pad took over the arrows — drawer fallback
+	{
+		id: 'up',
+		label: '\u2191',
+		description: 'Send Up arrow key',
+		action: { type: 'send', data: '\x1b[A', keyLabel: 'Up' },
+	},
+	{
+		id: 'down',
+		label: '\u2193',
+		description: 'Send Down arrow key',
+		action: { type: 'send', data: '\x1b[B', keyLabel: 'Down' },
 	},
 	{
 		id: 'ctrl-c',
