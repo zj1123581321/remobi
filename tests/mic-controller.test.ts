@@ -20,27 +20,38 @@ import { mockTerminalWithSent } from './fixtures'
 class FakeEngine implements AsrEngine {
 	starts = 0
 	stops = 0
+	rejectStops = false
 	private startResolve: (() => void) | undefined
+	private startReject: ((error: unknown) => void) | undefined
 	private partial: AsrTextHandler | undefined
 	private final: AsrFinalHandler | undefined
 	private error: AsrErrorHandler | undefined
 
 	start(): Promise<void> {
 		this.starts++
-		return new Promise<void>((resolve) => {
+		return new Promise<void>((resolve, reject) => {
 			this.startResolve = resolve
+			this.startReject = reject
 		})
 	}
 
 	resolveStart(): void {
 		const resolve = this.startResolve
 		this.startResolve = undefined
+		this.startReject = undefined
 		resolve?.()
+	}
+
+	rejectStart(error: unknown): void {
+		const reject = this.startReject
+		this.startResolve = undefined
+		this.startReject = undefined
+		reject?.(error)
 	}
 
 	stop(): Promise<void> {
 		this.stops++
-		return Promise.resolve()
+		return this.rejectStops ? Promise.reject(new Error('stop failed')) : Promise.resolve()
 	}
 
 	isSupported(): boolean {
@@ -89,7 +100,7 @@ interface TestHarness {
 	setConnected(connected: boolean): void
 }
 
-function createHarness(autoEnter = false): TestHarness {
+function createHarness(autoEnter = false, hooks = createHookRegistry()): TestHarness {
 	const engine = new FakeEngine()
 	const baseTerm = mockTerminalWithSent()
 	let connected = true
@@ -108,7 +119,7 @@ function createHarness(autoEnter = false): TestHarness {
 	const controller = createMicController({
 		term,
 		config,
-		hooks: createHookRegistry(),
+		hooks,
 		engine,
 	})
 	if (!controller) throw new Error('expected injected fake engine to create controller')
@@ -144,6 +155,10 @@ async function startRecording(harness: TestHarness): Promise<void> {
 
 beforeEach(() => {
 	GlobalRegistrator.register()
+	Object.defineProperty(document, 'visibilityState', {
+		configurable: true,
+		value: 'visible',
+	})
 	vi.useFakeTimers()
 })
 
@@ -158,6 +173,13 @@ describe('sanitizeVoiceText', () => {
 		const input = 'A\x00B\tC\nD\rE\x7fF\x80G\x9fH \u4f60\u597d'
 		expect(new TextEncoder().encode(sanitizeVoiceText(input))).toEqual(
 			new TextEncoder().encode('ABCDEFGH \u4f60\u597d'),
+		)
+	})
+
+	test('strips zero-width, format, bidi, line-separator, and paragraph-separator code points', () => {
+		const input = 'A\u200bB\u202aC\u2028D\u2029E\ufeffF e\u0301'
+		expect(new TextEncoder().encode(sanitizeVoiceText(input))).toEqual(
+			new TextEncoder().encode('ABCDEF e\u0301'),
 		)
 	})
 
@@ -209,7 +231,7 @@ describe('mic-controller PTT state machine', () => {
 		harness.controller.dispose()
 	})
 
-	test('final text overwrites partial and deduplicates stale sequences', async () => {
+	test('final text overwrites partial and discards stale or late sequences', async () => {
 		const harness = createHarness()
 		await startRecording(harness)
 		dispatchPointer(harness.button, 'pointerup')
@@ -221,7 +243,7 @@ describe('mic-controller PTT state machine', () => {
 		harness.engine.emitFinal('stale-1', 1)
 		expect(harness.controller.preview.input.value).toBe('final-2')
 		harness.engine.emitFinal('new-3', 3)
-		expect(harness.controller.preview.input.value).toBe('new-3')
+		expect(harness.controller.preview.input.value).toBe('final-2')
 		harness.controller.dispose()
 	})
 
@@ -234,6 +256,52 @@ describe('mic-controller PTT state machine', () => {
 		vi.advanceTimersByTime(3_000)
 		expect(harness.controller.state).toBe('preview')
 		expect(harness.controller.preview.input.value).toBe('keep me')
+		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+		expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow()
+		expect(harness.controller.state).toBe('idle')
+		harness.controller.dispose()
+	})
+
+	test('permission denial enters error and visibility cancellation returns to idle', async () => {
+		const harness = createHarness()
+		dispatchPointer(harness.button, 'pointerdown')
+		vi.advanceTimersByTime(300)
+		harness.engine.rejectStart(new DOMException('permission denied', 'NotAllowedError'))
+		await Promise.resolve()
+		await Promise.resolve()
+		expect(harness.controller.state).toBe('error')
+		expect(harness.controller.preview.message.textContent).toContain('permission')
+		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+		expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow()
+		expect(harness.controller.state).toBe('idle')
+		harness.controller.dispose()
+	})
+
+	test('connection timeout enters error and pointercancel cancels an active recording', async () => {
+		const timeout = createHarness()
+		dispatchPointer(timeout.button, 'pointerdown')
+		vi.advanceTimersByTime(300)
+		vi.advanceTimersByTime(5_000)
+		expect(timeout.controller.state).toBe('error')
+		timeout.controller.dispose()
+
+		const cancelled = createHarness()
+		await startRecording(cancelled)
+		dispatchPointer(cancelled.button, 'pointercancel')
+		expect(cancelled.controller.state).toBe('idle')
+		expect(cancelled.controller.preview.message.textContent).toContain('cancelled')
+		cancelled.controller.dispose()
+	})
+
+	test('stop rejection is observable while cancellation still reaches idle', async () => {
+		const harness = createHarness()
+		harness.engine.rejectStops = true
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+		dispatchPointer(harness.button, 'pointerdown')
+		dispatchPointer(harness.button, 'pointercancel')
+		await Promise.resolve()
+		expect(harness.controller.state).toBe('idle')
+		expect(error).toHaveBeenCalledWith('remobi: ASR stop failed', expect.any(Error))
 		harness.controller.dispose()
 	})
 
@@ -322,6 +390,41 @@ describe('preview injection', () => {
 		expect(harness.term.sent).toEqual([])
 		expect(harness.controller.state).toBe('preview')
 		expect(harness.controller.preview.message.textContent).toContain('disconnected')
+		harness.controller.dispose()
+	})
+
+	test('disconnect during after-send hook blocks the independent autoEnter write', async () => {
+		const hooks = createHookRegistry()
+		const harness = createHarness(true, hooks)
+		hooks.on('afterSendData', async () => {
+			harness.setConnected(false)
+			await Promise.resolve()
+		})
+		await startRecording(harness)
+		dispatchPointer(harness.button, 'pointerup')
+		harness.engine.emitFinal('typed command', 1)
+		harness.controller.preview.input.value = 'typed command'
+		harness.controller.preview.element
+			.querySelector('button:last-child')
+			?.dispatchEvent(new Event('click'))
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+		expect(harness.term.sent).toEqual(['typed command'])
+		expect(harness.controller.state).toBe('preview')
+		expect(harness.controller.preview.message.textContent).toContain('disconnected')
+		harness.controller.dispose()
+	})
+
+	test('late final after waiting timeout cannot overwrite edited preview text', async () => {
+		const harness = createHarness()
+		await startRecording(harness)
+		harness.engine.emitPartial('recognized')
+		vi.advanceTimersByTime(20)
+		dispatchPointer(harness.button, 'pointerup')
+		vi.advanceTimersByTime(3_000)
+		expect(harness.controller.state).toBe('preview')
+		harness.controller.preview.input.value = 'user edit'
+		harness.engine.emitFinal('late provider result', 2)
+		expect(harness.controller.preview.input.value).toBe('user edit')
 		harness.controller.dispose()
 	})
 

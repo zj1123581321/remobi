@@ -34,6 +34,7 @@ interface MicControllerOptions {
 const HOLD_THRESHOLD_MS = 300
 const CONNECT_TIMEOUT_MS = 5_000
 const WAITING_FINAL_TIMEOUT_MS = 3_000
+const NON_PRINTING_FORMAT_OR_SEPARATOR = /[\p{Cf}\p{Zl}\p{Zp}]/u
 
 const ERROR_MESSAGES: Record<AsrErrorCode, string> = {
 	unsupported: 'Voice input is not supported in this browser.',
@@ -56,14 +57,14 @@ export function isVoiceInputSupported(): boolean {
 	)
 }
 
-/** Keep only terminal-safe printable text and U+0020 space; strip C0, DEL, and C1 controls. */
+/** Keep terminal-safe printable text and U+0020 space; strip controls and format separators. */
 export function sanitizeVoiceText(text: string): string {
 	let result = ''
 	for (const character of text) {
 		const codePoint = character.codePointAt(0) ?? 0
-		if (codePoint >= 0x20 && codePoint !== 0x7f && !(codePoint >= 0x80 && codePoint <= 0x9f)) {
-			result += character
-		}
+		if (codePoint < 0x20 || codePoint === 0x7f || (codePoint >= 0x80 && codePoint <= 0x9f)) continue
+		if (NON_PRINTING_FORMAT_OR_SEPARATOR.test(character)) continue
+		result += character
 	}
 	return result
 }
@@ -176,14 +177,21 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		generation++
 		cleanupSession()
 		if (hadText) transition(['error'], 'preview', 'error-preview')
-		else transition(['error'], 'idle', 'error-idle')
 	}
 
 	function cancelSession(message: string, sessionGeneration: number): void {
 		if (disposed || sessionGeneration !== generation || currentState === 'idle') return
 		clearTimers()
 		transition(
-			['permission-requesting', 'connecting', 'recording', 'stopping', 'waiting-final'],
+			[
+				'permission-requesting',
+				'connecting',
+				'recording',
+				'stopping',
+				'waiting-final',
+				'preview',
+				'error',
+			],
 			'cancelled',
 			'cancel',
 		)
@@ -197,19 +205,14 @@ export function createMicController(options: MicControllerOptions): MicControlle
 
 	function finishPreview(sessionGeneration: number): void {
 		if (disposed || sessionGeneration !== generation || currentState !== 'waiting-final') return
-		if (finalTimer !== undefined) clearTimeout(finalTimer)
-		finalTimer = undefined
+		generation++
+		cleanupSession()
 		transition(['waiting-final'], 'preview', 'final-timeout')
 		preview.showMessage('Ready to send. Edit the text or cancel.')
 	}
 
 	function onFinal(text: string, sequence: number | undefined, sessionGeneration: number): void {
-		if (
-			disposed ||
-			sessionGeneration !== generation ||
-			(currentState !== 'waiting-final' && currentState !== 'preview')
-		)
-			return
+		if (disposed || sessionGeneration !== generation || currentState !== 'waiting-final') return
 		if (sequence !== undefined) {
 			if (sequence <= appliedSeq) return
 			appliedSeq = sequence
@@ -354,7 +357,13 @@ export function createMicController(options: MicControllerOptions): MicControlle
 				data: text,
 			})
 			if (disposed || sessionGeneration !== generation || currentState !== 'preview') return
-			if (options.config.asr.autoEnter) sendData(options.term, '\r')
+			if (options.config.asr.autoEnter) {
+				if (!options.term.isConnected()) {
+					preview.showMessage('Terminal disconnected; text is kept here until it reconnects.')
+					return
+				}
+				sendData(options.term, '\r')
+			}
 			preview.clear()
 			endAsIdle()
 		})()
