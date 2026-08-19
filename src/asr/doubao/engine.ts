@@ -481,7 +481,9 @@ export class DoubaoEngine implements AsrEngine {
 				rejectHandshake?.(new Error('ASR websocket closed during handshake'))
 				return
 			}
-			if (this.state === 'recording') {
+			if (this.state === 'starting') {
+				this.fail('connection-failed', epoch)
+			} else if (this.state === 'recording') {
 				this.fail('socket-closed', epoch)
 			} else if (this.state === 'stopping' && !this.finalReceived) {
 				this.fail('socket-closed', epoch)

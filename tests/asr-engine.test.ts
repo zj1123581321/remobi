@@ -710,6 +710,30 @@ describe('DoubaoEngine', () => {
 		expect(capture.stopCalls).toBe(1)
 	})
 
+	test('fails immediately when an opened websocket closes while capture is pending', async () => {
+		const capture = new PendingCapture()
+		const socket = new EpochSocket()
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+		const errors: string[] = []
+		engine.onError((code) => errors.push(code))
+
+		const start = engine.start()
+		await vi.waitFor(() => expect(capture.startCalls).toBe(1))
+		socket.triggerClose()
+
+		expect(errors).toEqual(['connection-failed'])
+		expect(capture.stopCalls).toBe(1)
+		capture.release()
+		await start
+		await engine.stop()
+		expect(capture.stopCalls).toBe(1)
+	})
+
 	test('reports websocket close during stopping once and preserves its stop promise', async () => {
 		const capture = new BlockingCapture()
 		const socket = new EpochSocket()
