@@ -112,7 +112,8 @@ query 鉴权直连火山 `bigmodel_async`，识别事件（partial/final/error�
      每 N 音频包回 partial；负序号包 → final；可注入畸形帧/错误码/断连；fixture 驱动。
   5. worklet 交付（E1）：build.ts `bundleWorkletAsset()` 双路径（源码 esbuild 现打 /
      `readPrebuiltAsset('asr-worklet.js')`）；`scripts/build-overlay.ts` 写 `dist/asr-worklet.js`；
-     serve 路由 `GET {basePath}asr-worklet.js?v={version}` → `text/javascript` + `cache-control: no-cache`；
+     serve 路由 `GET {basePath}asr-worklet.js` → `text/javascript` + `cache-control: no-cache`
+     （缓存策略定案为 no-cache，不接 `?v={version}`——review4 P2 处置，2026-08-19 修订）；
      CSP 对 worklet 零改动（same-origin 走 script-src 'self'）。
   6. config（E7 + spike delta）：`asr: { enabled:false, provider:'doubao'(字面量), doubao:{ apiKey,
      resourceId='volc.seedasr.sauc.duration' }, autoEnter:false }`；schema/merge/defineConfig 全通；
