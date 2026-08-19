@@ -1,0 +1,11 @@
+{
+  "mode": "legacy-query-bigasr-duration",
+  "at": "2026-08-19T05:29:17.936Z",
+  "handshake": "ok",
+  "detail": "收到 final 响应",
+  "target": {
+    "endpoint": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel",
+    "resourceId": "volc.bigasr.sauc.duration",
+    "authMode": "query"
+  }
+}

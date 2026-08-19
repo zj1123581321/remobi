@@ -1,0 +1,11 @@
+{
+  "mode": "query-seedasr-duration-opus",
+  "at": "2026-08-19T05:28:31.301Z",
+  "handshake": "ok",
+  "detail": "收到协议错误帧 0xF code=45000151",
+  "target": {
+    "endpoint": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
+    "resourceId": "volc.seedasr.sauc.duration",
+    "authMode": "query"
+  }
+}

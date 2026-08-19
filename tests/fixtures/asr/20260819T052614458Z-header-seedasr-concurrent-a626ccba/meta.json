@@ -1,0 +1,11 @@
+{
+  "mode": "header-seedasr-concurrent",
+  "at": "2026-08-19T05:26:14.680Z",
+  "handshake": "ok",
+  "detail": "收到协议错误帧 0xF code=45000292",
+  "target": {
+    "endpoint": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
+    "resourceId": "volc.seedasr.sauc.concurrent",
+    "authMode": "header"
+  }
+}
