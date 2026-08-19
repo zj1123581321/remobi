@@ -1,6 +1,7 @@
 import { FONT_SIZE_STORAGE_KEY, createDefaultActionRegistry } from './actions/registry'
 import { defaultConfig } from './config'
 import { createComboPicker } from './controls/combo-picker'
+import { createDpad } from './controls/dpad'
 import { createFloatingButtons } from './controls/floating-buttons'
 import { createHelpOverlay } from './controls/help'
 import type { KeyboardController } from './controls/keyboard-controller'
@@ -181,10 +182,16 @@ export function init(
 				const effectiveConfig = setup.effectiveConfig
 				const keyboardController = setup.keyboard
 
+				// Floating d-pad — created before the action registry so
+				// dpad-toggle buttons wire up via DI (same pattern as ⌨).
+				const dpad = createDpad(term)
+				document.body.appendChild(dpad.element)
+
 				const actions = createDefaultActionRegistry({
 					font: config.font,
 					openHelp,
 					toggleKeyboard: () => keyboardController.toggle(),
+					toggleDpad: dpad.toggle,
 				})
 
 				// Create drawer (needed by toolbar for toggle)

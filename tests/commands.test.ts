@@ -2,8 +2,8 @@ import { describe, expect, test } from 'vitest'
 import { defaultDrawerButtons } from '../src/drawer/commands'
 
 describe('defaultDrawerButtons', () => {
-	test('has 27 commands', () => {
-		expect(defaultDrawerButtons).toHaveLength(27)
+	test('has 29 commands', () => {
+		expect(defaultDrawerButtons).toHaveLength(29)
 	})
 
 	test('all commands have id, label, description, and action', () => {
@@ -94,6 +94,9 @@ describe('defaultDrawerButtons', () => {
 		})
 		expect(byId.get('left')?.action).toEqual({ type: 'send', data: '\x1b[D', keyLabel: 'Left' })
 		expect(byId.get('right')?.action).toEqual({ type: 'send', data: '\x1b[C', keyLabel: 'Right' })
+		// up/down fell off row1 when the d-pad took over the arrows — drawer fallback
+		expect(byId.get('up')?.action).toEqual({ type: 'send', data: '\x1b[A', keyLabel: 'Up' })
+		expect(byId.get('down')?.action).toEqual({ type: 'send', data: '\x1b[B', keyLabel: 'Down' })
 		expect(byId.get('ctrl-c')?.action).toEqual({ type: 'send', data: '\x03' })
 		expect(byId.get('ctrl-d')?.action).toEqual({ type: 'send', data: '\x04' })
 		expect(byId.get('q')?.action).toEqual({ type: 'send', data: 'q' })

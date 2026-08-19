@@ -133,12 +133,43 @@ body {
 	transform: translateY(0);
 }
 
+/* Handle row: centred drag handle + explicit close button on the right */
+#wt-drawer-header {
+	position: relative;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	min-height: 24px;
+	margin-bottom: 12px;
+}
+
 #wt-drawer-handle {
 	width: 40px;
 	height: 4px;
 	background: #585b70;
 	border-radius: 2px;
-	margin: 0 auto 12px auto;
+}
+
+#wt-drawer-close {
+	position: absolute;
+	right: -4px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 44px;
+	height: 44px;
+	background: transparent;
+	color: #a6adc8;
+	border: none;
+	border-radius: 50%;
+	font-size: 22px;
+	line-height: 1;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+#wt-drawer-close:active {
+	background: #45475a;
+	color: #cdd6f4;
 }
 
 #wt-drawer-tabs {
@@ -193,6 +224,50 @@ body {
 .wt-floating-group button.wt-action-error {
 	outline: 2px solid #f38ba8;
 	outline-offset: -2px;
+}
+
+/* Floating d-pad (moshi-style arrow cluster, toggled by the ✥ toolbar button) */
+#wt-dpad {
+	display: none;
+	position: fixed;
+	/* Above the default single-row toolbar (44px keys + 12px padding + 8px gap) */
+	bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+	right: calc(8px + env(safe-area-inset-right, 0px));
+	grid-template-columns: repeat(3, 48px);
+	gap: 4px;
+	padding: 6px;
+	background: rgba(49, 50, 68, 0.85);
+	border-radius: 12px;
+	/* Below the drawer backdrop (10000), above the terminal */
+	z-index: 9999;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+#wt-dpad.open {
+	display: grid;
+}
+
+#wt-dpad button {
+	width: 48px;
+	height: 48px;
+	background: #45475a;
+	color: #cdd6f4;
+	border: none;
+	border-radius: 8px;
+	font-size: 18px;
+	font-weight: 700;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+#wt-dpad button:active {
+	background: #585b70;
+}
+
+#wt-dpad .wt-dpad-spacer {
+	width: 48px;
+	height: 48px;
 }
 
 /* Swipe indicator */

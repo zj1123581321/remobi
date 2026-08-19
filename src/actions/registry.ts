@@ -21,6 +21,8 @@ export interface ActionExecutionContext {
 	readonly openHelp?: () => void
 	/** Toggles the soft keyboard — supplied per call or via registry deps */
 	readonly toggleKeyboard?: () => void
+	/** Toggles the floating d-pad — supplied per call or via registry deps */
+	readonly toggleDpad?: () => void
 }
 
 type ActionHandler = (action: ButtonAction, context: ActionExecutionContext) => void | Promise<void>
@@ -104,6 +106,7 @@ interface DefaultActionDeps {
 	readonly font?: FontConfig
 	readonly openHelp?: () => void
 	readonly toggleKeyboard?: () => void
+	readonly toggleDpad?: () => void
 }
 
 export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): ActionRegistry {
@@ -240,6 +243,20 @@ export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): Actio
 			throw error
 		}
 		toggleKeyboard()
+	})
+
+	registry.register('dpad-toggle', (_action, context) => {
+		const toggleDpad = context.toggleDpad ?? deps.toggleDpad
+		if (!toggleDpad) {
+			// Fail loud: a dpad-toggle button without a toggleDpad callback is a wiring bug.
+			const error = new Error(
+				'remobi: dpad-toggle action requires a toggleDpad callback ' +
+					'(context.toggleDpad or registry deps)',
+			)
+			console.error(error)
+			throw error
+		}
+		toggleDpad()
 	})
 
 	return registry

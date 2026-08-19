@@ -1,6 +1,9 @@
 import { createDefaultActionRegistry } from '../actions/registry'
 import type { ActionRegistry } from '../actions/registry'
-import { decorateKeyboardToggleButton } from '../controls/keyboard-controller'
+import {
+	decorateKeyboardToggleButton,
+	suppressSynthesisedMouse,
+} from '../controls/keyboard-controller'
 import type { HookRegistry } from '../hooks/registry'
 import type { ControlButton, RemobiConfig, XTerminal } from '../types'
 import { el } from '../util/dom'
@@ -36,10 +39,15 @@ export function createDrawer(
 	const appConfig = config.appConfig
 	const backdrop = el('div', { id: 'wt-backdrop' })
 	const drawer = el('div', { id: 'wt-drawer' })
+	const header = el('div', { id: 'wt-drawer-header' })
 	const handle = el('div', { id: 'wt-drawer-handle' })
+	const closeButton = el('button', { id: 'wt-drawer-close', 'aria-label': 'Close drawer' })
+	closeButton.textContent = '×'
 	const grid = el('div', { id: 'wt-drawer-grid' })
 
-	drawer.appendChild(handle)
+	header.appendChild(handle)
+	header.appendChild(closeButton)
+	drawer.appendChild(header)
 	drawer.appendChild(grid)
 
 	let drawerOpen = false
@@ -115,12 +123,21 @@ export function createDrawer(
 		return drawerOpen
 	}
 
-	onTap(backdrop, () => {
+	/** Shared dismiss path for backdrop tap and the × close button */
+	function dismissDrawer(): void {
 		const kbWasOpen = isKeyboardOpen()
 		haptic()
 		close()
 		conditionalFocus(term, kbWasOpen)
-	})
+	}
+
+	onTap(backdrop, dismissDrawer)
+
+	// Explicit close button — an addition to backdrop tap and handle swipe-down.
+	// Same touchend guard as the d-pad keys: without it the synthesised
+	// mousedown hands terminal focus to the button (Codex probe, Pixel 5).
+	suppressSynthesisedMouse(closeButton)
+	onTap(closeButton, dismissDrawer)
 
 	// Swipe-to-dismiss on handle
 	let handleStartY = 0

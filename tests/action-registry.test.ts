@@ -510,6 +510,48 @@ describe('createDefaultActionRegistry', () => {
 	})
 })
 
+describe('dpad-toggle action', () => {
+	function makeContext() {
+		return {
+			term: mockTerminal(),
+			kbWasOpen: false,
+			focusIfNeeded() {},
+			async sendText(_data: string) {},
+		}
+	}
+
+	test('calls the injected toggleDpad callback (registry deps)', async () => {
+		const toggleDpad = vi.fn()
+		const registry = createDefaultActionRegistry({ toggleDpad })
+
+		const executed = await registry.execute({ type: 'dpad-toggle' }, makeContext())
+
+		expect(executed).toBe(true)
+		expect(toggleDpad).toHaveBeenCalledTimes(1)
+	})
+
+	test('context.toggleDpad takes precedence over registry deps', async () => {
+		const depsToggle = vi.fn()
+		const contextToggle = vi.fn()
+		const registry = createDefaultActionRegistry({ toggleDpad: depsToggle })
+
+		await registry.execute({ type: 'dpad-toggle' }, { ...makeContext(), toggleDpad: contextToggle })
+
+		expect(contextToggle).toHaveBeenCalledTimes(1)
+		expect(depsToggle).not.toHaveBeenCalled()
+	})
+
+	test('fails loud when no toggleDpad callback is available', async () => {
+		const registry = createDefaultActionRegistry()
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+		await expect(registry.execute({ type: 'dpad-toggle' }, makeContext())).rejects.toThrow(
+			'remobi: dpad-toggle action requires a toggleDpad callback',
+		)
+		expect(errorSpy).toHaveBeenCalled()
+	})
+})
+
 describe('font-size action', () => {
 	function makeContext(term: XTerminal, focused: { value: boolean }) {
 		return {
