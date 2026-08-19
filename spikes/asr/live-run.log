@@ -18,4 +18,4 @@ query-seedasr-duration-protocol-error: HTTP 101; protocol-error 0xF code=4500000
 query-seedasr-duration-business-error: HTTP 101; protocol-error 0xF code=45000151
 fixture directories: 19
 fixture files: 271
-fixture total bytes: 947313
+fixture total bytes: 948065

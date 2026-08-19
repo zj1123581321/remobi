@@ -11,7 +11,7 @@
 | 项目 | 状态 | 证据与说明 |
 | --- | --- | --- |
 | query 鉴权握手 | ✅ | `_async + api_key + seedasr.duration` HTTP 101，fixture `20260819T052830488Z-query-seedasr-duration-2b7d8bd5`；header 对照同样 101。旧 `/bigmodel + api_key` 也 101。 |
-| full/audio/partial/final 真实 fixture | ✅ | 19 个目录、271 个文件、947,313 bytes；主 fixture 含 full、10 个 PCM 音频帧、0x9 partial、0x9 final、尾包。 |
+| full/audio/partial/final 真实 fixture | ✅ | 19 个目录、271 个文件、948,065 bytes；主 fixture 含 full、10 个 PCM 音频帧、0x9 partial、0x9 final、尾包。 |
 | 尾包 `0b0010` vs `0b0011` | ✅ | `neg-no-seq` 与 `neg-with-seq` 都返回 final；带序列尾包的实测序列规则为 10 音频帧时 `-12 = -(N+2)`。 |
 | 握手拒绝 | ❌ | 本轮所有候选均 101，没有 401/403 样本；Node rejection 分支仍保留，浏览器只能获得通用 error/close 的差异已记录。 |
 | 协议错误 0xF | ✅ | 45000000（尾包序列错/截断帧）、45000151（非法格式）、45000292（并发配额）均有真实帧。 |

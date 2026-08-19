@@ -11,7 +11,7 @@
 - **GO**：`wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async` + query `api_key/api_resource_id` + `volc.seedasr.sauc.duration`。
 - **NO-GO**：opus；服务端返回 0xF/45000151 `unsupported format opus`。
 - `neg-no-seq` 与 `neg-with-seq` 都收到 final；带序列尾包对 10 个音频帧必须是 `-12`（`-(N+2)`）。
-- 19 个 fixture 目录、271 个文件、947,313 bytes；主 fixture `20260819T052830488Z-query-seedasr-duration-2b7d8bd5`。
+- 19 个 fixture 目录、271 个文件、948,065 bytes；主 fixture `20260819T052830488Z-query-seedasr-duration-2b7d8bd5`。
 - 真机浏览器能力仍待用户回填；页面已完成，不把 Node 网络闸门当作真机采集结论。
 
 ## 已完成

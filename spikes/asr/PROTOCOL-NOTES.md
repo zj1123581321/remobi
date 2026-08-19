@@ -95,7 +95,7 @@ flags：none=`0b0000`、positive sequence=`0b0001`、negative without sequence=`
 
 ## fixture 清单
 
-本轮 `tests/fixtures/asr/`：19 个运行目录、271 个文件、947,313 bytes。目录包括：
+本轮 `tests/fixtures/asr/`：19 个运行目录、271 个文件、948,065 bytes。目录包括：
 
 ```text
 20260819T052613529Z-query-seedasr-duration-202db12e
