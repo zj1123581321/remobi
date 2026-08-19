@@ -100,6 +100,7 @@ Browser overlay (bundled to the client via esbuild):
 - `src/config-schema.ts` — Valibot validation schemas
 - `src/config-resolve.ts` — button array resolution
 - `src/config-validate.ts` — config assertions
+- `src/asr/` — provider-independent ASR contract, PCM pipeline, AudioWorklet, and Doubao SAUC engine
 - `src/pwa/` — PWA manifest, meta-tags, icons
 
 Server runtime (`remobi serve`, Node):

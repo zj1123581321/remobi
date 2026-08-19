@@ -6,7 +6,7 @@ import { createNodeWebSocket } from '@hono/node-ws'
 import { Hono } from 'hono'
 import type { WSContext } from 'hono/ws'
 import type WebSocket from 'ws'
-import { bundleClientAssets, renderClientHtml } from '../build'
+import { bundleClientAssets, bundleWorkletAsset, renderClientHtml } from '../build'
 import { bareDocumentRoute, documentRoute, joinBasePath } from './base-path'
 import { manifestToJson } from './pwa/manifest'
 import type { SessionClient, SharedTerminalSession } from './session'
@@ -156,15 +156,21 @@ export function buildSecurityHeaders(
 	fallbackHost: string,
 	fallbackPort: number,
 	scriptNonce: string,
+	asrEnabled = false,
 ) {
 	const authority = resolveRequestAuthority(hostHeader, fallbackHost, fallbackPort)
+	const connectSrc = asrEnabled
+		? `'self' ws://${authority} wss://${authority} wss://openspeech.bytedance.com`
+		: `'self' ws://${authority} wss://${authority}`
 	return {
-		'content-security-policy': `default-src 'self'; script-src 'self' 'nonce-${scriptNonce}'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src 'self' ws://${authority} wss://${authority}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'`,
+		'content-security-policy': `default-src 'self'; script-src 'self' 'nonce-${scriptNonce}'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src ${connectSrc}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'`,
 		'x-frame-options': 'DENY',
 		'x-content-type-options': 'nosniff',
 		'referrer-policy': 'no-referrer',
 		'cross-origin-resource-policy': 'same-origin',
-		'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+		'permissions-policy': asrEnabled
+			? 'camera=(), microphone=(self), geolocation=()'
+			: 'camera=(), microphone=(), geolocation=()',
 	} as const
 }
 
@@ -299,6 +305,7 @@ export async function serve(
 	console.log('remobi: building client...')
 	const scriptNonce = createScriptNonce()
 	const { js, css } = await bundleClientAssets(config, version, basePath)
+	const worklet = await bundleWorkletAsset()
 	const html = renderClientHtml(js, css, config, scriptNonce, basePath)
 	console.log('remobi: client ready')
 	let session: SharedTerminalSession | null = null
@@ -312,7 +319,7 @@ export async function serve(
 	const connections = new WeakMap<WebSocket, SessionClient>()
 
 	function securityHeadersForRequest(hostHeader: string | undefined): Record<string, string> {
-		return buildSecurityHeaders(hostHeader, host, port, scriptNonce)
+		return buildSecurityHeaders(hostHeader, host, port, scriptNonce, config.asr.enabled)
 	}
 
 	const app = new Hono()
@@ -438,6 +445,20 @@ export async function serve(
 				/* oxlint-enable typescript/consistent-type-assertions */
 			})
 		}
+	}
+
+	for (const route of routeVariants(basePath, '/asr-worklet.js')) {
+		app.get(route, (c) =>
+			withSecurityHeaders(
+				new Response(worklet, {
+					headers: {
+						'content-type': 'text/javascript',
+						'cache-control': 'no-cache',
+					},
+				}),
+				securityHeadersForRequest(c.req.header('host')),
+			),
+		)
 	}
 
 	if (icon180) {

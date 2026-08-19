@@ -143,6 +143,19 @@ export interface ReconnectConfig {
 	readonly enabled: boolean
 }
 
+/** Browser-direct ASR configuration. */
+export interface DoubaoAsrConfig {
+	readonly apiKey: string
+	readonly resourceId: string
+}
+
+export interface AsrConfig {
+	readonly enabled: boolean
+	readonly provider: 'doubao'
+	readonly doubao: DoubaoAsrConfig
+	readonly autoEnter: boolean
+}
+
 /** PWA (Progressive Web App) configuration */
 export interface PwaConfig {
 	readonly enabled: boolean
@@ -168,6 +181,7 @@ export interface RemobiConfig {
 	readonly scrollButtons: ScrollButtonsConfig
 	readonly pwa: PwaConfig
 	readonly reconnect: ReconnectConfig
+	readonly asr: AsrConfig
 }
 
 /** Deep partial — allows overriding any nested subset of config */

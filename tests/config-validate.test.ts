@@ -26,6 +26,36 @@ describe('assertValidConfigOverrides', () => {
 		expect(() => assertValidConfigOverrides({})).not.toThrow()
 	})
 
+	test('accepts the ASR override shape', () => {
+		expect(() =>
+			assertValidConfigOverrides({
+				asr: {
+					enabled: true,
+					provider: 'doubao',
+					doubao: { apiKey: 'sk-test', resourceId: 'volc.seedasr.sauc.duration' },
+					autoEnter: false,
+				},
+			}),
+		).not.toThrow()
+	})
+
+	test('redacts an ASR doubao string replacement in validation errors', () => {
+		const message = getValidationMessage(
+			{ asr: { doubao: 'sk-secret-value' } },
+			assertValidConfigOverrides,
+		)
+		expect(message).toContain('config.asr.doubao')
+		expect(message).toContain('redacted')
+		expect(message).not.toContain('sk-secret-value')
+	})
+
+	test('redacts an ASR parent string replacement in validation errors', () => {
+		const message = getValidationMessage({ asr: 'sk-secret-value' }, assertValidConfigOverrides)
+		expect(message).toContain('config.asr')
+		expect(message).toContain('redacted')
+		expect(message).not.toContain('sk-secret-value')
+	})
+
 	test('accepts valid partial config with custom row', () => {
 		expect(() =>
 			assertValidConfigOverrides({

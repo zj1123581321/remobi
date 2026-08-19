@@ -305,6 +305,34 @@ const reconnectResolvedSchema = v.strictObject({
 	enabled: v.boolean(),
 })
 
+// --- ASR ---
+
+const asrProviderSchema = v.literal('doubao')
+
+const doubaoAsrOverridesSchema = v.strictObject({
+	apiKey: v.optional(v.string()),
+	resourceId: v.optional(v.string()),
+})
+
+const asrOverridesSchema = v.strictObject({
+	enabled: v.optional(v.boolean()),
+	provider: v.optional(asrProviderSchema),
+	doubao: v.optional(doubaoAsrOverridesSchema),
+	autoEnter: v.optional(v.boolean()),
+})
+
+const doubaoAsrResolvedSchema = v.strictObject({
+	apiKey: v.string(),
+	resourceId: v.string(),
+})
+
+const asrResolvedSchema = v.strictObject({
+	enabled: v.boolean(),
+	provider: asrProviderSchema,
+	doubao: doubaoAsrResolvedSchema,
+	autoEnter: v.boolean(),
+})
+
 // --- Top-level schemas ---
 
 /** Schema for config overrides (all fields optional, button arrays accept array | function) */
@@ -329,6 +357,7 @@ export const remobiConfigOverridesSchema = v.strictObject({
 	scrollButtons: v.optional(scrollButtonsOverridesSchema),
 	pwa: v.optional(pwaOverridesSchema),
 	reconnect: v.optional(reconnectOverridesSchema),
+	asr: v.optional(asrOverridesSchema),
 })
 
 /** Schema for fully resolved config (all required fields, plain button arrays) */
@@ -349,4 +378,5 @@ export const remobiConfigResolvedSchema = v.strictObject({
 	scrollButtons: scrollButtonsResolvedSchema,
 	pwa: pwaResolvedSchema,
 	reconnect: reconnectResolvedSchema,
+	asr: asrResolvedSchema,
 })
