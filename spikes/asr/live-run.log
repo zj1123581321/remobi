@@ -1,0 +1,8 @@
+ASR spike live-run evidence (2026-08-19)
+
+$ node_modules/.bin/tsx --no-cache spikes/asr/probe-auth.ts query-raw
+FATAL: 缺少 VOLC_APP_KEY / VOLC_ACCESS_KEY（环境变量或 spikes/asr/.env.local）
+$ echo $?
+2
+
+No fixture directory was generated because the probe fails before opening a socket.
