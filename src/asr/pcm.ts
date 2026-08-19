@@ -1,7 +1,6 @@
 export const PCM_SAMPLE_RATE = 16_000
-export const PCM_CHANNELS = 1
 export const PCM_CHUNK_SAMPLES = 1_600
-export const PCM_SAMPLE_BYTES = 2
+const PCM_SAMPLE_BYTES = 2
 export const PCM_CHUNK_BYTES = PCM_CHUNK_SAMPLES * PCM_SAMPLE_BYTES
 
 /** Quantise one normalised float sample to signed 16-bit PCM. */

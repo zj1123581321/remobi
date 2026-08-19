@@ -31,15 +31,15 @@ export interface WebSocketLike {
 	close(): void
 }
 
-export type WebSocketFactory = (url: string) => WebSocketLike
+type WebSocketFactory = (url: string) => WebSocketLike
 
-export interface PcmCapture {
+interface PcmCapture {
 	start(onSamples: (samples: Int16Array) => void, onError: AsrErrorHandler): Promise<void>
 	stop(): Promise<void>
 	getPcmInFlightBytes(): number
 }
 
-export interface DoubaoEngineOptions {
+interface DoubaoEngineOptions {
 	readonly apiKey: string
 	readonly resourceId: string
 	readonly uid?: string

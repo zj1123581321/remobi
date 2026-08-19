@@ -20,7 +20,7 @@ function readFixture(name: string): Uint8Array {
 const SERVER_PARTIAL_FRAME = readFixture('012-recv-server-partial.hex')
 const SERVER_FINAL_FRAME = readFixture('013-recv-server-final.hex')
 
-export interface MockVolcServerOptions {
+interface MockVolcServerOptions {
 	readonly apiKey?: string
 	readonly resourceId?: string
 	readonly partialEvery?: number
@@ -29,7 +29,7 @@ export interface MockVolcServerOptions {
 	readonly disconnectAfterAudio?: number
 }
 
-export interface MockVolcServer {
+interface MockVolcServer {
 	readonly endpoint: string
 	readonly received: readonly Uint8Array[]
 	readonly sent: readonly Uint8Array[]

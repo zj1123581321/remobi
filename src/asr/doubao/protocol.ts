@@ -3,21 +3,21 @@ const HEADER_SIZE_WORDS = 1
 const SERIALIZATION_JSON = 1
 const COMPRESSION_NONE = 0
 
-export const SAUC_MESSAGE = {
+const SAUC_MESSAGE = {
 	fullRequest: 0x1,
 	audio: 0x2,
 	serverResponse: 0x9,
 	error: 0xf,
 } as const
 
-export interface FullRequestOptions {
+interface FullRequestOptions {
 	readonly uid?: string
 	readonly modelName?: string
 	readonly showUtterances?: boolean
 	readonly enablePunctuation?: boolean
 }
 
-export interface DecodedFullRequest {
+interface DecodedFullRequest {
 	readonly kind: 'full-request'
 	readonly flags: 0
 	readonly payload: Uint8Array
@@ -25,14 +25,14 @@ export interface DecodedFullRequest {
 	readonly json: unknown
 }
 
-export interface DecodedAudioFrame {
+interface DecodedAudioFrame {
 	readonly kind: 'audio'
 	readonly flags: 0 | 2 | 3
 	readonly payload: Uint8Array
 	readonly sequence?: number
 }
 
-export interface DecodedServerResponse {
+interface DecodedServerResponse {
 	readonly kind: 'server-response'
 	readonly flags: 0 | 1 | 3
 	readonly payload: Uint8Array
@@ -41,7 +41,7 @@ export interface DecodedServerResponse {
 	readonly sequence?: number
 }
 
-export interface DecodedErrorFrame {
+interface DecodedErrorFrame {
 	readonly kind: 'error'
 	readonly flags: 0
 	readonly errorCode: number
@@ -50,7 +50,7 @@ export interface DecodedErrorFrame {
 	readonly json: unknown
 }
 
-export type DecodedFrame =
+type DecodedFrame =
 	| DecodedFullRequest
 	| DecodedAudioFrame
 	| DecodedServerResponse

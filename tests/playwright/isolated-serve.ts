@@ -58,7 +58,7 @@ export async function waitForHttp(url: string, timeoutMs = 10_000): Promise<void
 	throw new Error(`timed out waiting for ${url}`)
 }
 
-export interface IsolatedServe {
+interface IsolatedServe {
 	port: number
 	url: string
 	close(): Promise<void>
