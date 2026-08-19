@@ -36,10 +36,15 @@ export function createDrawer(
 	const appConfig = config.appConfig
 	const backdrop = el('div', { id: 'wt-backdrop' })
 	const drawer = el('div', { id: 'wt-drawer' })
+	const header = el('div', { id: 'wt-drawer-header' })
 	const handle = el('div', { id: 'wt-drawer-handle' })
+	const closeButton = el('button', { id: 'wt-drawer-close', 'aria-label': 'Close drawer' })
+	closeButton.textContent = '×'
 	const grid = el('div', { id: 'wt-drawer-grid' })
 
-	drawer.appendChild(handle)
+	header.appendChild(handle)
+	header.appendChild(closeButton)
+	drawer.appendChild(header)
 	drawer.appendChild(grid)
 
 	let drawerOpen = false
@@ -116,6 +121,14 @@ export function createDrawer(
 	}
 
 	onTap(backdrop, () => {
+		const kbWasOpen = isKeyboardOpen()
+		haptic()
+		close()
+		conditionalFocus(term, kbWasOpen)
+	})
+
+	// Explicit close button — an addition to backdrop tap and handle swipe-down
+	onTap(closeButton, () => {
 		const kbWasOpen = isKeyboardOpen()
 		haptic()
 		close()
