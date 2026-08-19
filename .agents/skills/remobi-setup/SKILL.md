@@ -299,6 +299,7 @@ Tell the user:
    - **Combo picker**: Modal for arbitrary key combos — type `C-s`, `M-Enter`, `Alt-x`, `C-[`. Supports Ctrl, Alt, Shift modifiers + named keys (PageUp, Escape, etc.). Opened via drawer "Combo" button
    - **Help overlay**: `Guide` button in the command drawer. Shows all configured buttons, gestures, and floating buttons in tables. Config-driven, updates when you change buttons
    - **Landscape + keyboard**: When on-screen keyboard opens in landscape, row 2 auto-hides (except the ⌨ button) and buttons shrink — only if a second row exists; the default single-row toolbar stays fully visible. No config needed
+   - **Floating d-pad**: `✥` button on toolbar row1 pops up a six-key arrow cluster (← ↑ ↓ → ⌫ ⏎) above the toolbar — moshi style. Taps send keys without stealing terminal focus or popping the soft keyboard; in `keyboardMode: 'manual'` the input lock stays untouched. No config needed
    - **Keyboard sovereignty**: `mobile.keyboardMode` — `'auto'` (default): tapping the terminal opens the soft keyboard, ⌨ is momentary focus/blur. `'manual'`: the keyboard never pops up on terminal taps — only the ⌨ button (toolbar row1, next to ☰ More) grants/revokes input permission. If a manual-mode config has no ⌨ button anywhere, remobi injects one into row1 so the keyboard stays reachable
 6. PWA: enabled by default. On mobile Safari/Chrome, tap Share then "Add to Home Screen" for standalone app experience. Config options:
    - `pwa.enabled` (default `true`) — set `false` to disable manifest + icons
@@ -331,6 +332,7 @@ name  theme  font  toolbar  drawer  gestures  mobile  floatingButtons  scrollBut
 | `font-size`      | `delta: number`     | Adjust terminal font size, clamped to `font.sizeRange` |
 | `help`           | (none)              | Opens the help overlay |
 | `keyboard-toggle` | (none)             | Toggles the soft keyboard. Default on toolbar row1 (next to ☰ More). In `mobile.keyboardMode: 'manual'` it is the only way to summon the keyboard; remobi injects one into row1 if the config has none |
+| `dpad-toggle`    | (none)              | Toggles the floating d-pad (← ↑ ↓ → ⌫ ⏎) above the toolbar. Default on toolbar row1 (between ⏎ and ⌨). D-pad taps never steal terminal focus or pop the soft keyboard |
 
 Non-`send`/`prefix` actions must NOT have `data` or `keyLabel` — the validator rejects them.
 
@@ -384,22 +386,21 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 
 ### Default button IDs
 
-**Toolbar row 1** (8 buttons — the only row by default; moshi-style single row):
+**Toolbar row 1** (7 buttons — the only row by default; moshi-style single row):
 
 | `id` | `label` | `action` |
 |------|---------|----------|
 | `esc` | Esc | `send` `\x1b` |
 | `ctrl-c` | C-c | `send` `\x03` (dedicated — tap twice to quit coding agents) |
 | `tab` | Tab | `send` `\t` |
-| `up` | up arrow | `send` `\x1b[A` |
-| `down` | down arrow | `send` `\x1b[B` |
-| `enter` | enter | `send` `\r` |
+| `enter` | enter ⏎ | `send` `\r` |
+| `dpad-toggle` | ✥ | `dpad-toggle` (floating d-pad owns the arrow keys) |
 | `keyboard-toggle` | keyboard ⌨ | `keyboard-toggle` |
 | `drawer-toggle` | hamburger More | `drawer-toggle` |
 
 **Toolbar row 2**: empty by default (single-row toolbar). Set `toolbar.row2` to opt into a second row.
 
-**Drawer** (27 buttons — includes the keys removed from the toolbar: `shift-tab`, `left`, `right`, `ctrl-c`, `ctrl-d`, `q`, `alt-enter`, `space`, `backspace`, `ctrl`, `tmux-prefix`, `paste`):
+**Drawer** (29 buttons — includes the keys removed from the toolbar: `shift-tab`, `left`, `right`, `up`, `down`, `ctrl-c`, `ctrl-d`, `q`, `alt-enter`, `space`, `backspace`, `ctrl`, `tmux-prefix`, `paste`):
 
 | `id` | `label` | `action` |
 |------|---------|----------|
@@ -421,6 +422,8 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `shift-tab` | S-Tab | `send` `\x1b[Z` |
 | `left` | <- | `send` `\x1b[D` |
 | `right` | -> | `send` `\x1b[C` |
+| `up` | up arrow | `send` `\x1b[A` (row1 alumni — d-pad fallback) |
+| `down` | down arrow | `send` `\x1b[B` (row1 alumni — d-pad fallback) |
 | `ctrl-c` | C-c | `send` `\x03` |
 | `ctrl-d` | C-d | `send` `\x04` |
 | `q` | q | `send` `q` |

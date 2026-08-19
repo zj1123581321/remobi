@@ -318,7 +318,9 @@ async function main(): Promise<void> {
   // },
   // Drawer also supports { type: 'font-size', delta: -2 } and { type: 'help' } actions
   // (defaults include Font -/Font +/Guide buttons; these keep the drawer open for
-  // repeat taps). { type: 'keyboard-toggle' } is the ⌨ button (default: toolbar row1).
+  // repeat taps). { type: 'keyboard-toggle' } is the ⌨ button and
+  // { type: 'dpad-toggle' } is the ✥ floating arrow pad (← ↑ ↓ → ⌫ ⏎) — both
+  // default to toolbar row1.
   // pwa: {
   //   enabled: true,              // enable PWA manifest + meta tags (used by remobi serve)
   //   shortName: 'remobi',        // short name for home screen icon (defaults to name)

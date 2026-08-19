@@ -83,8 +83,9 @@ Browser overlay (bundled to the client via esbuild):
 - `src/drawer/drawer.ts` — command drawer with flat grid
 - `src/drawer/commands.ts` — re-exports defaultDrawerButtons from config
 - `src/gestures/` — swipe, pinch, scroll detection + gesture lock
-- `src/controls/` — help overlay, combo picker, floating buttons, scroll buttons, keyboard controller
-- `src/controls/keyboard-controller.ts` — keyboard sovereignty: three-signal state controller (`inputPermission`/`textareaFocus`/`keyboardVisible`), escape hatch, fail-loud overlay
+- `src/controls/` — help overlay, combo picker, floating buttons, scroll buttons, keyboard controller, d-pad
+- `src/controls/keyboard-controller.ts` — keyboard sovereignty: three-signal state controller (`inputPermission`/`textareaFocus`/`keyboardVisible`), escape hatch, fail-loud overlay; also exports the shared touchend focus-steal guard
+- `src/controls/dpad.ts` — moshi-style floating arrow-key pad (← ↑ ↓ → ⌫ ⏎), toggled by the ✥ `dpad-toggle` action; keys are focus-safe (touchend guard) and send via `sendData`
 - `src/theme/` — catppuccin-mocha + apply
 - `src/viewport/` — height management, landscape detection
 - `src/startup-resize.ts` — schedules the initial terminal resize on load (rAF + fonts-ready)
@@ -136,7 +137,7 @@ CLI + build:
 
 ## Conventions
 
-- Button actions use discriminated unions (`type: 'send' | 'ctrl-modifier' | 'paste' | 'combo-picker' | 'drawer-toggle' | 'font-size' | 'help' | 'keyboard-toggle' | 'prefix'`)
+- Button actions use discriminated unions (`type: 'send' | 'ctrl-modifier' | 'paste' | 'combo-picker' | 'drawer-toggle' | 'font-size' | 'help' | 'keyboard-toggle' | 'dpad-toggle' | 'prefix'`)
 - Unified control schema: use `ControlButton` for both toolbar and drawer items
 - Config shape: `drawer.buttons` (not `drawer.commands`)
 - Config via `defineConfig()` — typed, with sensible defaults
