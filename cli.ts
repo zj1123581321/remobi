@@ -281,7 +281,7 @@ async function main(): Promise<void> {
   // },
   //
   // toolbar: {
-  //   row1: (defaults) => defaults.filter((b) => b.id !== 'tab'),
+  //   row1: (defaults) => defaults.filter((b) => b.id !== 'esc'),
   // },
   //
   // drawer: {

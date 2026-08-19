@@ -54,7 +54,12 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 		description: 'Send Ctrl-C interrupt (tap twice to quit agents)',
 		action: { type: 'send', data: '\x03' },
 	},
-	{ id: 'tab', label: 'Tab', description: 'Send Tab key', action: { type: 'send', data: '\t' } },
+	{
+		id: 'backspace',
+		label: '⌫',
+		description: 'Send Backspace key',
+		action: { type: 'send', data: '\x7f' },
+	},
 	{
 		id: 'enter',
 		label: '\u23CE',
@@ -174,6 +179,13 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 		action: { type: 'help' },
 	},
 	// Keys removed from the toolbar when it went single-row stay reachable here
+	{
+		// Tab left row1 for the more-used ⌫ — drawer fallback
+		id: 'tab',
+		label: 'Tab',
+		description: 'Send Tab key',
+		action: { type: 'send', data: '\t', keyLabel: 'Tab' },
+	},
 	{
 		id: 'shift-tab',
 		label: 'S-Tab',

@@ -8,7 +8,7 @@ describe('defaultRow1 (moshi-style single row)', () => {
 		expect(defaultRow1.map((b) => b.id)).toEqual([
 			'esc',
 			'ctrl-c',
-			'tab',
+			'backspace',
 			'enter',
 			'dpad-toggle',
 			'keyboard-toggle',
@@ -29,6 +29,12 @@ describe('defaultRow1 (moshi-style single row)', () => {
 	test('keeps ⏎ on the row — the primary send key never moves into a submenu', () => {
 		const enter = defaultRow1.find((b) => b.id === 'enter')
 		expect(enter?.action).toEqual({ type: 'send', data: '\r' })
+	})
+
+	test('has ⌫ Backspace third (\\x7f) — Tab moved to the drawer', () => {
+		const backspace = defaultRow1[2]
+		expect(backspace?.id).toBe('backspace')
+		expect(backspace?.action).toEqual({ type: 'send', data: '\x7f' })
 	})
 
 	test('has no arrow keys — the floating d-pad (✥) owns them now', () => {

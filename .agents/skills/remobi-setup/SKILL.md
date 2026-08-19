@@ -392,7 +392,7 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 |------|---------|----------|
 | `esc` | Esc | `send` `\x1b` |
 | `ctrl-c` | C-c | `send` `\x03` (dedicated — tap twice to quit coding agents) |
-| `tab` | Tab | `send` `\t` |
+| `backspace` | ⌫ | `send` `\x7f` |
 | `enter` | enter ⏎ | `send` `\r` |
 | `dpad-toggle` | ✥ | `dpad-toggle` (floating d-pad owns the arrow keys) |
 | `keyboard-toggle` | keyboard ⌨ | `keyboard-toggle` |
@@ -419,6 +419,7 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `font-decrease` | Font - | `font-size` `delta: -2` |
 | `font-increase` | Font + | `font-size` `delta: 2` |
 | `guide` | Guide | `help` |
+| `tab` | Tab | `send` `\t` (row1 alumni — ⌫ took its slot) |
 | `shift-tab` | S-Tab | `send` `\x1b[Z` |
 | `left` | <- | `send` `\x1b[D` |
 | `right` | -> | `send` `\x1b[C` |

@@ -122,8 +122,8 @@ describe('defaultConfig', () => {
 		expect(defaultConfig.toolbar.row2).toEqual([])
 	})
 
-	test('has 29 drawer buttons', () => {
-		expect(defaultConfig.drawer.buttons).toHaveLength(29)
+	test('has 30 drawer buttons', () => {
+		expect(defaultConfig.drawer.buttons).toHaveLength(30)
 	})
 
 	test('default drawer uses stock tmux bindings only', () => {
@@ -140,9 +140,9 @@ describe('defaultConfig', () => {
 		expect(byId.has('tmux-links')).toBe(false)
 	})
 
-	test('row1 is Esc, C-c, Tab, ⏎, ✥, ⌨, ☰ More', () => {
+	test('row1 is Esc, C-c, ⌫, ⏎, ✥, ⌨, ☰ More', () => {
 		const labels = defaultConfig.toolbar.row1.map((b) => b.label)
-		expect(labels).toEqual(['Esc', 'C-c', 'Tab', '⏎', '✥', '⌨', '☰ More'])
+		expect(labels).toEqual(['Esc', 'C-c', '⌫', '⏎', '✥', '⌨', '☰ More'])
 	})
 
 	test('default mobile font size is 13', () => {
