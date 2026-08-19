@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import WebSocket from 'ws'
-import { DoubaoEngine } from '../src/asr/doubao/engine'
+import { DoubaoEngine, type WebSocketLike } from '../src/asr/doubao/engine'
 import { createMockVolcServer } from './fixtures/asr/mock-volc-server'
 
 class FakeCapture {
@@ -24,6 +24,25 @@ class FakeCapture {
 
 function websocketFactory(url: string): WebSocket {
 	return new WebSocket(url)
+}
+
+class SlowSocket implements WebSocketLike {
+	readonly url: string
+	readonly readyState = 1
+	readonly bufferedAmount = 64_001
+	onopen: ((event: never) => void) | null = null
+	onerror: ((event: never) => void) | null = null
+	onclose: ((event: never) => void) | null = null
+	onmessage: ((event: never) => void) | null = null
+
+	constructor(url: string) {
+		this.url = url
+		queueMicrotask(() => this.onopen?.(undefined as never))
+	}
+
+	send(_data: Uint8Array): void {}
+
+	close(): void {}
 }
 
 describe('DoubaoEngine', () => {
@@ -93,5 +112,22 @@ describe('DoubaoEngine', () => {
 		await expect(engine.start()).rejects.toThrow()
 		expect(errors).toContain('connection-failed')
 		await server.close()
+	})
+
+	test('reports network-too-slow above the two-second in-flight high water mark', async () => {
+		const capture = new FakeCapture()
+		const socket = new SlowSocket('')
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+		const errors: string[] = []
+		engine.onError((error) => errors.push(error))
+		await engine.start()
+		await new Promise((resolve) => setTimeout(resolve, 120))
+		expect(errors).toContain('network-too-slow')
+		expect(capture.stopped).toBe(true)
 	})
 })

@@ -29,9 +29,9 @@ export interface WebSocketLike {
 	close(): void
 }
 
-type WebSocketFactory = (url: string) => WebSocketLike
+export type WebSocketFactory = (url: string) => WebSocketLike
 
-interface PcmCapture {
+export interface PcmCapture {
 	start(onSamples: (samples: Int16Array) => void): Promise<void>
 	stop(): Promise<void>
 }
@@ -106,6 +106,7 @@ class BrowserPcmCapture implements PcmCapture {
 			throw error
 		}
 		if (this.context.sampleRate !== PCM_SAMPLE_RATE) {
+			for (const track of this.stream.getTracks()) track.stop()
 			await this.dispose()
 			throw new Error(`AudioContext sample rate is ${this.context.sampleRate}`)
 		}
