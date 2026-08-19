@@ -431,11 +431,11 @@ export class DoubaoEngine implements AsrEngine {
 				this.fail('protocol-error', epoch)
 				return
 			}
+			if (frame.flags === 3) this.finalWaiter?.()
 			const text = getText(frame.json)
 			if (text === undefined) return
 			if (frame.flags === 3) {
 				for (const handler of this.finalHandlers) handler(text)
-				this.finalWaiter?.()
 			} else {
 				for (const handler of this.partialHandlers) handler(text)
 			}

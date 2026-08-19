@@ -1,14 +1,29 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 
 const OPEN = 1
+const SERVER_FIXTURE_DIR = resolve(
+	'tests/fixtures/asr/20260819T052830488Z-query-seedasr-duration-2b7d8bd5',
+)
+
+function readFixture(name: string): Uint8Array {
+	const hex = readFileSync(resolve(SERVER_FIXTURE_DIR, name), 'utf8').replace(/\s+/g, '')
+	const bytes = new Uint8Array(hex.length / 2)
+	for (let index = 0; index < bytes.length; index++) {
+		bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16)
+	}
+	return bytes
+}
+
+const SERVER_PARTIAL_FRAME = readFixture('012-recv-server-partial.hex')
+const SERVER_FINAL_FRAME = readFixture('013-recv-server-final.hex')
 
 export interface MockVolcServerOptions {
 	readonly apiKey?: string
 	readonly resourceId?: string
 	readonly partialEvery?: number
-	readonly partialText?: string
-	readonly finalText?: string
 	readonly errorCode?: number
 	readonly malformedFrame?: Uint8Array
 	readonly disconnectAfterAudio?: number
@@ -17,6 +32,7 @@ export interface MockVolcServerOptions {
 export interface MockVolcServer {
 	readonly endpoint: string
 	readonly received: readonly Uint8Array[]
+	readonly sent: readonly Uint8Array[]
 	close(): Promise<void>
 }
 
@@ -45,17 +61,6 @@ function parseFrame(data: Uint8Array): { readonly type: number; readonly flags: 
 	return sequence === undefined ? { type, flags } : { type, flags, sequence }
 }
 
-function jsonFrame(flags: number, sequence: number | undefined, value: unknown): Uint8Array {
-	const payload = new TextEncoder().encode(JSON.stringify(value))
-	const sequenceBytes = sequence === undefined ? 0 : 4
-	const result = new Uint8Array(8 + sequenceBytes + payload.byteLength)
-	result.set([0x11, 0x90 | flags, 0x10, 0], 0)
-	if (sequence !== undefined) new DataView(result.buffer).setInt32(4, sequence)
-	new DataView(result.buffer).setUint32(4 + sequenceBytes, payload.byteLength)
-	result.set(payload, 8 + sequenceBytes)
-	return result
-}
-
 function errorFrame(code: number, value: unknown): Uint8Array {
 	const payload = new TextEncoder().encode(JSON.stringify(value))
 	const result = new Uint8Array(12 + payload.byteLength)
@@ -79,6 +84,7 @@ export async function createMockVolcServer(
 	const resourceId = options.resourceId ?? 'volc.seedasr.sauc.duration'
 	const partialEvery = options.partialEvery ?? 1
 	const received: Uint8Array[] = []
+	const sent: Uint8Array[] = []
 	const sockets = new Set<WebSocket>()
 	const wss = new WebSocketServer({ noServer: true })
 	const server: Server = createServer()
@@ -95,12 +101,16 @@ export async function createMockVolcServer(
 	wss.on('connection', (socket) => {
 		sockets.add(socket)
 		let audioCount = 0
+		const sendFixture = (frame: Uint8Array): void => {
+			sent.push(frame.slice())
+			socket.send(frame)
+		}
 		socket.on('message', (raw) => {
 			const bytes = raw instanceof Buffer ? new Uint8Array(raw) : new Uint8Array(raw as ArrayBuffer)
 			received.push(bytes.slice())
 			const frame = parseFrame(bytes)
 			if (frame.type === 0x1) {
-				socket.send(jsonFrame(0, undefined, { result: { text: 'connected' } }))
+				sendFixture(SERVER_PARTIAL_FRAME)
 				return
 			}
 			if (frame.type !== 0x2) return
@@ -110,7 +120,7 @@ export async function createMockVolcServer(
 				} else if (options.malformedFrame) {
 					socket.send(options.malformedFrame)
 				} else {
-					socket.send(jsonFrame(3, 1, { result: { text: options.finalText ?? 'mock final' } }))
+					sendFixture(SERVER_FINAL_FRAME)
 				}
 				return
 			}
@@ -120,7 +130,7 @@ export async function createMockVolcServer(
 				return
 			}
 			if (audioCount % partialEvery === 0 && socket.readyState === OPEN) {
-				socket.send(jsonFrame(0, undefined, { result: { text: options.partialText ?? 'mock partial' } }))
+				sendFixture(SERVER_PARTIAL_FRAME)
 			}
 		})
 		socket.on('close', () => sockets.delete(socket))
@@ -133,6 +143,7 @@ export async function createMockVolcServer(
 	return {
 		endpoint: `ws://127.0.0.1:${address.port}`,
 		received,
+		sent,
 		async close() {
 			for (const socket of sockets) socket.close()
 			wss.close()

@@ -1,7 +1,23 @@
 import { describe, expect, test, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import WebSocket from 'ws'
 import { DoubaoEngine, type WebSocketLike } from '../src/asr/doubao/engine'
+import { decodeFrame } from '../src/asr/doubao/protocol'
 import { createMockVolcServer } from './fixtures/asr/mock-volc-server'
+
+const ASR_FIXTURE_DIR = resolve(
+	'tests/fixtures/asr/20260819T052830488Z-query-seedasr-duration-2b7d8bd5',
+)
+
+function readAsrFixture(name: string): Uint8Array {
+	const hex = readFileSync(resolve(ASR_FIXTURE_DIR, name), 'utf8').replace(/\s+/g, '')
+	const bytes = new Uint8Array(hex.length / 2)
+	for (let index = 0; index < bytes.length; index++) {
+		bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16)
+	}
+	return bytes
+}
 
 class FakeCapture {
 	private callback: ((samples: Int16Array) => void) | undefined
@@ -258,8 +274,10 @@ describe('DoubaoEngine', () => {
 		}
 	})
 
-	test('streams injected PCM through mock server and exposes partial/final events', async () => {
+	test('streams injected PCM through real server response fixtures', async () => {
 		const server = await createMockVolcServer({ partialEvery: 1 })
+		const partialFixture = readAsrFixture('012-recv-server-partial.hex')
+		const finalFixture = readAsrFixture('013-recv-server-final.hex')
 		const capture = new FakeCapture()
 		const engine = new DoubaoEngine({
 			apiKey: 'test-api-key',
@@ -282,10 +300,15 @@ describe('DoubaoEngine', () => {
 
 		expect(capture.started).toBe(true)
 		expect(capture.stopped).toBe(true)
-		expect(partials).toContain('mock partial')
-		expect(finals).toEqual(['mock final'])
+		expect(partials).toEqual([])
+		expect(finals).toEqual([])
 		expect(errors).toEqual([])
 		expect(server.received.map((frame) => (frame[1] ?? 0) >> 4)).toEqual([1, 2, 2])
+		expect(server.sent).toEqual([partialFixture, partialFixture, finalFixture])
+		const endFrame = server.received[2]
+		if (!endFrame) throw new Error('mock did not receive the end frame')
+		const decodedEnd = decodeFrame(endFrame)
+		expect(decodedEnd).toMatchObject({ kind: 'audio', flags: 3, sequence: -3 })
 		await server.close()
 	})
 
