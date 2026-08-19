@@ -30,12 +30,6 @@ const DPAD_KEYS: ReadonlyArray<{
 	null,
 ]
 
-interface Dpad {
-	readonly element: HTMLDivElement
-	readonly toggle: () => void
-	readonly isOpen: () => boolean
-}
-
 /**
  * moshi-style floating d-pad: a six-key arrow cluster (← ↑ ↓ → ⌫ ⏎) that
  * pops up above the toolbar via the ✥ dpad-toggle button.
@@ -46,9 +40,11 @@ interface Dpad {
  * lock) is untouched. Keys send via term.input (sendData), the same path
  * as typed input, so keyboard suppression semantics do not apply.
  */
-export function createDpad(term: XTerminal): Dpad {
+export function createDpad(term: XTerminal): {
+	readonly element: HTMLDivElement
+	readonly toggle: () => void
+} {
 	const element = el('div', { id: 'wt-dpad' })
-	let open = false
 
 	for (const key of DPAD_KEYS) {
 		if (key === null) {
@@ -68,9 +64,8 @@ export function createDpad(term: XTerminal): Dpad {
 	}
 
 	function toggle(): void {
-		open = !open
-		element.classList.toggle('open', open)
+		element.classList.toggle('open')
 	}
 
-	return { element, toggle, isOpen: () => open }
+	return { element, toggle }
 }

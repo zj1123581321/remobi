@@ -30,15 +30,13 @@ describe('createDpad', () => {
 	test('starts hidden; toggle() shows and hides the panel', () => {
 		const dpad = createDpad(mockTerminalWithSent())
 
-		expect(dpad.isOpen()).toBe(false)
+		// The 'open' class is the single source of truth (user-observable state)
 		expect(dpad.element.classList.contains('open')).toBe(false)
 
 		dpad.toggle()
-		expect(dpad.isOpen()).toBe(true)
 		expect(dpad.element.classList.contains('open')).toBe(true)
 
 		dpad.toggle()
-		expect(dpad.isOpen()).toBe(false)
 		expect(dpad.element.classList.contains('open')).toBe(false)
 	})
 
