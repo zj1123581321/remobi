@@ -1,4 +1,11 @@
 [files]
 # docs/sessions holds session handoffs/cards/review verdicts — full of commit SHAs
 # and branch names (H0 freeze mandates SHAs), not user-facing prose.
-extend-exclude = ["CHANGELOG.md", "docs/sessions/**"]
+# tests/fixtures holds recorded protocol evidence (hex dumps, server payloads) —
+# bytes must stay verbatim, never "corrected".
+extend-exclude = ["CHANGELOG.md", "docs/sessions/**", "tests/fixtures/**"]
+
+[default.extend-words]
+# Real proper nouns: byted-ailab-speech-sdk (npm package), firt.dev (mobile web compat reference)
+byted = "byted"
+firt = "firt"
