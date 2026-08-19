@@ -20,12 +20,12 @@ describe('doubao SAUC protocol', () => {
 	test('encodes the real full request bytes', () => {
 		const golden = fixture(fixtureRoot, '000-send-full-client-request.hex')
 		expect(encodeFullRequest(golden.slice(8))).toEqual(golden)
-		expect(golden[0] >> 4).toBe(1)
-		expect(golden[0] & 0x0f).toBe(1)
-		expect(golden[1] >> 4).toBe(1)
-		expect(golden[1] & 0x0f).toBe(0)
-		expect(golden[2] >> 4).toBe(1)
-		expect(golden[2] & 0x0f).toBe(0)
+		expect((golden[0] ?? 0) >> 4).toBe(1)
+		expect((golden[0] ?? 0) & 0x0f).toBe(1)
+		expect((golden[1] ?? 0) >> 4).toBe(1)
+		expect((golden[1] ?? 0) & 0x0f).toBe(0)
+		expect((golden[2] ?? 0) >> 4).toBe(1)
+		expect((golden[2] ?? 0) & 0x0f).toBe(0)
 		expect(new DataView(golden.buffer).getUint32(4)).toBe(178)
 	})
 
@@ -42,10 +42,12 @@ describe('doubao SAUC protocol', () => {
 
 		const partial = decodeFrame(fixture(fixtureRoot, '012-recv-server-partial.hex'))
 		expect(partial).toMatchObject({ kind: 'server-response', flags: 0 })
+		if (partial.kind !== 'server-response') throw new Error('expected server response')
 		expect(partial.payloadText).toContain('log_id')
 
 		const final = decodeFrame(fixture(fixtureRoot, '013-recv-server-final.hex'))
 		expect(final).toMatchObject({ kind: 'server-response', flags: 3, sequence: 1 })
+		if (final.kind !== 'server-response') throw new Error('expected server response')
 		expect(final.json).toMatchObject({ audio_info: { duration: 1000 } })
 	})
 
@@ -63,6 +65,7 @@ describe('doubao SAUC protocol', () => {
 			),
 		)
 		expect(frame).toMatchObject({ kind: 'error', errorCode: 0x02aea540 })
+		if (frame.kind !== 'error') throw new Error('expected error frame')
 		expect(frame.payloadText).toContain('body too short')
 	})
 

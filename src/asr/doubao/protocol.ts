@@ -175,7 +175,9 @@ function validateHeader(bytes: Uint8Array): {
 	if (bytes.byteLength < 4) malformed('header is truncated')
 	if (bytes[0] !== 0x11) malformed('unsupported version or header size')
 	if (bytes[2] !== 0x10 || bytes[3] !== 0) malformed('unsupported serialization or compression')
-	return { messageType: bytes[1] >> 4, flags: bytes[1] & 0x0f }
+	const messageByte = bytes[1]
+	if (messageByte === undefined) malformed('missing message type')
+	return { messageType: messageByte >> 4, flags: messageByte & 0x0f }
 }
 
 function decodeFullRequest(bytes: Uint8Array, flags: number): DecodedFullRequest {
