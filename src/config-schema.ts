@@ -382,32 +382,33 @@ function addVoiceInputButtonIssues<T>(
 		const button = buttons[buttonIndex]
 		const action = voiceInputAction(button)
 		if (!action || !isRecord(button)) continue
+		const path: [v.IssuePathItem, ...v.IssuePathItem[]] = [
+			...basePath,
+			{
+				type: 'array',
+				origin: 'value',
+				input: buttons,
+				key: buttonIndex,
+				value: button,
+			},
+			{
+				type: 'object',
+				origin: 'value',
+				input: button,
+				key: 'action',
+				value: action,
+			},
+			{
+				type: 'object',
+				origin: 'value',
+				input: action,
+				key: 'type',
+				value: action.type,
+			},
+		]
 		addIssue({
 			message: 'voice-input action is only allowed in toolbar buttons',
-			path: [
-				...basePath,
-				{
-					type: 'array',
-					origin: 'value',
-					input: buttons,
-					key: buttonIndex,
-					value: button,
-				},
-				{
-					type: 'object',
-					origin: 'value',
-					input: button,
-					key: 'action',
-					value: action,
-				},
-				{
-					type: 'object',
-					origin: 'value',
-					input: action,
-					key: 'type',
-					value: action.type,
-				},
-			] as [v.IssuePathItem, ...v.IssuePathItem[]],
+			path,
 		})
 	}
 }
