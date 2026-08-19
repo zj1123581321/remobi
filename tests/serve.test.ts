@@ -4,7 +4,6 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
-import { sleep, spawnProcess } from '../src/util/node-compat'
 import {
 	buildSecurityHeaders,
 	describeCommandForLogs,
@@ -14,6 +13,7 @@ import {
 	resolveRequestAuthority,
 	withSecurityHeaders,
 } from '../src/serve'
+import { sleep, spawnProcess } from '../src/util/node-compat'
 
 const repoRoot = join(import.meta.dirname, '..')
 const runningProcesses: ReturnType<typeof spawnProcess>[] = []
@@ -68,6 +68,25 @@ function requestStatus(url: string): Promise<number> {
 		const request = httpRequest(url, (response) => {
 			response.resume()
 			response.once('end', () => resolve(response.statusCode ?? 0))
+		})
+		request.once('error', reject)
+		request.end()
+	})
+}
+
+function requestResource(
+	url: string,
+): Promise<{ statusCode: number; cacheControl?: string; contentType?: string }> {
+	return new Promise((resolve, reject) => {
+		const request = httpRequest(url, (response) => {
+			response.resume()
+			response.once('end', () =>
+				resolve({
+					statusCode: response.statusCode ?? 0,
+					cacheControl: response.headers['cache-control'],
+					contentType: response.headers['content-type'],
+				}),
+			)
 		})
 		request.once('error', reject)
 		request.end()
@@ -199,14 +218,22 @@ describe('buildSecurityHeaders', () => {
 
 	test('does not grant microphone or Doubao access when ASR is disabled', () => {
 		const headers = buildSecurityHeaders('127.0.0.1:7681', '127.0.0.1', 7681, 'nonce-123', false)
+		expect(headers['content-security-policy']).toBe(
+			"default-src 'self'; script-src 'self' 'nonce-nonce-123'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:7681 wss://127.0.0.1:7681; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
+		)
 		expect(headers['permissions-policy']).toBe('camera=(), microphone=(), geolocation=()')
-		expect(headers['content-security-policy']).not.toContain('openspeech.bytedance.com')
+		expect(headers['content-security-policy']).not.toContain('*')
+		expect(headers['content-security-policy']).not.toMatch(/\bwss:(?:\s|;|$)/)
 	})
 
 	test('grants only microphone and the Doubao origin when ASR is enabled', () => {
 		const headers = buildSecurityHeaders('127.0.0.1:7681', '127.0.0.1', 7681, 'nonce-123', true)
+		expect(headers['content-security-policy']).toBe(
+			"default-src 'self'; script-src 'self' 'nonce-nonce-123'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:7681 wss://127.0.0.1:7681 wss://openspeech.bytedance.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
+		)
 		expect(headers['permissions-policy']).toBe('camera=(), microphone=(self), geolocation=()')
-		expect(headers['content-security-policy']).toContain('wss://openspeech.bytedance.com')
+		expect(headers['content-security-policy']).not.toContain('*')
+		expect(headers['content-security-policy']).not.toMatch(/\bwss:(?:\s|;|$)/)
 	})
 })
 
@@ -239,18 +266,26 @@ describe('withSecurityHeaders', () => {
 describe('serve document route', () => {
 	test('does not allow enabled-ASR HTML to be cached', async () => {
 		const { url } = await startServe(true)
-		const response = await new Promise<{ cacheControl: string | undefined }>((resolve, reject) => {
-			const request = httpRequest(url, (httpResponse) => {
-				httpResponse.resume()
-				httpResponse.once('end', () =>
-					resolve({ cacheControl: httpResponse.headers['cache-control'] }),
-				)
-			})
-			request.once('error', reject)
-			request.end()
-		})
+		const response = await requestResource(url)
 
+		expect(response.statusCode).toBe(200)
 		expect(response.cacheControl).toBe('private, no-store')
+		expect(response.contentType).toBe('text/html; charset=UTF-8')
+	})
+
+	test('serves the worklet only when ASR is enabled', async () => {
+		const { url } = await startServe(true)
+		const response = await requestResource(`${url}/asr-worklet.js`)
+
+		expect(response.statusCode).toBe(200)
+		expect(response.contentType).toBe('text/javascript')
+	})
+
+	test('does not serve the worklet when ASR is disabled', async () => {
+		const { url } = await startServe(false)
+		const response = await requestResource(`${url}/asr-worklet.js`)
+
+		expect(response.statusCode).toBe(404)
 	})
 })
 
