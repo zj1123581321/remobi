@@ -107,10 +107,11 @@ class BrowserWebSocketAdapter implements WebSocketLike {
 		this.socket.onerror = handler === null ? null : (event) => handler({ message: event.type })
 	}
 
-	set onclose(
-		handler: ((event: { readonly code: number; readonly reason: string }) => void) | null,
-	) {
-		this.socket.onclose = handler === null ? null : (event) => handler({ code: event.code, reason: event.reason })
+	set onclose(handler:
+		| ((event: { readonly code: number; readonly reason: string }) => void)
+		| null) {
+		this.socket.onclose =
+			handler === null ? null : (event) => handler({ code: event.code, reason: event.reason })
 	}
 
 	set onmessage(handler: ((event: { readonly data: unknown }) => void) | null) {
@@ -241,7 +242,8 @@ export class DoubaoEngine implements AsrEngine {
 			(Boolean(globalThis.AudioContext) &&
 				Boolean(globalThis.AudioWorkletNode) &&
 				Boolean(globalThis.navigator?.mediaDevices?.getUserMedia))
-		const websocketSupported = this.options.websocketFactory !== undefined || Boolean(globalThis.WebSocket)
+		const websocketSupported =
+			this.options.websocketFactory !== undefined || Boolean(globalThis.WebSocket)
 		return captureSupported && websocketSupported
 	}
 

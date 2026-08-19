@@ -49,10 +49,11 @@ class WebSocketAdapter implements WebSocketLike {
 		this.socket.onerror = handler === null ? null : (event) => handler({ message: event.message })
 	}
 
-	set onclose(
-		handler: ((event: { readonly code: number; readonly reason: string }) => void) | null,
-	) {
-		this.socket.onclose = handler === null ? null : (event) => handler({ code: event.code, reason: event.reason })
+	set onclose(handler:
+		| ((event: { readonly code: number; readonly reason: string }) => void)
+		| null) {
+		this.socket.onclose =
+			handler === null ? null : (event) => handler({ code: event.code, reason: event.reason })
 	}
 
 	set onmessage(handler: ((event: { readonly data: unknown }) => void) | null) {
@@ -280,7 +281,7 @@ describe('DoubaoEngine', () => {
 		engine.onFinal((text) => finals.push(text))
 
 		await engine.start()
-			socket.onmessage?.({
+		socket.onmessage?.({
 			data: serverResponse({
 				result: {
 					utterances: [{ text: 'hello' }, { nested: { text: 'must not recurse' } }],

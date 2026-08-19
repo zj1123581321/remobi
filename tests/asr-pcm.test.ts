@@ -35,10 +35,7 @@ describe('ASR PCM pipeline', () => {
 	})
 
 	test('downmixes stereo samples before byte-level PCM encoding', () => {
-		const channels = [
-			Float32Array.from([0.5, -1]),
-			Float32Array.from([0.25, 1]),
-		]
+		const channels = [Float32Array.from([0.5, -1]), Float32Array.from([0.25, 1])]
 		const mono = Float32Array.from([
 			downmixToMonoSample(channels, 0),
 			downmixToMonoSample(channels, 1),

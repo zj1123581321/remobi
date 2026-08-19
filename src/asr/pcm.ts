@@ -23,7 +23,8 @@ export function downmixToMonoSample(
 		const channel = channels[channelIndex]
 		if (channel === undefined) throw new RangeError('PCM input channel is missing')
 		const sample = channel[sampleIndex]
-		if (sample === undefined) throw new RangeError('PCM input channel is shorter than the first channel')
+		if (sample === undefined)
+			throw new RangeError('PCM input channel is shorter than the first channel')
 		total += sample
 	}
 	return total / channels.length
