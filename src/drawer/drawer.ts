@@ -1,6 +1,9 @@
 import { createDefaultActionRegistry } from '../actions/registry'
 import type { ActionRegistry } from '../actions/registry'
-import { decorateKeyboardToggleButton } from '../controls/keyboard-controller'
+import {
+	decorateKeyboardToggleButton,
+	suppressSynthesisedMouse,
+} from '../controls/keyboard-controller'
 import type { HookRegistry } from '../hooks/registry'
 import type { ControlButton, RemobiConfig, XTerminal } from '../types'
 import { el } from '../util/dom'
@@ -127,7 +130,10 @@ export function createDrawer(
 		conditionalFocus(term, kbWasOpen)
 	})
 
-	// Explicit close button — an addition to backdrop tap and handle swipe-down
+	// Explicit close button — an addition to backdrop tap and handle swipe-down.
+	// Same touchend guard as the d-pad keys: without it the synthesised
+	// mousedown hands terminal focus to the button (Codex probe, Pixel 5).
+	suppressSynthesisedMouse(closeButton)
 	onTap(closeButton, () => {
 		const kbWasOpen = isKeyboardOpen()
 		haptic()

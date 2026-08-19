@@ -48,6 +48,15 @@ describe('drawer close paths', () => {
 		expect(backdrop.style.display).toBe('none')
 	})
 
+	test('focus safety: touchend on × is defaultPrevented (no focus steal)', () => {
+		const { drawer } = makeDrawer()
+		const closeButton = drawer.querySelector<HTMLButtonElement>('#wt-drawer-close')
+
+		const event = new Event('touchend', { cancelable: true })
+		closeButton?.dispatchEvent(event)
+		expect(event.defaultPrevented).toBe(true)
+	})
+
 	test('backdrop tap still closes the drawer', () => {
 		const { backdrop, drawer, open, isOpen } = makeDrawer()
 		open()
