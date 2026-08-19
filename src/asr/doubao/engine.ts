@@ -3,6 +3,7 @@ import type {
 	AsrEngine,
 	AsrErrorCode,
 	AsrErrorHandler,
+	AsrFinalHandler,
 	AsrTextHandler,
 	AsrUnsubscribe,
 } from '../types'
@@ -347,7 +348,7 @@ type EngineState = 'idle' | 'starting' | 'recording' | 'stopping' | 'failing'
 export class DoubaoEngine implements AsrEngine {
 	private readonly options: DoubaoEngineOptions
 	private readonly partialHandlers = new Set<AsrTextHandler>()
-	private readonly finalHandlers = new Set<AsrTextHandler>()
+	private readonly finalHandlers = new Set<AsrFinalHandler>()
 	private readonly errorHandlers = new Set<AsrErrorHandler>()
 	private readonly websocketFactory: WebSocketFactory
 	private readonly capture: PcmCapture
@@ -389,7 +390,7 @@ export class DoubaoEngine implements AsrEngine {
 		return unsubscribe(this.partialHandlers, handler)
 	}
 
-	onFinal(handler: AsrTextHandler): AsrUnsubscribe {
+	onFinal(handler: AsrFinalHandler): AsrUnsubscribe {
 		return unsubscribe(this.finalHandlers, handler)
 	}
 
@@ -545,7 +546,7 @@ export class DoubaoEngine implements AsrEngine {
 			const text = getText(frame.json)
 			if (text === undefined) return
 			if (frame.flags === 3) {
-				for (const handler of this.finalHandlers) handler(text)
+				for (const handler of this.finalHandlers) handler(text, frame.sequence)
 			} else {
 				for (const handler of this.partialHandlers) handler(text)
 			}

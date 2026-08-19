@@ -655,6 +655,31 @@ describe('DoubaoEngine', () => {
 		expect(finals).toEqual(['done'])
 	})
 
+	test('forwards final sequence while keeping no-sequence responses compatible', async () => {
+		const socket = new EpochSocket()
+		const capture = new FakeCapture()
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+		const partials: string[] = []
+		const finals: Array<{ readonly text: string; readonly sequence: number | undefined }> = []
+		engine.onPartial((text) => partials.push(text))
+		engine.onFinal((text, sequence) => finals.push({ text, sequence }))
+
+		await engine.start()
+		socket.triggerMessage(serverResponse({ result: { text: 'partial' } }))
+		const stop = engine.stop()
+		await Promise.resolve()
+		socket.triggerMessage(serverResponse({ result: { text: 'final' } }, true))
+		await stop
+
+		expect(partials).toEqual(['partial'])
+		expect(finals).toEqual([{ text: 'final', sequence: 1 }])
+	})
+
 	test('cancels pending capture start and rejects concurrent start without double opening', async () => {
 		const capture = new PendingCapture()
 		const sockets: EpochSocket[] = []
