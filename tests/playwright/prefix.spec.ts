@@ -1,17 +1,27 @@
 /**
  * E2E tests for the prefix button: tap Prefix → sends prefix byte →
  * combo picker opens with contextual title/description.
+ * The Prefix button lives in the drawer since the toolbar went single-row.
  */
 import { expect, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
 test.beforeEach(async ({ page }) => {
 	await page.goto('/')
 	await page.waitForSelector('#wt-toolbar', { timeout: 10_000 })
 })
 
-test('prefix button tap opens combo picker with contextual title', async ({ page }) => {
-	const prefixBtn = page.locator('#wt-toolbar button', { hasText: 'Prefix' })
+/** Open the drawer and tap the Prefix button inside it */
+async function tapDrawerPrefix(page: Page): Promise<void> {
+	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	await toggle.tap()
+	await expect(page.locator('#wt-drawer')).toHaveClass(/open/)
+	const prefixBtn = page.locator('#wt-drawer-grid button', { hasText: 'Prefix' })
 	await prefixBtn.tap()
+}
+
+test('prefix button tap opens combo picker with contextual title', async ({ page }) => {
+	await tapDrawerPrefix(page)
 
 	const backdrop = page.locator('#wt-combo-backdrop')
 	await expect(backdrop).toBeVisible({ timeout: 3_000 })
@@ -21,7 +31,10 @@ test('prefix button tap opens combo picker with contextual title', async ({ page
 })
 
 test('prefix button touchend-only opens combo picker', async ({ page }) => {
-	const prefixBtn = page.locator('#wt-toolbar button', { hasText: 'Prefix' })
+	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	await toggle.tap()
+	await expect(page.locator('#wt-drawer')).toHaveClass(/open/)
+	const prefixBtn = page.locator('#wt-drawer-grid button', { hasText: 'Prefix' })
 
 	await prefixBtn.dispatchEvent('touchend', {
 		touches: [],
@@ -35,8 +48,7 @@ test('prefix button touchend-only opens combo picker', async ({ page }) => {
 })
 
 test('prefix combo picker submits follow-up key and closes', async ({ page }) => {
-	const prefixBtn = page.locator('#wt-toolbar button', { hasText: 'Prefix' })
-	await prefixBtn.tap()
+	await tapDrawerPrefix(page)
 
 	const backdrop = page.locator('#wt-combo-backdrop')
 	await expect(backdrop).toBeVisible({ timeout: 3_000 })
@@ -51,8 +63,7 @@ test('prefix combo picker submits follow-up key and closes', async ({ page }) =>
 
 test('prefix combo picker cancel restores default title', async ({ page }) => {
 	// Open via prefix
-	const prefixBtn = page.locator('#wt-toolbar button', { hasText: 'Prefix' })
-	await prefixBtn.tap()
+	await tapDrawerPrefix(page)
 	await expect(page.locator('#wt-combo-backdrop')).toBeVisible({ timeout: 3_000 })
 
 	// Cancel

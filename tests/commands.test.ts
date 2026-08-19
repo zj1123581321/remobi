@@ -2,8 +2,8 @@ import { describe, expect, test } from 'vitest'
 import { defaultDrawerButtons } from '../src/drawer/commands'
 
 describe('defaultDrawerButtons', () => {
-	test('has 15 commands', () => {
-		expect(defaultDrawerButtons).toHaveLength(15)
+	test('has 27 commands', () => {
+		expect(defaultDrawerButtons).toHaveLength(27)
 	})
 
 	test('all commands have id, label, description, and action', () => {
@@ -15,14 +15,15 @@ describe('defaultDrawerButtons', () => {
 		}
 	})
 
-	test('all non-scroll send commands start with tmux prefix (Ctrl-b)', () => {
+	test('tmux commands send tmux prefix (Ctrl-b); raw key sends do not', () => {
 		for (const cmd of defaultDrawerButtons) {
 			if (cmd.action.type !== 'send') continue
-			if (cmd.label === 'PgUp' || cmd.label === 'PgDn') {
-				// Scroll keys are app-level by default for better cross-app compatibility.
-				expect(cmd.action.data.startsWith('\x02')).toBe(false)
-			} else {
+			if (cmd.id.startsWith('tmux-')) {
 				expect(cmd.action.data.startsWith('\x02')).toBe(true)
+			} else {
+				// Scroll keys and the keys relocated from the single-row toolbar
+				// are app-level raw sends (no tmux prefix).
+				expect(cmd.action.data.startsWith('\x02')).toBe(false)
 			}
 		}
 	})
@@ -81,5 +82,34 @@ describe('defaultDrawerButtons', () => {
 		expect(byId.get('guide')?.label).toBe('Guide')
 		expect(byId.get('guide')?.action).toEqual({ type: 'help' })
 		expect(byId.get('tmux-help')?.label).toBe('Help')
+	})
+
+	test('keeps the keys removed from the single-row toolbar reachable', () => {
+		const byId = new Map(defaultDrawerButtons.map((button) => [button.id, button]))
+
+		expect(byId.get('shift-tab')?.action).toEqual({
+			type: 'send',
+			data: '\x1b[Z',
+			keyLabel: 'Shift+Tab',
+		})
+		expect(byId.get('left')?.action).toEqual({ type: 'send', data: '\x1b[D', keyLabel: 'Left' })
+		expect(byId.get('right')?.action).toEqual({ type: 'send', data: '\x1b[C', keyLabel: 'Right' })
+		expect(byId.get('ctrl-c')?.action).toEqual({ type: 'send', data: '\x03' })
+		expect(byId.get('ctrl-d')?.action).toEqual({ type: 'send', data: '\x04' })
+		expect(byId.get('q')?.action).toEqual({ type: 'send', data: 'q' })
+		expect(byId.get('alt-enter')?.action).toEqual({
+			type: 'send',
+			data: '\x1b\r',
+			keyLabel: 'Alt+Enter',
+		})
+		expect(byId.get('space')?.action).toEqual({ type: 'send', data: ' ' })
+		expect(byId.get('backspace')?.action).toEqual({
+			type: 'send',
+			data: '\x7f',
+			keyLabel: 'Backspace',
+		})
+		expect(byId.get('ctrl')?.action).toEqual({ type: 'ctrl-modifier' })
+		expect(byId.get('tmux-prefix')?.action).toEqual({ type: 'prefix', data: '\x02' })
+		expect(byId.get('paste')?.action).toEqual({ type: 'paste' })
 	})
 })

@@ -26,7 +26,7 @@ export function syncKeyboardIndicators(keyboard: KeyboardController, root: Paren
 	}
 }
 
-/** Default keyboard-toggle button (toolbar row2, far right) */
+/** Default keyboard-toggle button (toolbar row1, next to ☰ More) */
 export const keyboardToggleButton: ControlButton = {
 	id: 'keyboard-toggle',
 	label: '⌨',
@@ -167,7 +167,8 @@ export function createKeyboardController(term: XTerminal, mode: KeyboardMode): K
  * toolbar row1/row2 and floatingButtons are directly reachable; a
  * drawer-only ⌨ counts only when a reachable drawer-toggle exists to open it
  * (the drawer starts hidden). Otherwise inject the default button at the end
- * of toolbar row2 (the toolbar always renders). Pure — returns a new config.
+ * of toolbar row1 (row1 is the primary row — it always renders). Pure —
+ * returns a new config.
  */
 export function withKeyboardEscapeHatch(config: RemobiConfig): RemobiConfig {
 	if (config.mobile.keyboardMode !== 'manual') return config
@@ -194,7 +195,7 @@ export function withKeyboardEscapeHatch(config: RemobiConfig): RemobiConfig {
 		...config,
 		toolbar: {
 			...config.toolbar,
-			row2: [...config.toolbar.row2, keyboardToggleButton],
+			row1: [...config.toolbar.row1, keyboardToggleButton],
 		},
 	}
 }

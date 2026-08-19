@@ -125,9 +125,9 @@ describe('keyboardMode config schema', () => {
 		).not.toThrow()
 	})
 
-	test('default row2 ends with the keyboard-toggle button', () => {
-		const row2 = defineConfig().toolbar.row2
-		expect(row2[row2.length - 1]).toEqual(keyboardToggleButton)
+	test('default row1 carries the keyboard-toggle button (before ☰ More)', () => {
+		const row1 = defineConfig().toolbar.row1
+		expect(row1[row1.length - 2]).toEqual(keyboardToggleButton)
 	})
 })
 
@@ -318,56 +318,56 @@ describe('escape hatch (V2)', () => {
 
 	test('manual with an existing keyboard-toggle is returned unchanged', () => {
 		const config = defineConfig({ mobile: { keyboardMode: 'manual' } })
-		// default row2 already ends with ⌨
+		// default row1 already includes ⌨
 		expect(withKeyboardEscapeHatch(config)).toBe(config)
 	})
 
 	test('floating-buttons keyboard-toggle is directly reachable — no injection', () => {
 		const config = defineConfig({
 			mobile: { keyboardMode: 'manual' },
-			toolbar: { row2: (defaults) => defaults.filter((b) => b.id !== 'keyboard-toggle') },
+			toolbar: { row1: (defaults) => defaults.filter((b) => b.id !== 'keyboard-toggle') },
 			floatingButtons: [{ position: 'top-left', buttons: [keyboardToggleButton] }],
 		})
 		expect(withKeyboardEscapeHatch(config)).toBe(config)
 	})
 
-	test('drawer-only ⌨ without a drawer-toggle is unreachable — inject into row2', () => {
+	test('drawer-only ⌨ without a drawer-toggle is unreachable — inject into row1', () => {
 		const config = defineConfig({
 			mobile: { keyboardMode: 'manual' },
 			toolbar: {
-				row2: (defaults) =>
+				row1: (defaults) =>
 					defaults.filter((b) => b.id !== 'keyboard-toggle' && b.action.type !== 'drawer-toggle'),
 			},
 			drawer: { buttons: [keyboardToggleButton] },
 		})
 		const patched = withKeyboardEscapeHatch(config)
 		expect(patched).not.toBe(config)
-		expect(patched.toolbar.row2[patched.toolbar.row2.length - 1]).toEqual(keyboardToggleButton)
+		expect(patched.toolbar.row1[patched.toolbar.row1.length - 1]).toEqual(keyboardToggleButton)
 	})
 
 	test('drawer-only ⌨ with a reachable drawer-toggle counts as covered', () => {
 		const config = defineConfig({
 			mobile: { keyboardMode: 'manual' },
-			// default row2 keeps drawer-toggle; drop only the ⌨
-			toolbar: { row2: (defaults) => defaults.filter((b) => b.id !== 'keyboard-toggle') },
+			// default row1 keeps drawer-toggle; drop only the ⌨
+			toolbar: { row1: (defaults) => defaults.filter((b) => b.id !== 'keyboard-toggle') },
 			drawer: { buttons: [keyboardToggleButton] },
 		})
 		expect(withKeyboardEscapeHatch(config)).toBe(config)
 	})
 
-	test('manual without any keyboard-toggle injects the default into row2', () => {
+	test('manual without any keyboard-toggle injects the default into row1', () => {
 		const config = defineConfig({
 			mobile: { keyboardMode: 'manual' },
-			toolbar: { row2: (defaults) => defaults.filter((b) => b.id !== 'keyboard-toggle') },
+			toolbar: { row1: (defaults) => defaults.filter((b) => b.id !== 'keyboard-toggle') },
 		})
-		const before = config.toolbar.row2.length
+		const before = config.toolbar.row1.length
 		const patched = withKeyboardEscapeHatch(config)
 		expect(patched).not.toBe(config)
-		expect(patched.toolbar.row2).toHaveLength(before + 1)
-		expect(patched.toolbar.row2[patched.toolbar.row2.length - 1]).toEqual(keyboardToggleButton)
+		expect(patched.toolbar.row1).toHaveLength(before + 1)
+		expect(patched.toolbar.row1[patched.toolbar.row1.length - 1]).toEqual(keyboardToggleButton)
 		// Pure: the input config is untouched
-		expect(config.toolbar.row2).toHaveLength(before)
-		expect(config.toolbar.row2.some((b) => b.id === 'keyboard-toggle')).toBe(false)
+		expect(config.toolbar.row1).toHaveLength(before)
+		expect(config.toolbar.row1.some((b) => b.id === 'keyboard-toggle')).toBe(false)
 	})
 })
 
@@ -484,9 +484,14 @@ describe('renderer wiring (toolbar / drawer / floating)', () => {
 })
 
 describe('base.css keyboard rules', () => {
-	test('landscape wt-kb-open exempts the keyboard-toggle (F1)', () => {
+	test('landscape wt-kb-open hides only a true second row, exempting the keyboard-toggle (F1)', () => {
+		// Single-row toolbar: the only row is :first-child and must stay visible
 		expect(css).toContain(
-			'#wt-toolbar.wt-kb-open .wt-row:last-child button:not(.wt-keyboard-toggle)',
+			'#wt-toolbar.wt-kb-open .wt-row:not(:first-child):last-child button:not(.wt-keyboard-toggle)',
+		)
+		// The unguarded last-child hide (would blank the single-row toolbar) must be gone
+		expect(css).not.toMatch(
+			/#wt-toolbar\.wt-kb-open \.wt-row:last-child button:not\(\.wt-keyboard-toggle\)/,
 		)
 		// The old whole-row hide must be gone
 		expect(css).not.toMatch(/#wt-toolbar\.wt-kb-open \.wt-row:last-child \{/)

@@ -83,7 +83,7 @@ remobi serve -- zellij attach --create main
 zellij needs no extra setup for mobile:
 
 - Mouse mode is on by default, so touch scroll and tap-to-focus just work — no `set -g mouse on` equivalent to remember
-- Stock zellij ships a tmux-compat mode on `Ctrl-B`, so remobi's Prefix button and the default swipe gestures (`prefix+n`/`prefix+p` — next/previous tab) work unchanged, as do the New Window (`prefix+c`), Split (`prefix+%`/`prefix+"`), Zoom (`prefix+z`), Copy/scrollback (`prefix+[`), and Kill (`prefix+x`) drawer buttons
+- Stock zellij ships a tmux-compat mode on `Ctrl-B`, so remobi's Prefix drawer button works unchanged, as do the New Window (`prefix+c`), Split (`prefix+%`/`prefix+"`), Zoom (`prefix+z`), Copy/scrollback (`prefix+[`), and Kill (`prefix+x`) drawer buttons; the swipe gestures (`prefix+n`/`prefix+p` — next/previous tab) work once enabled (they default to off)
 - Its native modal shortcuts (`Ctrl+t` for tabs, `Ctrl+p` for panes, …) also pass through fine
 
 Only three drawer buttons send sequences zellij doesn't bind. A `remobi.config.ts` with zellij equivalents:
@@ -116,7 +116,7 @@ remobi serve -- herdr --session main
 herdr needs no extra setup for mobile:
 
 - Mouse capture is on by default, so touch scroll and tap-to-focus just work — no `set -g mouse on` equivalent to remember
-- Its default prefix is `Ctrl-B`, the same as tmux, so remobi's Prefix button and the default swipe gestures (`prefix+n`/`prefix+p` — next/previous tab) work unchanged, as do the New Window (`prefix+c`), Zoom (`prefix+z`), Kill (`prefix+x`), and Help (`prefix+?`) drawer buttons
+- Its default prefix is `Ctrl-B`, the same as tmux, so remobi's Prefix drawer button works unchanged, as do the New Window (`prefix+c`), Zoom (`prefix+z`), Kill (`prefix+x`), and Help (`prefix+?`) drawer buttons; the swipe gestures (`prefix+n`/`prefix+p`) work once enabled (they default to off)
 - It has a built-in single-column mobile layout for narrow terminals (`ui.mobile_width_threshold` in herdr's config)
 
 Only a few drawer buttons send sequences herdr doesn't bind. A `remobi.config.ts` with herdr equivalents:
@@ -225,23 +225,19 @@ Create `remobi.config.ts` (or run `remobi init`):
 export default {
   font: {
     family: 'JetBrainsMono NFM, monospace',
-    mobileSizeDefault: 16,
+    mobileSizeDefault: 13,   // adjusted sizes (drawer Font -/+) persist in localStorage
     sizeRange: [8, 32],
   },
   toolbar: {
+    // Single row by default (8 keys): Esc, C-c, Tab, up, down, Enter,
+    // keyboard-toggle, drawer-toggle. row2 defaults to empty — set it to
+    // opt into a second row. Ctrl/Prefix/Paste live in the drawer.
     row1: [
       { id: 'esc', label: 'Esc', description: 'Send Escape key', action: { type: 'send', data: '\x1b' } },
-      { id: 'tmux-prefix', label: 'Prefix', description: 'Send tmux prefix key (Ctrl-B)', action: { type: 'send', data: '\x02' } },
+      { id: 'ctrl-c', label: 'C-c', description: 'Send Ctrl-C interrupt', action: { type: 'send', data: '\x03' } },
       // ...
     ],
-    row2: [
-      { id: 'alt-enter', label: 'M-↵', description: 'Send Alt+Enter (ESC + Enter)', action: { type: 'send', data: '\x1b\r' } },
-      { id: 'drawer-toggle', label: '☰ More', description: 'Open command drawer', action: { type: 'drawer-toggle' } },
-      { id: 'paste', label: 'Paste', description: 'Paste from clipboard', action: { type: 'paste' } },
-      { id: 'backspace', label: '⌫', description: 'Send Backspace key', action: { type: 'send', data: '\x7f' } },
-      { id: 'keyboard-toggle', label: '⌨', description: 'Toggle the soft keyboard', action: { type: 'keyboard-toggle' } },
-      // ...
-    ],
+    row2: [],
   },
   drawer: {
     buttons: [
@@ -255,7 +251,7 @@ export default {
   },
   gestures: {
     swipe: {
-      enabled: true,
+      enabled: true,        // default: false — horizontal swipes scroll the toolbar row; opt in to swipe-to-switch-window
       left: '\x02n',         // data sent on swipe left (default: next tmux window)
       right: '\x02p',        // data sent on swipe right (default: prev tmux window)
       leftLabel: 'Next tmux window',    // shown in help overlay
@@ -274,7 +270,7 @@ export default {
     widthThreshold: 768,   // px — default matches common phone/tablet breakpoint
     keyboardMode: 'auto',  // 'auto': tapping the terminal opens the soft keyboard.
                            // 'manual': the keyboard stays suppressed — only the ⌨
-                           // button (toolbar row2) summons/dismisses it. In manual
+                           // button (toolbar row1) summons/dismisses it. In manual
                            // mode remobi injects a ⌨ button if your config has none.
   },
   floatingButtons: [
@@ -360,7 +356,7 @@ Key modules:
 
 | Module | Purpose |
 |--------|---------|
-| `src/toolbar/` | Two-row touch toolbar |
+| `src/toolbar/` | Touch toolbar (single row by default, optional second row) |
 | `src/drawer/` | Command drawer with grid layout |
 | `src/gestures/` | Swipe, pinch, scroll detection |
 | `src/controls/` | Help overlay, combo picker, scroll buttons |

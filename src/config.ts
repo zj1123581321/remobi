@@ -14,14 +14,17 @@ const defaultFont: RemobiConfig['font'] = {
 	family: 'JetBrainsMono NFM, monospace',
 	cdnUrl:
 		'https://cdn.jsdelivr.net/gh/mshaugh/nerdfont-webfonts@latest/build/jetbrainsmono-nfm.css',
-	mobileSizeDefault: 16,
+	mobileSizeDefault: 13,
 	sizeRange: [8, 32],
 }
 
 /** Default gesture configuration */
 const defaultGestures: RemobiConfig['gestures'] = {
 	swipe: {
-		enabled: true,
+		// Default off: horizontal swipes at the screen bottom now belong to the
+		// single-row toolbar scroll — a swipe starting just above it would fire
+		// a window switch. Window switching stays in the drawer (Win/Windows).
+		enabled: false,
 		threshold: 80,
 		maxDuration: 400,
 		left: '\x02n',
@@ -34,7 +37,7 @@ const defaultGestures: RemobiConfig['gestures'] = {
 	doubleTap: { enabled: false, data: '\x02z', maxInterval: 300 },
 }
 
-/** Default row 1 buttons (prefix + nav) */
+/** Default row 1 buttons (moshi-style single row: the high-frequency keys) */
 const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 	{
 		id: 'esc',
@@ -43,24 +46,14 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 		action: { type: 'send', data: '\x1b' },
 	},
 	{
-		id: 'tmux-prefix',
-		label: 'Prefix',
-		description: 'Send tmux prefix key (Ctrl-B)',
-		action: { type: 'prefix', data: '\x02' },
+		// Dedicated C-c: coding agents need double Ctrl-C to quit, which neither
+		// the one-shot sticky Ctrl nor the auto-closing drawer can express.
+		id: 'ctrl-c',
+		label: 'C-c',
+		description: 'Send Ctrl-C interrupt (tap twice to quit agents)',
+		action: { type: 'send', data: '\x03' },
 	},
 	{ id: 'tab', label: 'Tab', description: 'Send Tab key', action: { type: 'send', data: '\t' } },
-	{
-		id: 'shift-tab',
-		label: 'S-Tab',
-		description: 'Send Shift+Tab key',
-		action: { type: 'send', data: '\x1b[Z', keyLabel: 'Shift+Tab' },
-	},
-	{
-		id: 'left',
-		label: '\u2190',
-		description: 'Send Left arrow key',
-		action: { type: 'send', data: '\x1b[D', keyLabel: 'Left' },
-	},
 	{
 		id: 'up',
 		label: '\u2191',
@@ -74,66 +67,26 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 		action: { type: 'send', data: '\x1b[B', keyLabel: 'Down' },
 	},
 	{
-		id: 'right',
-		label: '\u2192',
-		description: 'Send Right arrow key',
-		action: { type: 'send', data: '\x1b[C', keyLabel: 'Right' },
-	},
-	{
-		id: 'ctrl-c',
-		label: 'C-c',
-		description: 'Send Ctrl-C interrupt',
-		action: { type: 'send', data: '\x03' },
-	},
-	{
 		id: 'enter',
 		label: '\u23CE',
 		description: 'Send Enter/Return key',
 		action: { type: 'send', data: '\r' },
 	},
-]
-
-/** Default row 2 buttons */
-const defaultRow2: RemobiConfig['toolbar']['row2'] = [
-	{
-		id: 'q',
-		label: 'q',
-		description: 'Send q key',
-		action: { type: 'send', data: 'q' },
-	},
-	{
-		id: 'alt-enter',
-		label: 'M-↵',
-		description: 'Send Alt+Enter (ESC + Enter)',
-		action: { type: 'send', data: '\x1b\r', keyLabel: 'Alt+Enter' },
-	},
-	{
-		id: 'ctrl-d',
-		label: 'C-d',
-		description: 'Send Ctrl-D key',
-		action: { type: 'send', data: '\x04' },
-	},
+	keyboardToggleButton,
 	{
 		id: 'drawer-toggle',
 		label: '\u2630 More',
 		description: 'Open command drawer',
 		action: { type: 'drawer-toggle' },
 	},
-	{ id: 'paste', label: 'Paste', description: 'Paste from clipboard', action: { type: 'paste' } },
-	{
-		id: 'backspace',
-		label: '\u232b',
-		description: 'Send Backspace key',
-		action: { type: 'send', data: '\x7f', keyLabel: 'Backspace' },
-	},
-	{
-		id: 'space',
-		label: 'Space',
-		description: 'Send Space key',
-		action: { type: 'send', data: ' ' },
-	},
-	keyboardToggleButton,
 ]
+
+/**
+ * Default row 2 buttons — empty: the toolbar is a single row by default
+ * (moshi style). The removed keys live in the drawer defaults below; set
+ * `toolbar.row2` to opt back into a second row.
+ */
+const defaultRow2: RemobiConfig['toolbar']['row2'] = []
 
 /** Default drawer commands */
 export const defaultDrawerButtons: readonly ControlButton[] = [
@@ -227,6 +180,75 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 		description: 'Open the remobi help guide',
 		action: { type: 'help' },
 	},
+	// Keys removed from the toolbar when it went single-row stay reachable here
+	{
+		id: 'shift-tab',
+		label: 'S-Tab',
+		description: 'Send Shift+Tab key',
+		action: { type: 'send', data: '\x1b[Z', keyLabel: 'Shift+Tab' },
+	},
+	{
+		id: 'left',
+		label: '\u2190',
+		description: 'Send Left arrow key',
+		action: { type: 'send', data: '\x1b[D', keyLabel: 'Left' },
+	},
+	{
+		id: 'right',
+		label: '\u2192',
+		description: 'Send Right arrow key',
+		action: { type: 'send', data: '\x1b[C', keyLabel: 'Right' },
+	},
+	{
+		id: 'ctrl-c',
+		label: 'C-c',
+		description: 'Send Ctrl-C interrupt',
+		action: { type: 'send', data: '\x03' },
+	},
+	{
+		id: 'ctrl-d',
+		label: 'C-d',
+		description: 'Send Ctrl-D key',
+		action: { type: 'send', data: '\x04' },
+	},
+	{
+		id: 'q',
+		label: 'q',
+		description: 'Send q key',
+		action: { type: 'send', data: 'q' },
+	},
+	{
+		id: 'alt-enter',
+		label: 'M-↵',
+		description: 'Send Alt+Enter (ESC + Enter)',
+		action: { type: 'send', data: '\x1b\r', keyLabel: 'Alt+Enter' },
+	},
+	{
+		id: 'space',
+		label: 'Space',
+		description: 'Send Space key',
+		action: { type: 'send', data: ' ' },
+	},
+	{
+		id: 'backspace',
+		label: '\u232b',
+		description: 'Send Backspace key',
+		action: { type: 'send', data: '\x7f', keyLabel: 'Backspace' },
+	},
+	// Second single-row cut (8-key row): Ctrl modifier / Prefix / Paste stay reachable here
+	{
+		id: 'ctrl',
+		label: 'Ctrl',
+		description: 'Sticky Ctrl modifier (applies to the next key)',
+		action: { type: 'ctrl-modifier' },
+	},
+	{
+		id: 'tmux-prefix',
+		label: 'Prefix',
+		description: 'Send tmux prefix key (Ctrl-B)',
+		action: { type: 'prefix', data: '\x02' },
+	},
+	{ id: 'paste', label: 'Paste', description: 'Paste from clipboard', action: { type: 'paste' } },
 ]
 
 /** Default mobile configuration */

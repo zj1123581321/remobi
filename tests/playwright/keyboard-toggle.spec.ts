@@ -98,9 +98,9 @@ test('send button produces a WS input payload while the keyboard is suppressed',
 		)
 		.toBe('none')
 
-	// Tap the row2 'q' button — button sends bypass the textarea entirely
-	const qButton = page.locator('#wt-toolbar button', { hasText: /^q$/ })
-	await qButton.dispatchEvent('touchend', {
+	// Tap the toolbar Esc button — button sends bypass the textarea entirely
+	const escButton = page.locator('#wt-toolbar button', { hasText: /^Esc$/ })
+	await escButton.dispatchEvent('touchend', {
 		touches: [],
 		changedTouches: [],
 		targetTouches: [],
@@ -108,7 +108,7 @@ test('send button produces a WS input payload while the keyboard is suppressed',
 
 	await expect
 		.poll(() => page.evaluate(() => window.__sentPayloads ?? []))
-		.toContain(JSON.stringify({ type: 'input', data: 'q' }))
+		.toContain(JSON.stringify({ type: 'input', data: '\x1b' }))
 })
 
 test('⌨ button focuses the terminal in auto mode (wiring: button → registry → controller)', async ({

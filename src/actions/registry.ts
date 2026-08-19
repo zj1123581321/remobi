@@ -80,13 +80,22 @@ function describePrefixByte(data: string): string | null {
 	return null
 }
 
-/** Change terminal font size by delta, clamped to config range */
+/** localStorage key for the user-adjusted terminal font size */
+export const FONT_SIZE_STORAGE_KEY = 'remobi:fontSize'
+
+/** Change terminal font size by delta, clamped to config range, and persist it */
 function changeFontSize(term: XTerminal, delta: number, font: FontConfig): void {
 	const current = term.options.fontSize
 	const next = Math.max(font.sizeRange[0], Math.min(font.sizeRange[1], current + delta))
 	if (next !== current) {
 		term.options.fontSize = next
 		resizeTerm()
+		try {
+			localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(next))
+		} catch (error) {
+			// iOS private mode throws on localStorage writes — keep going without a cache
+			console.error('remobi: failed to persist font size', error)
+		}
 	}
 }
 

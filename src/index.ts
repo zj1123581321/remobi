@@ -1,4 +1,4 @@
-import { createDefaultActionRegistry } from './actions/registry'
+import { FONT_SIZE_STORAGE_KEY, createDefaultActionRegistry } from './actions/registry'
 import { defaultConfig } from './config'
 import { createComboPicker } from './controls/combo-picker'
 import { createFloatingButtons } from './controls/floating-buttons'
@@ -14,7 +14,7 @@ import { createScrollButtons } from './controls/scroll-buttons'
 import { createDrawer } from './drawer/drawer'
 import { attachDoubleTapGesture } from './gestures/double-tap'
 import { createGestureLock } from './gestures/lock'
-import { attachPinchGestures } from './gestures/pinch'
+import { attachPinchGestures, clampFontSize } from './gestures/pinch'
 import { attachScrollGesture } from './gestures/scroll'
 import { attachSwipeGestures } from './gestures/swipe'
 import { createHookRegistry } from './hooks/registry'
@@ -45,6 +45,26 @@ export type {
 } from './types'
 export type { HookRegistry, SendSource } from './hooks/registry'
 
+/**
+ * Read the persisted font size (localStorage `remobi:fontSize`), falling back
+ * to the config default when absent or unreadable (iOS private mode throws).
+ * A usable value is clamped to the current `font.sizeRange` — the persisted
+ * range may be wider than today's config. An empty string is treated as
+ * absent (`Number('') === 0` would otherwise parse as a valid size).
+ */
+function readPersistedFontSize(font: RemobiConfig['font']): number {
+	try {
+		const raw = localStorage.getItem(FONT_SIZE_STORAGE_KEY)
+		if (raw !== null && raw !== '') {
+			const size = Number(raw)
+			if (Number.isFinite(size)) return clampFontSize(size, font.sizeRange)
+		}
+	} catch (error) {
+		console.error('remobi: failed to read persisted font size', error)
+	}
+	return font.mobileSizeDefault
+}
+
 /** Detect touch device */
 function isMobile(): boolean {
 	return 'ontouchstart' in window || navigator.maxTouchPoints > 0
@@ -72,7 +92,7 @@ function setupHelpOverlay(
 /**
  * Keyboard sovereignty setup: escape hatch (V2) + shared controller (T-B).
  * Returns the effective config — with the default ⌨ button injected into
- * toolbar row2 when manual mode has no keyboard-toggle anywhere.
+ * toolbar row1 when manual mode has no keyboard-toggle anywhere.
  */
 function setupKeyboard(
 	term: XTerminal,
@@ -137,9 +157,10 @@ export function init(
 					return
 				}
 
-				// Apply theme and font
+				// Apply theme and font — a persisted font size (user-adjusted via
+				// the drawer's Font -/+ buttons) wins over the config default
 				applyTheme(term, config.theme)
-				term.options.fontSize = config.font.mobileSizeDefault
+				term.options.fontSize = readPersistedFontSize(config.font)
 				term.options.fontFamily = config.font.family
 				startupResize.scheduleImmediate()
 
@@ -153,7 +174,7 @@ export function init(
 				const openHelp = setupHelpOverlay(term, config, version)
 
 				// Keyboard sovereignty: escape hatch (V2) injects a ⌨ button into
-				// row2 when manual mode lacks one; the controller must exist before
+				// row1 when manual mode lacks one; the controller must exist before
 				// the action registry so keyboard-toggle can be wired via DI.
 				const setup = setupKeyboard(term, config)
 				keyboard = setup.keyboard

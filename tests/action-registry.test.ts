@@ -1,6 +1,10 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { createActionRegistry, createDefaultActionRegistry } from '../src/actions/registry'
+import {
+	FONT_SIZE_STORAGE_KEY,
+	createActionRegistry,
+	createDefaultActionRegistry,
+} from '../src/actions/registry'
 import { defaultConfig } from '../src/config'
 import type { ButtonAction, XTerminal } from '../src/types'
 import { mockTerminal } from './fixtures'
@@ -534,6 +538,39 @@ describe('font-size action', () => {
 		expect(term.options.fontSize).toBe(16)
 		expect(resizeSpy).toHaveBeenCalledTimes(1)
 		expect(focused.value).toBe(true)
+		// Persisted so a reload keeps the adjusted size
+		expect(localStorage.getItem(FONT_SIZE_STORAGE_KEY)).toBe('16')
+
+		window.__remobiResize = undefined
+	})
+
+	test('does not write localStorage when the size is unchanged (clamped)', async () => {
+		const registry = createDefaultActionRegistry({ font: defaultConfig.font })
+		const term = mockTerminal()
+		term.options.fontSize = 32
+		const focused = { value: false }
+		window.__remobiResize = () => {}
+
+		await registry.execute({ type: 'font-size', delta: 2 }, makeContext(term, focused))
+		expect(term.options.fontSize).toBe(32)
+		expect(localStorage.getItem(FONT_SIZE_STORAGE_KEY)).toBeNull()
+
+		window.__remobiResize = undefined
+	})
+
+	test('survives localStorage write failures (iOS private mode) — logs and continues', async () => {
+		const registry = createDefaultActionRegistry({ font: defaultConfig.font })
+		const term = mockTerminal()
+		const focused = { value: false }
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+		vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+			throw new Error('QuotaExceededError')
+		})
+		window.__remobiResize = () => {}
+
+		await registry.execute({ type: 'font-size', delta: 2 }, makeContext(term, focused))
+		expect(term.options.fontSize).toBe(16)
+		expect(errorSpy).toHaveBeenCalled()
 
 		window.__remobiResize = undefined
 	})
