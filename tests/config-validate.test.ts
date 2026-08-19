@@ -140,6 +140,40 @@ describe('assertValidConfigOverrides', () => {
 		expect(floatingMessage).toContain('only allowed in toolbar buttons')
 	})
 
+	test('locates every invalid voice-input button by array index and action type', () => {
+		const voice = (id: string) => ({
+			id,
+			label: 'Mic',
+			description: 'Hold to speak',
+			action: { type: 'voice-input' },
+		})
+		const message = getValidationMessage(
+			{
+				drawer: {
+					buttons: [
+						voice('drawer-0'),
+						{ ...voice('regular'), action: { type: 'send', data: 'x' } },
+						voice('drawer-2'),
+					],
+				},
+				floatingButtons: [
+					{ position: 'top-left', buttons: [] },
+					{
+						position: 'top-right',
+						buttons: [
+							{ ...voice('floating-0'), action: { type: 'send', data: 'x' } },
+							voice('floating-1'),
+						],
+					},
+				],
+			},
+			assertValidConfigOverrides,
+		)
+		expect(message).toContain('config.drawer.buttons[0].action.type')
+		expect(message).toContain('config.drawer.buttons[2].action.type')
+		expect(message).toContain('config.floatingButtons[1].buttons[1].action.type')
+	})
+
 	test('rejects unknown root keys', () => {
 		const message = getValidationMessage({ mystery: true }, assertValidConfigOverrides)
 		expect(message).toContain('config.mystery')

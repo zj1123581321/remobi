@@ -368,12 +368,48 @@ const asrResolvedSchema = v.pipe(
 
 // --- Top-level schemas ---
 
-function hasVoiceInputAction(value: unknown): boolean {
-	if (!Array.isArray(value)) return false
-	return value.some((button) => {
-		if (!isRecord(button) || !isRecord(button.action)) return false
-		return button.action.type === 'voice-input'
-	})
+function voiceInputAction(value: unknown): Record<string, unknown> | undefined {
+	if (!isRecord(value) || !isRecord(value.action)) return undefined
+	return value.action.type === 'voice-input' ? value.action : undefined
+}
+
+function addVoiceInputButtonIssues<T>(
+	addIssue: v.RawCheckAddIssue<T>,
+	buttons: readonly unknown[],
+	basePath: readonly [v.IssuePathItem, ...v.IssuePathItem[]],
+): void {
+	for (let buttonIndex = 0; buttonIndex < buttons.length; buttonIndex++) {
+		const button = buttons[buttonIndex]
+		const action = voiceInputAction(button)
+		if (!action || !isRecord(button)) continue
+		addIssue({
+			message: 'voice-input action is only allowed in toolbar buttons',
+			path: [
+				...basePath,
+				{
+					type: 'array',
+					origin: 'value',
+					input: buttons,
+					key: buttonIndex,
+					value: button,
+				},
+				{
+					type: 'object',
+					origin: 'value',
+					input: button,
+					key: 'action',
+					value: action,
+				},
+				{
+					type: 'object',
+					origin: 'value',
+					input: action,
+					key: 'type',
+					value: action.type,
+				},
+			] as [v.IssuePathItem, ...v.IssuePathItem[]],
+		})
+	}
 }
 
 function voiceInputPlacementCheck<T extends Record<string, unknown>>() {
@@ -381,36 +417,34 @@ function voiceInputPlacementCheck<T extends Record<string, unknown>>() {
 		if (!dataset.typed || !isRecord(dataset.value)) return
 		const value = dataset.value
 		const drawer = isRecord(value.drawer) ? value.drawer : undefined
-		if (drawer && hasVoiceInputAction(drawer.buttons)) {
-			addIssue({
-				message: 'voice-input action is only allowed in toolbar buttons',
-				path: [{ type: 'object', origin: 'value', input: value, key: 'drawer', value: drawer }],
-			})
+		if (drawer && Array.isArray(drawer.buttons)) {
+			addVoiceInputButtonIssues(addIssue, drawer.buttons, [
+				{ type: 'object', origin: 'value', input: value, key: 'drawer', value: drawer },
+				{ type: 'object', origin: 'value', input: drawer, key: 'buttons', value: drawer.buttons },
+			])
 		}
 		const floatingButtons = value.floatingButtons
 		if (!Array.isArray(floatingButtons)) return
 		for (let index = 0; index < floatingButtons.length; index++) {
 			const group = floatingButtons[index]
-			if (!isRecord(group) || !hasVoiceInputAction(group.buttons)) continue
-			addIssue({
-				message: 'voice-input action is only allowed in toolbar buttons',
-				path: [
-					{
-						type: 'object',
-						origin: 'value',
-						input: value,
-						key: 'floatingButtons',
-						value: floatingButtons,
-					},
-					{
-						type: 'array',
-						origin: 'value',
-						input: floatingButtons,
-						key: index,
-						value: group,
-					},
-				],
-			})
+			if (!isRecord(group) || !Array.isArray(group.buttons)) continue
+			addVoiceInputButtonIssues(addIssue, group.buttons, [
+				{
+					type: 'object',
+					origin: 'value',
+					input: value,
+					key: 'floatingButtons',
+					value: floatingButtons,
+				},
+				{
+					type: 'array',
+					origin: 'value',
+					input: floatingButtons,
+					key: index,
+					value: group,
+				},
+				{ type: 'object', origin: 'value', input: group, key: 'buttons', value: group.buttons },
+			])
 		}
 	})
 }

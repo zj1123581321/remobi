@@ -207,6 +207,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	const queuedMessages: ClientMessage[] = []
 	let socket: WebSocket | null = null
 	const connectionListeners = new Set<(connected: boolean) => void>()
+	let lastConnectionState: boolean | undefined
 	let snapshotLoaded = false
 	const pendingOutput: string[] = []
 	let exitReceived = false
@@ -257,6 +258,9 @@ function main(config: RemobiConfig, version: string | undefined): void {
 
 	function onConnectionChange(handler: (connected: boolean) => void): { dispose(): void } {
 		connectionListeners.add(handler)
+		const connected = isConnected()
+		lastConnectionState = connected
+		handler(connected)
 		return {
 			dispose() {
 				connectionListeners.delete(handler)
@@ -266,6 +270,8 @@ function main(config: RemobiConfig, version: string | undefined): void {
 
 	function notifyConnectionChange(): void {
 		const connected = isConnected()
+		if (connected === lastConnectionState) return
+		lastConnectionState = connected
 		for (const listener of connectionListeners) listener(connected)
 	}
 
