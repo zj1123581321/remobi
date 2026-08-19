@@ -83,14 +83,7 @@ export async function bundleClientAssets(
 	return { js, css: cssOutput.text }
 }
 
-/** Bundle the AudioWorklet entry in source mode, or load its published asset. */
-export async function bundleWorkletAsset(): Promise<string> {
-	const prebuilt = readPrebuiltAsset('asr-worklet.js')
-	if (prebuilt !== null) return prebuilt
-	if (!IS_SOURCE_RUNTIME) {
-		throw new Error('remobi package is missing dist/asr-worklet.js')
-	}
-
+async function bundleWorkletFromSource(): Promise<string> {
 	const esbuild = await import('esbuild')
 	const result = await esbuild.build({
 		entryPoints: [resolveProjectFile('src/asr/worklet-entry.ts')],
@@ -104,6 +97,16 @@ export async function bundleWorkletAsset(): Promise<string> {
 	const output = result.outputFiles.find((file) => file.path.endsWith('.js'))
 	if (!output) throw new Error('remobi worklet build produced no JavaScript output')
 	return output.text
+}
+
+/** Bundle the AudioWorklet entry in source mode, or load its published asset. */
+export async function bundleWorkletAsset(): Promise<string> {
+	const prebuilt = readPrebuiltAsset('asr-worklet.js')
+	if (prebuilt !== null) return prebuilt
+	if (!IS_SOURCE_RUNTIME) {
+		throw new Error('remobi package is missing dist/asr-worklet.js')
+	}
+	return bundleWorkletFromSource()
 }
 
 export function renderClientHtml(
@@ -168,5 +171,5 @@ export async function writeClientBundle(outputPath: string): Promise<void> {
 }
 
 export async function writeWorkletBundle(outputPath: string): Promise<void> {
-	writeFileSync(resolve(outputPath, 'asr-worklet.js'), await bundleWorkletAsset())
+	writeFileSync(resolve(outputPath, 'asr-worklet.js'), await bundleWorkletFromSource())
 }

@@ -305,7 +305,7 @@ export async function serve(
 	console.log('remobi: building client...')
 	const scriptNonce = createScriptNonce()
 	const { js, css } = await bundleClientAssets(config, version, basePath)
-	const worklet = await bundleWorkletAsset()
+	const worklet = config.asr.enabled ? await bundleWorkletAsset() : undefined
 	const html = renderClientHtml(js, css, config, scriptNonce, basePath)
 	console.log('remobi: client ready')
 	let session: SharedTerminalSession | null = null
@@ -447,18 +447,20 @@ export async function serve(
 		}
 	}
 
-	for (const route of routeVariants(basePath, '/asr-worklet.js')) {
-		app.get(route, (c) =>
-			withSecurityHeaders(
-				new Response(worklet, {
-					headers: {
-						'content-type': 'text/javascript',
-						'cache-control': 'no-cache',
-					},
-				}),
-				securityHeadersForRequest(c.req.header('host')),
-			),
-		)
+	if (worklet !== undefined) {
+		for (const route of routeVariants(basePath, '/asr-worklet.js')) {
+			app.get(route, (c) =>
+				withSecurityHeaders(
+					new Response(worklet, {
+						headers: {
+							'content-type': 'text/javascript',
+							'cache-control': 'no-cache',
+						},
+					}),
+					securityHeadersForRequest(c.req.header('host')),
+				),
+			)
+		}
 	}
 
 	if (icon180) {
