@@ -6,3 +6,4 @@ test-results/
 playwright-report/
 .playwright-cli/
 demo/
+.omo/
