@@ -3,11 +3,13 @@
  *
  * 用法：
  *   node_modules/.bin/tsx --no-cache spikes/asr/probe-auth.ts [mode...]
- *   mode: query-raw | query-jwt | header | end-variant | opus | protocol-error |
+ *   mode: query-seedasr-duration | query-seedasr-concurrent | query-bigasr-duration |
+ *         header-seedasr-duration | header-seedasr-concurrent | header-bigasr-duration |
+ *         legacy-query-bigasr-duration | end-variant | opus | protocol-error |
  *         business-error | all
  *
- * 密钥只从 VOLC_APP_KEY / VOLC_ACCESS_KEY 或同目录 .env.local 读取。所有输出物
- * 只写 origin、query 参数名、帧索引和摘要，不写密钥或完整带参 URL。
+ * 密钥只从 X_API_KEY 或主仓 spikes/asr/.env.local 读取。所有输出物只写 origin、
+ * query 参数名、帧索引和摘要，不写密钥或完整带参 URL。
  */
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -20,8 +22,14 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(HERE, '..', '..')
 const FIXTURE_ROOT = join(REPO_ROOT, 'tests', 'fixtures', 'asr')
 const ORIGIN = 'wss://openspeech.bytedance.com'
-const ENDPOINT = `${ORIGIN}/api/v3/sauc/bigmodel`
-const RESOURCE_ID = 'volc.bigasr.sauc.duration'
+const ASYNC_ENDPOINT = `${ORIGIN}/api/v3/sauc/bigmodel_async`
+const LEGACY_ENDPOINT = `${ORIGIN}/api/v3/sauc/bigmodel`
+const MAIN_ENV = '/home/zlx/projects/oss/remobi/spikes/asr/.env.local'
+const RESOURCE_IDS = {
+	seedasrDuration: 'volc.seedasr.sauc.duration',
+	seedasrConcurrent: 'volc.seedasr.sauc.concurrent',
+	bigasrDuration: 'volc.bigasr.sauc.duration',
+} as const
 const PCM_RATE = 16_000
 const PCM_CHUNK_BYTES = 3_200
 
@@ -43,25 +51,27 @@ const FLAGS = {
 type EndVariant = 'neg-no-seq' | 'neg-with-seq'
 type AudioFormat = 'pcm' | 'opus'
 type Fault = 'none' | 'protocol' | 'business'
-type ProbeMode =
-	| 'query-raw'
-	| 'query-jwt'
-	| 'header'
-	| 'end-variant-neg-no-seq'
-	| 'opus'
-	| 'protocol-error'
-	| 'business-error'
+type AuthMode = 'query' | 'header'
+
+interface Candidate {
+	mode: string
+	endpoint: string
+	resourceId: string
+	authMode: AuthMode
+}
 
 interface Keys {
-	appKey: string
-	accessKey: string
+	apiKey: string
 }
 
 interface ProbeOptions {
-	mode: ProbeMode
+	mode: string
 	url: string
 	queryNames: string[]
 	headers?: Record<string, string>
+	endpoint: string
+	resourceId: string
+	authMode: AuthMode
 	audioFormat: AudioFormat
 	endVariant: EndVariant
 	fault: Fault
@@ -82,7 +92,7 @@ interface DecodedFrame {
 }
 
 interface FixtureRun {
-	mode: ProbeMode
+	mode: string
 	directory: string
 	nextId: number
 	transcript: string[]
@@ -91,27 +101,25 @@ interface FixtureRun {
 interface ProbeResult {
 	handshake: 'ok' | 'fail'
 	detail: string
-	mode: ProbeMode
+	mode: string
 	directory: string
+	target?: { endpoint: string; resourceId: string; authMode: AuthMode }
 }
 
 function loadKeys(): Keys {
-	let appKey = process.env.VOLC_APP_KEY ?? ''
-	let accessKey = process.env.VOLC_ACCESS_KEY ?? ''
-	const localEnv = join(HERE, '.env.local')
-	if ((!appKey || !accessKey) && existsSync(localEnv)) {
-		const lines = readFileSync(localEnv, 'utf8').split(/\r?\n/)
+	let apiKey = process.env.X_API_KEY ?? ''
+	if (!apiKey && existsSync(MAIN_ENV)) {
+		const lines = readFileSync(MAIN_ENV, 'utf8').split(/\r?\n/)
 		for (const line of lines) {
-			const match = line.match(/^\s*(VOLC_APP_KEY|VOLC_ACCESS_KEY)\s*=\s*(.*?)\s*$/)
+			const match = line.match(/^\s*X_API_KEY\s*=\s*(.*?)\s*$/)
 			if (!match) continue
-			if (match[1] === 'VOLC_APP_KEY' && !appKey) appKey = match[2]
-			if (match[1] === 'VOLC_ACCESS_KEY' && !accessKey) accessKey = match[2]
+			apiKey = match[1]
 		}
 	}
-	if (!appKey || !accessKey) {
-		throw new Error('缺少 VOLC_APP_KEY / VOLC_ACCESS_KEY（环境变量或 spikes/asr/.env.local）')
+	if (!apiKey) {
+		throw new Error('缺少 X_API_KEY（环境变量或主仓 spikes/asr/.env.local）')
 	}
-	return { appKey, accessKey }
+	return { apiKey }
 }
 
 function binary(value: number): string {
@@ -215,7 +223,7 @@ function payloadSummary(payload: Buffer): Record<string, unknown> {
 	return summary
 }
 
-function createRun(mode: ProbeMode): FixtureRun {
+function createRun(mode: string): FixtureRun {
 	const stamp = new Date().toISOString().replace(/[-:.]/g, '').replace('Z', 'Z')
 	const directory = join(FIXTURE_ROOT, `${stamp}-${mode}-${randomUUID().slice(0, 8)}`)
 	mkdirSync(directory, { recursive: true })
@@ -349,11 +357,28 @@ function sendAudio(
 	const endFrame =
 		endVariant === 'neg-with-seq'
 			? encodeFrame(MESSAGE.clientAudio, FLAGS.negativeWithSequence, Buffer.alloc(0), {
-					sequence: -(sequence + 1),
+					sequence: -(sequence + 2),
 				})
 			: encodeFrame(MESSAGE.clientAudio, FLAGS.negativeWithoutSequence, Buffer.alloc(0))
 	recordFrame(run, 'send', `end-${endVariant}`, endFrame)
 	socket.send(endFrame)
+}
+
+function responseLabel(frame: DecodedFrame): string {
+	if (frame.messageType === MESSAGE.serverError) return 'protocol-error'
+	if (frame.messageType !== MESSAGE.serverFull) return 'server-frame'
+	return frame.flags === FLAGS.negativeWithSequence ? 'server-final' : 'server-partial'
+}
+
+function isFinalResponse(
+	frame: DecodedFrame,
+	summary: Record<string, unknown> | undefined,
+): boolean {
+	return (
+		frame.flags === FLAGS.negativeWithSequence ||
+		summary?.['result.is_final'] === true ||
+		summary?.['result.definite'] === true
+	)
 }
 
 async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
@@ -362,7 +387,7 @@ async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
 		`\n=== mode=${options.mode} end=${options.endVariant} audio=${options.audioFormat} fault=${options.fault} ===`,
 	)
 	console.log(
-		`  target: ${ENDPOINT} (query 参数名: ${options.queryNames.join(',') || 'none; header 鉴权'})`,
+		`  target: ${options.endpoint} resource=${options.resourceId} auth=${options.authMode} (query 参数名: ${options.queryNames.join(',') || 'none'})`,
 	)
 	return await new Promise<ProbeResult>((resolve) => {
 		let settled = false
@@ -382,9 +407,14 @@ async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
 			settled = true
 			if (timer) clearTimeout(timer)
 			if (socket && socket.readyState < WebSocket.CLOSING) socket.close()
-			closeRun(run, { handshake, detail, ...extra })
+			const target = {
+				endpoint: options.endpoint,
+				resourceId: options.resourceId,
+				authMode: options.authMode,
+			}
+			closeRun(run, { handshake, detail, target, ...extra })
 			console.log(`  => ${handshake.toUpperCase()}: ${detail}`)
-			resolve({ handshake, detail, mode: options.mode, directory: run.directory })
+			resolve({ handshake, detail, mode: options.mode, directory: run.directory, target })
 		}
 		const sendFullRequest = (): void => {
 			if (!socket) throw new Error('WS 尚未创建')
@@ -422,7 +452,8 @@ async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
 		})
 		socket.on('message', (data) => {
 			const frame = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer)
-			const decoded = recordFrame(run, 'recv', 'server-frame', frame)
+			const decodedFrame = decodeFrame(frame)
+			const decoded = recordFrame(run, 'recv', responseLabel(decodedFrame), frame)
 			if (!decoded) return
 			if (decoded.messageType === MESSAGE.serverError) {
 				finish('ok', `收到协议错误帧 0xF code=${decoded.errorCode ?? 'unknown'}`)
@@ -430,7 +461,7 @@ async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
 			}
 			if (decoded.messageType === MESSAGE.serverFull) {
 				const summary = payloadSummary(decoded.payload).json as Record<string, unknown> | undefined
-				const final = summary?.['result.is_final'] === true || summary?.['result.definite'] === true
+				const final = isFinalResponse(decoded, summary)
 				const businessCode = summary?.code
 				if (businessCode !== undefined && businessCode !== 0 && businessCode !== '0') {
 					finish('ok', `收到业务错误响应帧 0x9 code=${String(businessCode)}`)
@@ -452,62 +483,79 @@ async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
 	})
 }
 
-async function getStsToken(keys: Keys): Promise<string> {
-	const response = await fetch('https://openspeech.bytedance.com/api/v1/sts/token', {
-		method: 'POST',
-		headers: {
-			Authorization: `Bearer; ${keys.accessKey}`,
-			'Content-Type': 'application/json',
-		},
-		body: JSON.stringify({ appid: keys.appKey, duration: 300 }),
-	})
-	const body = await response.text()
-	if (!response.ok) {
-		const digest = createHash('sha256').update(body).digest('hex').slice(0, 16)
-		throw new Error(`STS token HTTP ${response.status}; body sha256=${digest}`)
-	}
-	const parsed: unknown = JSON.parse(body)
-	if (
-		typeof parsed !== 'object' ||
-		parsed === null ||
-		typeof (parsed as { jwt_token?: unknown }).jwt_token !== 'string'
-	) {
-		throw new Error('STS token 响应缺少 jwt_token 字段')
-	}
-	console.log('  STS token 获取成功（token 值不输出）')
-	return (parsed as { jwt_token: string }).jwt_token
-}
+const CANDIDATES: readonly Candidate[] = [
+	{
+		mode: 'query-seedasr-duration',
+		endpoint: ASYNC_ENDPOINT,
+		resourceId: RESOURCE_IDS.seedasrDuration,
+		authMode: 'query',
+	},
+	{
+		mode: 'query-seedasr-concurrent',
+		endpoint: ASYNC_ENDPOINT,
+		resourceId: RESOURCE_IDS.seedasrConcurrent,
+		authMode: 'query',
+	},
+	{
+		mode: 'query-bigasr-duration',
+		endpoint: ASYNC_ENDPOINT,
+		resourceId: RESOURCE_IDS.bigasrDuration,
+		authMode: 'query',
+	},
+	{
+		mode: 'header-seedasr-duration',
+		endpoint: ASYNC_ENDPOINT,
+		resourceId: RESOURCE_IDS.seedasrDuration,
+		authMode: 'header',
+	},
+	{
+		mode: 'header-seedasr-concurrent',
+		endpoint: ASYNC_ENDPOINT,
+		resourceId: RESOURCE_IDS.seedasrConcurrent,
+		authMode: 'header',
+	},
+	{
+		mode: 'header-bigasr-duration',
+		endpoint: ASYNC_ENDPOINT,
+		resourceId: RESOURCE_IDS.bigasrDuration,
+		authMode: 'header',
+	},
+	{
+		mode: 'legacy-query-bigasr-duration',
+		endpoint: LEGACY_ENDPOINT,
+		resourceId: RESOURCE_IDS.bigasrDuration,
+		authMode: 'query',
+	},
+]
 
-function makeQuery(keys: Keys, accessKey: string): { url: string; queryNames: string[] } {
-	const url = `${ENDPOINT}?api_resource_id=${encodeURIComponent(RESOURCE_ID)}&api_app_key=${encodeURIComponent(keys.appKey)}&api_access_key=${encodeURIComponent(accessKey)}`
+function makeQuery(apiKey: string, candidate: Candidate): { url: string; queryNames: string[] } {
+	const url = `${candidate.endpoint}?api_key=${encodeURIComponent(apiKey)}&api_resource_id=${encodeURIComponent(candidate.resourceId)}`
 	return { url, queryNames: queryNames(url) }
 }
 
-function optionsFor(mode: ProbeMode, keys: Keys, jwtToken?: string): ProbeOptions {
-	if (mode === 'header') {
-		return {
-			mode,
-			url: ENDPOINT,
-			queryNames: [],
-			headers: {
-				'X-Api-App-Key': keys.appKey,
-				'X-Api-Access-Key': keys.accessKey,
-				'X-Api-Resource-Id': RESOURCE_ID,
-			},
-			audioFormat: 'pcm',
-			endVariant: 'neg-with-seq',
-			fault: 'none',
-		}
-	}
-	const authValue = mode === 'query-jwt' ? `Jwt; ${jwtToken ?? ''}` : keys.accessKey
-	const query = makeQuery(keys, authValue)
+function optionsFor(
+	candidate: Candidate,
+	apiKey: string,
+	mode = candidate.mode,
+	audioFormat: AudioFormat = 'pcm',
+	endVariant: EndVariant = 'neg-with-seq',
+	fault: Fault = 'none',
+): ProbeOptions {
+	const query = candidate.authMode === 'query' ? makeQuery(apiKey, candidate) : undefined
 	return {
 		mode,
-		url: query.url,
-		queryNames: query.queryNames,
-		audioFormat: mode === 'opus' ? 'opus' : 'pcm',
-		endVariant: mode === 'end-variant-neg-no-seq' ? 'neg-no-seq' : 'neg-with-seq',
-		fault: mode === 'protocol-error' ? 'protocol' : mode === 'business-error' ? 'business' : 'none',
+		url: query?.url ?? candidate.endpoint,
+		queryNames: query?.queryNames ?? [],
+		headers:
+			candidate.authMode === 'header'
+				? { 'X-Api-Key': apiKey, 'X-Api-Resource-Id': candidate.resourceId }
+				: undefined,
+		endpoint: candidate.endpoint,
+		resourceId: candidate.resourceId,
+		authMode: candidate.authMode,
+		audioFormat,
+		endVariant,
+		fault,
 	}
 }
 
@@ -520,9 +568,9 @@ async function main(): Promise<void> {
 	console.log('\n===== 汇总（不含密钥与完整带参 URL） =====')
 	for (const result of results)
 		console.log(`${result.handshake === 'ok' ? '✅' : '❌'} ${result.mode}: ${result.detail}`)
-	if (!results.some((result) => result.mode.startsWith('query-') && result.handshake === 'ok')) {
+	if (!results.some((result) => result.target?.authMode === 'query' && result.handshake === 'ok')) {
 		console.log(
-			'结论：query 鉴权未成功，直连 no-go；请结合 header 对照组区分密钥问题与 query 鉴权支持问题。',
+			'结论：query 鉴权未成功，直连 no-go；请结合 header 对照组区分 key 问题与 query 鉴权支持问题。',
 		)
 	}
 }
@@ -531,39 +579,61 @@ async function runAuthCandidates(
 	keys: Keys,
 	requested: string[],
 	runAll: boolean,
-): Promise<{ results: ProbeResult[]; jwtToken?: string }> {
+): Promise<{ results: ProbeResult[] }> {
 	const results: ProbeResult[] = []
-	let jwtToken: string | undefined
-	const run = async (mode: ProbeMode, token?: string): Promise<ProbeResult> => {
-		const result = await runProbe(optionsFor(mode, keys, token))
+	let followupCandidate: Candidate | undefined
+	let querySuccess: Candidate | undefined
+	const run = async (
+		candidate: Candidate,
+		mode = candidate.mode,
+		audioFormat: AudioFormat = 'pcm',
+		endVariant: EndVariant = 'neg-with-seq',
+		fault: Fault = 'none',
+	): Promise<ProbeResult> => {
+		const result = await runProbe(
+			optionsFor(candidate, keys.apiKey, mode, audioFormat, endVariant, fault),
+		)
 		results.push(result)
 		return result
 	}
 
-	for (const mode of ['query-raw', 'query-jwt', 'header'] as const) {
-		if (!runAll && !requested.includes(mode)) continue
-		if (mode === 'query-jwt') {
-			try {
-				jwtToken = await getStsToken(keys)
-				await run(mode, jwtToken)
-			} catch (error: unknown) {
-				const detail = `STS 阶段失败：${error instanceof Error ? error.message : String(error)}`
-				console.error(`  query-jwt 中止：${detail}`)
-				results.push({ handshake: 'fail', detail, mode, directory: 'not-created' })
-			}
-		} else {
-			await run(mode)
-		}
+	for (const candidate of CANDIDATES) {
+		if (!runAll && !requested.includes(candidate.mode)) continue
+		const result = await run(candidate)
+		if (result.handshake === 'ok' && !followupCandidate) followupCandidate = candidate
+		if (result.handshake === 'ok' && candidate.authMode === 'query' && !querySuccess)
+			querySuccess = candidate
 	}
-	const anyHandshake = results.some((result) => result.handshake === 'ok')
-	const followups: [boolean, ProbeMode][] = [
-		[runAll || requested.includes('end-variant'), 'end-variant-neg-no-seq'],
-		[runAll || requested.includes('opus'), 'opus'],
-		[runAll || requested.includes('protocol-error'), 'protocol-error'],
-		[runAll || requested.includes('business-error'), 'business-error'],
+	const target = querySuccess ?? followupCandidate
+	const followups: [boolean, string, AudioFormat, EndVariant, Fault][] = [
+		[
+			runAll || requested.includes('end-variant'),
+			'end-variant-neg-no-seq',
+			'pcm',
+			'neg-no-seq',
+			'none',
+		],
+		[runAll || requested.includes('opus'), 'opus', 'opus', 'neg-with-seq', 'none'],
+		[
+			runAll || requested.includes('protocol-error'),
+			'protocol-error',
+			'pcm',
+			'neg-with-seq',
+			'protocol',
+		],
+		[
+			runAll || requested.includes('business-error'),
+			'business-error',
+			'pcm',
+			'neg-with-seq',
+			'business',
+		],
 	]
-	for (const [enabled, mode] of followups) if (anyHandshake && enabled) await run(mode, jwtToken)
-	return { results, jwtToken }
+	for (const [enabled, mode, audioFormat, endVariant, fault] of followups) {
+		if (target && enabled)
+			await run(target, `${target.mode}-${mode}`, audioFormat, endVariant, fault)
+	}
+	return { results }
 }
 
 main().catch((error: unknown) => {
