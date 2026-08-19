@@ -123,23 +123,21 @@ export function createDrawer(
 		return drawerOpen
 	}
 
-	onTap(backdrop, () => {
+	/** Shared dismiss path for backdrop tap and the × close button */
+	function dismissDrawer(): void {
 		const kbWasOpen = isKeyboardOpen()
 		haptic()
 		close()
 		conditionalFocus(term, kbWasOpen)
-	})
+	}
+
+	onTap(backdrop, dismissDrawer)
 
 	// Explicit close button — an addition to backdrop tap and handle swipe-down.
 	// Same touchend guard as the d-pad keys: without it the synthesised
 	// mousedown hands terminal focus to the button (Codex probe, Pixel 5).
 	suppressSynthesisedMouse(closeButton)
-	onTap(closeButton, () => {
-		const kbWasOpen = isKeyboardOpen()
-		haptic()
-		close()
-		conditionalFocus(term, kbWasOpen)
-	})
+	onTap(closeButton, dismissDrawer)
 
 	// Swipe-to-dismiss on handle
 	let handleStartY = 0
