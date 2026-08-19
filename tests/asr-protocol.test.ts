@@ -10,6 +10,7 @@ import {
 const fixtureRoot = 'tests/fixtures/asr/20260819T052830488Z-query-seedasr-duration-2b7d8bd5'
 const variantRoot =
 	'tests/fixtures/asr/20260819T052830811Z-query-seedasr-duration-end-variant-neg-no-seq-73fd940e'
+const liveSmokeRoot = 'tests/fixtures/asr/2026-08-19T1230Z-live-smoke'
 
 function fixture(root: string, name: string): Uint8Array {
 	const hex = readFileSync(`${root}/${name}`, 'utf8').replace(/\s+/g, '')
@@ -51,6 +52,16 @@ describe('doubao SAUC protocol', () => {
 		expect(final.json).toMatchObject({ audio_info: { duration: 1000 } })
 	})
 
+	test('decodes live no-sequence and sequenced server responses', () => {
+		const noSequence = decodeFrame(fixture(liveSmokeRoot, 'recv-001-mt9f0.hex'))
+		expect(noSequence).toMatchObject({ kind: 'server-response', flags: 0 })
+
+		const partial = decodeFrame(fixture(liveSmokeRoot, 'recv-002-mt9f1.hex'))
+		expect(partial).toMatchObject({ kind: 'server-response', flags: 1, sequence: 1 })
+		if (partial.kind !== 'server-response') throw new Error('expected server response')
+		expect(partial.payloadText).toContain('"text":"The."')
+	})
+
 	test('decodes the accepted no-sequence end variant', () => {
 		const frame = decodeFrame(fixture(variantRoot, '011-send-end-neg-no-seq.hex'))
 		expect(frame).toMatchObject({ kind: 'audio', flags: 2, payload: new Uint8Array() })
@@ -72,6 +83,15 @@ describe('doubao SAUC protocol', () => {
 	test('rejects a server response with invalid JSON payload', () => {
 		const bytes = Uint8Array.from([0x11, 0x90, 0x10, 0, 0, 0, 0, 1, 0x7b])
 		expect(() => decodeFrame(bytes)).toThrow('payload is not valid JSON')
+	})
+
+	test('rejects a server response with unsupported flags 2', () => {
+		const payload = new TextEncoder().encode('{}')
+		const bytes = new Uint8Array(8 + payload.byteLength)
+		bytes.set([0x11, 0x92, 0x10, 0])
+		new DataView(bytes.buffer).setUint32(4, payload.byteLength)
+		bytes.set(payload, 8)
+		expect(() => decodeFrame(bytes)).toThrow('unsupported server response flags')
 	})
 
 	test.each([

@@ -34,7 +34,7 @@ export interface DecodedAudioFrame {
 
 export interface DecodedServerResponse {
 	readonly kind: 'server-response'
-	readonly flags: 0 | 3
+	readonly flags: 0 | 1 | 3
 	readonly payload: Uint8Array
 	readonly payloadText: string
 	readonly json: unknown
@@ -146,7 +146,7 @@ function readInt32(bytes: Uint8Array, offset: number): number {
 }
 
 function readSequence(bytes: Uint8Array, flags: number): number | undefined {
-	if (flags !== 3) return undefined
+	if (flags !== 1 && flags !== 3) return undefined
 	if (bytes.byteLength < 12) malformed('sequence frame is truncated')
 	return readInt32(bytes, 4)
 }
@@ -207,9 +207,9 @@ function decodeAudio(bytes: Uint8Array, flags: number): DecodedAudioFrame {
 }
 
 function decodeServerResponse(bytes: Uint8Array, flags: number): DecodedServerResponse {
-	if (flags !== 0 && flags !== 3) malformed('unsupported server response flags')
+	if (flags !== 0 && flags !== 1 && flags !== 3) malformed('unsupported server response flags')
 	const sequence = readSequence(bytes, flags)
-	const payload = payloadSlice(bytes, flags === 3 ? 8 : 4)
+	const payload = payloadSlice(bytes, flags === 1 || flags === 3 ? 8 : 4)
 	const parsed = parseJson(payload)
 	return sequence === undefined
 		? { kind: 'server-response', flags, payload, ...parsed }

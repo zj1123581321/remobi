@@ -9,9 +9,10 @@ import { createMockVolcServer } from './fixtures/asr/mock-volc-server'
 const ASR_FIXTURE_DIR = resolve(
 	'tests/fixtures/asr/20260819T052830488Z-query-seedasr-duration-2b7d8bd5',
 )
+const LIVE_SMOKE_FIXTURE_DIR = resolve('tests/fixtures/asr/2026-08-19T1230Z-live-smoke')
 
-function readAsrFixture(name: string): Uint8Array {
-	const hex = readFileSync(resolve(ASR_FIXTURE_DIR, name), 'utf8').replace(/\s+/g, '')
+function readAsrFixture(name: string, root = ASR_FIXTURE_DIR): Uint8Array {
+	const hex = readFileSync(resolve(root, name), 'utf8').replace(/\s+/g, '')
 	const bytes = new Uint8Array(hex.length / 2)
 	for (let index = 0; index < bytes.length; index++) {
 		bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16)
@@ -712,6 +713,31 @@ describe('DoubaoEngine', () => {
 
 		expect(partials).toEqual(['partial'])
 		expect(finals).toEqual([{ text: 'final', sequence: 1 }])
+	})
+
+	test('forwards a live sequenced partial response without protocol error', async () => {
+		const socket = new EpochSocket()
+		const capture = new FakeCapture()
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+		const partials: string[] = []
+		const errors: string[] = []
+		engine.onPartial((text) => partials.push(text))
+		engine.onError((error) => errors.push(error))
+
+		await engine.start()
+		socket.triggerMessage(readAsrFixture('recv-002-mt9f1.hex', LIVE_SMOKE_FIXTURE_DIR).buffer)
+		expect(partials).toEqual(['The.'])
+		expect(errors).toEqual([])
+
+		const stop = engine.stop()
+		await Promise.resolve()
+		socket.triggerMessage(serverResponse({ result: { text: 'done' } }, true))
+		await stop
 	})
 
 	test('cancels pending capture start and rejects concurrent start without double opening', async () => {
