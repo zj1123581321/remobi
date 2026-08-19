@@ -62,6 +62,40 @@ describe('doubao SAUC protocol', () => {
 		expect(partial.payloadText).toContain('"text":"The."')
 	})
 
+	test.each([4, 5, 6, 7, 8, 9, 10, 11])(
+		'rejects truncated flags=1 sequenced response at length %i',
+		(length) => {
+			const bytes = new Uint8Array(length)
+			bytes.set([0x11, 0x91, 0x10, 0])
+			expect(() => decodeFrame(bytes)).toThrow('Invalid SAUC frame')
+		},
+	)
+
+	test.each([0, 1, 3])('rejects flags=1 response with mismatched payload length %i', (length) => {
+		const payload = new TextEncoder().encode('{}')
+		const bytes = new Uint8Array(12 + payload.byteLength)
+		bytes.set([0x11, 0x91, 0x10, 0])
+		new DataView(bytes.buffer).setInt32(4, 7)
+		new DataView(bytes.buffer).setUint32(8, length)
+		bytes.set(payload, 12)
+		expect(() => decodeFrame(bytes)).toThrow('payload length')
+	})
+
+	test('decodes a flags=1 response sequence and exact payload boundary', () => {
+		const payload = new TextEncoder().encode('{"result":{"text":"partial"}}')
+		const bytes = new Uint8Array(12 + payload.byteLength)
+		bytes.set([0x11, 0x91, 0x10, 0])
+		new DataView(bytes.buffer).setInt32(4, 7)
+		new DataView(bytes.buffer).setUint32(8, payload.byteLength)
+		bytes.set(payload, 12)
+		expect(decodeFrame(bytes)).toMatchObject({
+			kind: 'server-response',
+			flags: 1,
+			sequence: 7,
+			payload,
+		})
+	})
+
 	test('decodes the accepted no-sequence end variant', () => {
 		const frame = decodeFrame(fixture(variantRoot, '011-send-end-neg-no-seq.hex'))
 		expect(frame).toMatchObject({ kind: 'audio', flags: 2, payload: new Uint8Array() })

@@ -4,8 +4,6 @@ import { createComboPicker } from './controls/combo-picker'
 import { createDpad } from './controls/dpad'
 import { createFloatingButtons } from './controls/floating-buttons'
 import { createHelpOverlay } from './controls/help'
-import { createMicController } from './controls/mic-controller'
-import type { MicController } from './controls/mic-controller'
 import type { KeyboardController } from './controls/keyboard-controller'
 import {
 	createKeyboardController,
@@ -13,6 +11,8 @@ import {
 	syncKeyboardIndicators,
 	withKeyboardEscapeHatch,
 } from './controls/keyboard-controller'
+import { createMicController } from './controls/mic-controller'
+import type { MicController } from './controls/mic-controller'
 import { createScrollButtons } from './controls/scroll-buttons'
 import { createDrawer } from './drawer/drawer'
 import { attachDoubleTapGesture } from './gestures/double-tap'

@@ -6,9 +6,9 @@ export function mockTerminal(): XTerminal {
 		options: { fontSize: 14 },
 		input(_data: string, _wasUserInput: boolean) {},
 		focus() {},
-	onData(_handler: (data: string) => void) {
-		return { dispose() {} }
-	},
+		onData(_handler: (data: string) => void) {
+			return { dispose() {} }
+		},
 		isConnected() {
 			return true
 		},

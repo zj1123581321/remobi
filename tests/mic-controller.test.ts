@@ -155,7 +155,7 @@ afterEach(() => {
 
 describe('sanitizeVoiceText', () => {
 	test('keeps printable bytes and spaces, strips C0/DEL/C1', () => {
-		const input = `A\x00B\tC\nD\rE\x7fF\x80G\x9fH \u4f60\u597d`
+		const input = 'A\x00B\tC\nD\rE\x7fF\x80G\x9fH \u4f60\u597d'
 		expect(new TextEncoder().encode(sanitizeVoiceText(input))).toEqual(
 			new TextEncoder().encode('ABCDEFGH \u4f60\u597d'),
 		)
@@ -225,13 +225,13 @@ describe('mic-controller PTT state machine', () => {
 		harness.controller.dispose()
 	})
 
-		test('waiting-final timeout preserves recognized text for manual sending', async () => {
-			const harness = createHarness()
-			await startRecording(harness)
-			harness.engine.emitPartial('keep me')
-			vi.advanceTimersByTime(20)
-			dispatchPointer(harness.button, 'pointerup')
-			vi.advanceTimersByTime(3_000)
+	test('waiting-final timeout preserves recognized text for manual sending', async () => {
+		const harness = createHarness()
+		await startRecording(harness)
+		harness.engine.emitPartial('keep me')
+		vi.advanceTimersByTime(20)
+		dispatchPointer(harness.button, 'pointerup')
+		vi.advanceTimersByTime(3_000)
 		expect(harness.controller.state).toBe('preview')
 		expect(harness.controller.preview.input.value).toBe('keep me')
 		harness.controller.dispose()
@@ -285,7 +285,9 @@ describe('preview injection', () => {
 		harness.controller.dispose()
 		const engine = new FakeEngine()
 		const term = harness.term
-		const config = defineConfig({ asr: { enabled: true, autoEnter: true, doubao: { apiKey: 'test-key' } } })
+		const config = defineConfig({
+			asr: { enabled: true, autoEnter: true, doubao: { apiKey: 'test-key' } },
+		})
 		const controller = createMicController({ term, config, hooks, engine })
 		if (!controller) throw new Error('expected controller')
 		const button = document.createElement('button')
@@ -339,7 +341,10 @@ describe('preview injection', () => {
 describe('capability detection', () => {
 	test('requires secure context and getUserMedia', () => {
 		Object.defineProperty(globalThis, 'isSecureContext', { configurable: true, value: false })
-		Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia() {} } })
+		Object.defineProperty(navigator, 'mediaDevices', {
+			configurable: true,
+			value: { getUserMedia() {} },
+		})
 		expect(isVoiceInputSupported()).toBe(false)
 		Object.defineProperty(globalThis, 'isSecureContext', { configurable: true, value: true })
 		expect(isVoiceInputSupported()).toBe(true)

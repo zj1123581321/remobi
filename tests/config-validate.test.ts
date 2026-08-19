@@ -93,8 +93,22 @@ describe('assertValidConfigOverrides', () => {
 		expect(() =>
 			assertValidConfigOverrides({
 				toolbar: {
-					row1: [{ id: 'voice', label: 'Mic', description: 'Hold to speak', action: { type: 'voice-input' } }],
-					row2: [{ id: 'voice-2', label: 'Mic 2', description: 'Hold to speak', action: { type: 'voice-input' } }],
+					row1: [
+						{
+							id: 'voice',
+							label: 'Mic',
+							description: 'Hold to speak',
+							action: { type: 'voice-input' },
+						},
+					],
+					row2: [
+						{
+							id: 'voice-2',
+							label: 'Mic 2',
+							description: 'Hold to speak',
+							action: { type: 'voice-input' },
+						},
+					],
 				},
 			}),
 		).not.toThrow()
