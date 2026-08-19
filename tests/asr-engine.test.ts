@@ -756,6 +756,33 @@ describe('DoubaoEngine', () => {
 		await stop
 	})
 
+	test('reports malformed JSON during stopping once and settles the shared stop', async () => {
+		const capture = new BlockingCapture()
+		const socket = new EpochSocket()
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+		const errors: string[] = []
+		engine.onError((code) => errors.push(code))
+
+		await engine.start()
+		const stop = engine.stop()
+		await vi.waitFor(() => expect(capture.stopCalls).toBe(1))
+		await expect(engine.start()).rejects.toThrow('busy')
+		socket.triggerMessage(rawServerResponse('{'))
+
+		expect(errors).toEqual(['protocol-error'])
+		expect(engine.stop()).toBe(stop)
+		capture.releaseStop()
+		await stop
+
+		expect(capture.stopped).toBe(true)
+		expect(socket.readyState).toBe(3)
+	})
+
 	test('reports handshake close and reaches idle without starting capture', async () => {
 		const socket = new EpochSocket(false)
 		const capture = new FakeCapture()
@@ -792,6 +819,26 @@ describe('DoubaoEngine', () => {
 		await stop
 		await start
 		expect(capture.started).toBe(false)
+	})
+
+	test('rejects start while a failure is still cleaning up', async () => {
+		const capture = new BlockingCapture()
+		const socket = new RuntimeErrorSocket('')
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+		const errors: string[] = []
+		engine.onError((code) => errors.push(code))
+
+		await engine.start()
+		socket.triggerError()
+		expect(errors).toEqual(['connection-failed'])
+		await expect(engine.start()).rejects.toThrow('busy')
+		capture.releaseStop()
+		await engine.stop()
 	})
 
 	test('turns malformed JSON into one protocol error while ignoring valid empty results', async () => {
