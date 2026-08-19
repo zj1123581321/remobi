@@ -26,6 +26,52 @@ describe('assertValidConfigOverrides', () => {
 		expect(() => assertValidConfigOverrides({})).not.toThrow()
 	})
 
+	test('accepts the ASR override shape', () => {
+		expect(() =>
+			assertValidConfigOverrides({
+				asr: {
+					enabled: true,
+					provider: 'doubao',
+					doubao: { apiKey: 'sk-test', resourceId: 'volc.seedasr.sauc.duration' },
+					autoEnter: false,
+				},
+			}),
+		).not.toThrow()
+	})
+
+	test.each([{ enabled: true, doubao: { apiKey: '' } }, { enabled: true }])(
+		'rejects enabling ASR without a non-empty API key: %#',
+		(asr) => {
+			const message = getValidationMessage({ asr }, assertValidConfigOverrides)
+			expect(message).toContain('config.asr.doubao.apiKey')
+			expect(message).toContain('redacted')
+			expect(message).not.toContain('sk-secret')
+		},
+	)
+
+	test('allows the disabled ASR default with an empty API key', () => {
+		expect(() =>
+			assertValidConfigOverrides({ asr: { enabled: false, doubao: { apiKey: '' } } }),
+		).not.toThrow()
+	})
+
+	test('redacts an ASR doubao string replacement in validation errors', () => {
+		const message = getValidationMessage(
+			{ asr: { doubao: 'sk-secret-value' } },
+			assertValidConfigOverrides,
+		)
+		expect(message).toContain('config.asr.doubao')
+		expect(message).toContain('redacted')
+		expect(message).not.toContain('sk-secret-value')
+	})
+
+	test('redacts an ASR parent string replacement in validation errors', () => {
+		const message = getValidationMessage({ asr: 'sk-secret-value' }, assertValidConfigOverrides)
+		expect(message).toContain('config.asr')
+		expect(message).toContain('redacted')
+		expect(message).not.toContain('sk-secret-value')
+	})
+
 	test('accepts valid partial config with custom row', () => {
 		expect(() =>
 			assertValidConfigOverrides({

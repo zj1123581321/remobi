@@ -13,7 +13,7 @@ export function mockTerminal(): XTerminal {
 }
 
 /** Mock terminal that records input data */
-export interface MockTermWithSent extends XTerminal {
+interface MockTermWithSent extends XTerminal {
 	readonly sent: string[]
 }
 

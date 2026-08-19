@@ -86,10 +86,14 @@ function toValidationIssues(issues: readonly v.BaseIssue<unknown>[]): Validation
 			continue
 		}
 		const received = issue.input !== undefined ? issue.input : undefined
+		const path = issuePath(issue)
 		result.push({
-			path: issuePath(issue),
+			path,
 			expected: issueExpected(issue),
-			received: describeReceived(received),
+			received:
+				path === 'config.asr' || path.startsWith('config.asr.')
+					? 'redacted'
+					: describeReceived(received),
 		})
 	}
 	return result

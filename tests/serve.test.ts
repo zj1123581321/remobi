@@ -1,4 +1,9 @@
-import { describe, expect, test } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { request as httpRequest } from 'node:http'
+import { createServer } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, test } from 'vitest'
 import {
 	buildSecurityHeaders,
 	describeCommandForLogs,
@@ -8,6 +13,120 @@ import {
 	resolveRequestAuthority,
 	withSecurityHeaders,
 } from '../src/serve'
+import { sleep, spawnProcess } from '../src/util/node-compat'
+
+const repoRoot = join(import.meta.dirname, '..')
+const runningProcesses: ReturnType<typeof spawnProcess>[] = []
+const tempDirs: string[] = []
+
+afterEach(async () => {
+	while (runningProcesses.length > 0) {
+		const proc = runningProcesses.pop()
+		if (!proc) continue
+		proc.kill('SIGINT')
+		await proc.exited
+	}
+	while (tempDirs.length > 0) {
+		const dir = tempDirs.pop()
+		if (dir) rmSync(dir, { recursive: true, force: true })
+	}
+})
+
+async function reservePort(): Promise<number> {
+	const server = createServer()
+	await new Promise<void>((resolve, reject) => {
+		server.once('error', reject)
+		server.listen(0, '127.0.0.1', () => resolve())
+	})
+	const address = server.address()
+	if (!address || typeof address === 'string') {
+		server.close()
+		throw new Error('failed to reserve test port')
+	}
+	await new Promise<void>((resolve, reject) => {
+		server.close((error) => (error ? reject(error) : resolve()))
+	})
+	return address.port
+}
+
+async function waitForHttp(url: string): Promise<void> {
+	const deadline = Date.now() + 10_000
+	while (Date.now() < deadline) {
+		try {
+			const statusCode = await requestStatus(url)
+			if (statusCode >= 200 && statusCode < 300) return
+		} catch {
+			// The serve process may still be starting.
+		}
+		await sleep(100)
+	}
+	throw new Error(`timed out waiting for ${url}`)
+}
+
+function requestStatus(url: string): Promise<number> {
+	return new Promise((resolve, reject) => {
+		const request = httpRequest(url, (response) => {
+			response.resume()
+			response.once('end', () => resolve(response.statusCode ?? 0))
+		})
+		request.once('error', reject)
+		request.end()
+	})
+}
+
+function requestResource(
+	url: string,
+): Promise<{ statusCode: number; cacheControl?: string; contentType?: string }> {
+	return new Promise((resolve, reject) => {
+		const request = httpRequest(url, (response) => {
+			response.resume()
+			response.once('end', () =>
+				resolve({
+					statusCode: response.statusCode ?? 0,
+					cacheControl: response.headers['cache-control'],
+					contentType: response.headers['content-type'],
+				}),
+			)
+		})
+		request.once('error', reject)
+		request.end()
+	})
+}
+
+async function startServe(asrEnabled: boolean): Promise<{ port: number; url: string }> {
+	const port = await reservePort()
+	const configDir = mkdtempSync(join(tmpdir(), 'remobi-serve-test-'))
+	tempDirs.push(configDir)
+	const configPath = join(configDir, 'remobi.config.ts')
+	writeFileSync(
+		configPath,
+		`export default ${JSON.stringify({
+			asr: { enabled: asrEnabled, doubao: { apiKey: 'serve-test-key' } },
+		})}`,
+	)
+	const proc = spawnProcess(
+		[
+			'pnpm',
+			'exec',
+			'tsx',
+			'cli.ts',
+			'serve',
+			'--config',
+			configPath,
+			'--port',
+			String(port),
+			'--',
+			'bash',
+			'--norc',
+			'--noprofile',
+		],
+		{ cwd: repoRoot, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
+	)
+	runningProcesses.push(proc)
+	const url = `http://127.0.0.1:${port}`
+	await waitForHttp(url)
+	return { port, url }
+}
 
 describe('isLoopbackHost', () => {
 	test('accepts loopback hosts', () => {
@@ -96,6 +215,26 @@ describe('buildSecurityHeaders', () => {
 		expect(csp).toContain('ws://192.168.1.10:7681')
 		expect(csp).toContain('wss://192.168.1.10:7681')
 	})
+
+	test('does not grant microphone or Doubao access when ASR is disabled', () => {
+		const headers = buildSecurityHeaders('127.0.0.1:7681', '127.0.0.1', 7681, 'nonce-123', false)
+		expect(headers['content-security-policy']).toBe(
+			"default-src 'self'; script-src 'self' 'nonce-nonce-123'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:7681 wss://127.0.0.1:7681; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
+		)
+		expect(headers['permissions-policy']).toBe('camera=(), microphone=(), geolocation=()')
+		expect(headers['content-security-policy']).not.toContain('*')
+		expect(headers['content-security-policy']).not.toMatch(/\bwss:(?:\s|;|$)/)
+	})
+
+	test('grants only microphone and the Doubao origin when ASR is enabled', () => {
+		const headers = buildSecurityHeaders('127.0.0.1:7681', '127.0.0.1', 7681, 'nonce-123', true)
+		expect(headers['content-security-policy']).toBe(
+			"default-src 'self'; script-src 'self' 'nonce-nonce-123'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:7681 wss://127.0.0.1:7681 wss://openspeech.bytedance.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
+		)
+		expect(headers['permissions-policy']).toBe('camera=(), microphone=(self), geolocation=()')
+		expect(headers['content-security-policy']).not.toContain('*')
+		expect(headers['content-security-policy']).not.toMatch(/\bwss:(?:\s|;|$)/)
+	})
 })
 
 describe('withSecurityHeaders', () => {
@@ -121,6 +260,32 @@ describe('withSecurityHeaders', () => {
 		)
 		expect(response.headers.get('content-security-policy')).toContain('ws://127.0.0.1:7681')
 		expect(await response.text()).toBe('ok')
+	})
+})
+
+describe('serve document route', () => {
+	test('does not allow enabled-ASR HTML to be cached', async () => {
+		const { url } = await startServe(true)
+		const response = await requestResource(url)
+
+		expect(response.statusCode).toBe(200)
+		expect(response.cacheControl).toBe('private, no-store')
+		expect(response.contentType).toBe('text/html; charset=UTF-8')
+	})
+
+	test('serves the worklet only when ASR is enabled', async () => {
+		const { url } = await startServe(true)
+		const response = await requestResource(`${url}/asr-worklet.js`)
+
+		expect(response.statusCode).toBe(200)
+		expect(response.contentType).toBe('text/javascript')
+	})
+
+	test('does not serve the worklet when ASR is disabled', async () => {
+		const { url } = await startServe(false)
+		const response = await requestResource(`${url}/asr-worklet.js`)
+
+		expect(response.statusCode).toBe(404)
 	})
 })
 

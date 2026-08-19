@@ -8,6 +8,10 @@ import * as v from 'valibot'
 
 const finiteNumber = v.pipe(v.number(), v.finite())
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 // --- Button action (discriminated union) ---
 
 const sendActionSchema = v.strictObject({
@@ -305,6 +309,61 @@ const reconnectResolvedSchema = v.strictObject({
 	enabled: v.boolean(),
 })
 
+// --- ASR ---
+
+const asrProviderSchema = v.literal('doubao')
+
+const doubaoAsrOverridesSchema = v.strictObject({
+	apiKey: v.optional(v.string()),
+	resourceId: v.optional(v.string()),
+})
+
+function asrApiKeyCheck<T extends Record<string, unknown>>() {
+	return v.rawCheck<T>(({ dataset, addIssue }) => {
+		if (!dataset.typed || !isRecord(dataset.value) || dataset.value.enabled !== true) return
+		const doubao = dataset.value.doubao
+		const doubaoRecord = isRecord(doubao) ? doubao : {}
+		const apiKey = doubaoRecord.apiKey
+		if (typeof apiKey === 'string' && apiKey.length > 0) return
+		addIssue({
+			message: 'ASR apiKey must be a non-empty string when enabled',
+			expected: 'non-empty string',
+			input: apiKey,
+			path: [
+				{ type: 'object', origin: 'value', input: dataset.value, key: 'doubao', value: doubao },
+				{ type: 'object', origin: 'value', input: doubaoRecord, key: 'apiKey', value: apiKey },
+			],
+		})
+	})
+}
+
+const asrOverridesBaseSchema = v.strictObject({
+	enabled: v.optional(v.boolean()),
+	provider: v.optional(asrProviderSchema),
+	doubao: v.optional(doubaoAsrOverridesSchema),
+	autoEnter: v.optional(v.boolean()),
+})
+const asrOverridesSchema = v.pipe(
+	asrOverridesBaseSchema,
+	asrApiKeyCheck<v.InferOutput<typeof asrOverridesBaseSchema>>(),
+)
+
+const doubaoAsrResolvedSchema = v.strictObject({
+	apiKey: v.string(),
+	resourceId: v.string(),
+})
+
+const asrResolvedBaseSchema = v.strictObject({
+	enabled: v.boolean(),
+	provider: asrProviderSchema,
+	doubao: doubaoAsrResolvedSchema,
+	autoEnter: v.boolean(),
+})
+const asrResolvedSchema = v.pipe(
+	asrResolvedBaseSchema,
+	asrApiKeyCheck<v.InferOutput<typeof asrResolvedBaseSchema>>(),
+)
+
 // --- Top-level schemas ---
 
 /** Schema for config overrides (all fields optional, button arrays accept array | function) */
@@ -329,6 +388,7 @@ export const remobiConfigOverridesSchema = v.strictObject({
 	scrollButtons: v.optional(scrollButtonsOverridesSchema),
 	pwa: v.optional(pwaOverridesSchema),
 	reconnect: v.optional(reconnectOverridesSchema),
+	asr: v.optional(asrOverridesSchema),
 })
 
 /** Schema for fully resolved config (all required fields, plain button arrays) */
@@ -349,4 +409,5 @@ export const remobiConfigResolvedSchema = v.strictObject({
 	scrollButtons: scrollButtonsResolvedSchema,
 	pwa: pwaResolvedSchema,
 	reconnect: reconnectResolvedSchema,
+	asr: asrResolvedSchema,
 })
