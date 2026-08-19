@@ -57,20 +57,3 @@ export function int16ToPcmBytes(samples: Int16Array): Uint8Array {
 	}
 	return bytes
 }
-
-/** Convert normalised float samples directly to little-endian PCM bytes. */
-export function float32ToPcm16(samples: Float32Array): Uint8Array {
-	return int16ToPcmBytes(float32ToInt16(samples))
-}
-
-/** Split PCM bytes into 100ms chunks, retaining one final short chunk when needed. */
-export function chunkPcm16(pcm: Uint8Array): readonly Uint8Array[] {
-	if (pcm.byteLength % PCM_SAMPLE_BYTES !== 0) {
-		throw new RangeError('PCM byte length must contain whole 16-bit samples')
-	}
-	const chunks: Uint8Array[] = []
-	for (let offset = 0; offset < pcm.byteLength; offset += PCM_CHUNK_BYTES) {
-		chunks.push(pcm.slice(offset, Math.min(offset + PCM_CHUNK_BYTES, pcm.byteLength)))
-	}
-	return chunks
-}

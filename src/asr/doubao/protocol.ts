@@ -235,5 +235,3 @@ export function decodeFrame(input: Uint8Array | ArrayBuffer): DecodedFrame {
 	if (messageType === SAUC_MESSAGE.error) return decodeError(bytes, flags)
 	return malformed(`unsupported message type 0x${messageType.toString(16)}`)
 }
-
-export const decodeServerFrame = decodeFrame

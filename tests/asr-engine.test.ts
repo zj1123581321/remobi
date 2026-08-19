@@ -1,6 +1,6 @@
-import { describe, expect, test, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { describe, expect, test, vi } from 'vitest'
 import WebSocket from 'ws'
 import { DoubaoEngine, type WebSocketLike } from '../src/asr/doubao/engine'
 import { decodeFrame } from '../src/asr/doubao/protocol'

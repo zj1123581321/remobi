@@ -188,7 +188,9 @@ class BrowserPcmCapture implements PcmCapture {
 		}
 		this.node = new AudioWorkletNode(this.context, WORKLET_PROCESSOR_NAME)
 		this.node.port.onmessage = (
-			event: MessageEvent<{ type: 'pcm'; samples: Int16Array; posted: number } | { type: 'flush-ack' }>,
+			event: MessageEvent<
+				{ type: 'pcm'; samples: Int16Array; posted: number } | { type: 'flush-ack' }
+			>,
 		) => {
 			if (epoch !== this.epoch) return
 			if (event.data.type === 'pcm') {
@@ -388,7 +390,7 @@ export class DoubaoEngine implements AsrEngine {
 		}
 		socket.onerror = runtimeError
 		await new Promise<void>((resolve, reject) => {
-			 socket.onopen = () => {
+			socket.onopen = () => {
 				if (epoch !== this.epoch) {
 					resolve()
 					return
