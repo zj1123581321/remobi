@@ -1,40 +1,43 @@
-<!-- delegate-outcome: failed -->
+<!-- delegate-outcome: succeeded -->
 
 # 执行器报告：ASR 增量 0 Spike
 
 ## Outcome
 
-本卡按任务卡收口为 `failed`：密钥未就位导致 Node 探针无法建立连接。无服务端 no-go 结论，也没有伪造 fixture。
+本卡按任务卡收口为 `succeeded`：密钥已就位，Node 探针真实完成新版 `_async` query/header 候选、full/PCM/partial/final、尾包、opus 和错误模式运行。
+
+## 结论
+
+- **GO**：`wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async` + query `api_key/api_resource_id` + `volc.seedasr.sauc.duration`。
+- **NO-GO**：opus；服务端返回 0xF/45000151 `unsupported format opus`。
+- `neg-no-seq` 与 `neg-with-seq` 都收到 final；带序列尾包对 10 个音频帧必须是 `-12`（`-(N+2)`）。
+- 19 个 fixture 目录、271 个文件、947,313 bytes；主 fixture `20260819T052830488Z-query-seedasr-duration-2b7d8bd5`。
+- 真机浏览器能力仍待用户回填；页面已完成，不把 Node 网络闸门当作真机采集结论。
 
 ## 已完成
 
-- `spikes/asr/probe-auth.ts`：query raw、query STS JWT、header 对照、尾包两个 variant、opus、协议错误 0xF、业务错误 0x9 分类、全帧 hex/transcript 录制、密钥脱敏。
-- `spikes/asr/probe.html`：16 kHz 实际采样率、AudioWorklet、getUserMedia、iOS Safari/PWA/Android 标记与四类中断事件观察；内含 HTTPS 和真机步骤。
-- `spikes/asr/PROTOCOL-NOTES.md`：header nibble、offset 推导、full request 脱敏样例、fixture 约定与待实跑结论。
-- `docs/sessions/260819-1306-asr-spike-results.md`：逐项验收状态、阻塞原因和增量 1 影响。
+- `spikes/asr/probe-auth.ts`：读取 X_API_KEY，按新版 3 个 resourceId 试 query/header，保留旧 endpoint 对照；真实录制所有收发帧；标注 0x9 partial/final、0xF errors、opus 与两种尾包。
+- `spikes/asr/probe.html`：16 kHz 实际采样率、AudioWorklet、getUserMedia、iOS Safari/PWA/Android 与中断信号观察。
+- `spikes/asr/PROTOCOL-NOTES.md`：实帧 offset、尾包 sequence、resourceId/endpoint 选择、错误表现和增量 1 影响。
+- `docs/sessions/260819-1306-asr-spike-results.md`：逐项验收与 go/no-go 结果。
 
-## 真实验证
+## 真实验证摘录
 
 ```text
-node_modules/.bin/tsx --no-cache spikes/asr/probe-auth.ts query-raw
-FATAL: 缺少 VOLC_APP_KEY / VOLC_ACCESS_KEY（环境变量或 spikes/asr/.env.local）
-exit=2
+query-seedasr-duration: HTTP 101; 0x9 server-partial flags=0b0000 offset=8; 0x9 server-final flags=0b0011 offset=12
+query-seedasr-duration-end-variant-neg-no-seq: HTTP 101; 0x9 server-final flags=0b0011 offset=12
+query-seedasr-duration-opus: HTTP 101; 0xF code=45000151 unsupported format opus
+query-seedasr-duration-protocol-error: HTTP 101; 0xF code=45000000
 ```
 
-`pnpm exec biome check spikes/asr` 通过；探针使用专门 TypeScript 编译参数检查通过；浏览器页内脚本用 Node `new Function` 语法检查通过。`tests/fixtures/asr/` 没有真实帧目录。
-
-fixture 目录探活：`tests/fixtures/asr/` 为空，`fixture_total_bytes=0`。
+错误 fixture 还记录 45000292 并发配额不足、旧尾包 `-11` 导致 expected `-12` 的 sequence mismatch，以及非法 format 的 45000151。所有候选握手均 101，没有握手拒绝样本。
 
 ## 安全自查
 
-已检查新增输出物和差异：没有密钥值、STS token、完整带参 wss URL 或 STS 响应原文；日志只写 origin/path、query 参数名、状态码、logid（若服务端提供）和 payload 截断摘要。主仓 `.env.local` 未复制、移动或删除。
+输出物没有 key 值、完整带参 wss URL、STS token 或 STS body；fixture 只保存二进制帧、脱敏 payload 摘要、endpoint/resourceId/authMode。主仓 `.env.local` 只读使用，未复制、移动或删除。
 
 ## 提交
 
-- `063382d chore(asr): add SAUC auth spike probe [codex]`
-- `d8fc128 chore(asr): add browser capability probe [codex]`
-- `d158554 test(asr): record blocked live probe run [codex]`
-- `416c6ca docs(sessions): record blocked ASR spike result [codex]`
-- `a214883 chore(asr): continue auth candidates after STS failure [codex]`
+本轮将按小步提交：探针代码、真实 fixture、备忘/结果文档。最终 commit 列表以 `git log` 为准；未 push、未开 PR、未修改 `src/`。
 
-等待密钥就位后应重跑 `node_modules/.bin/tsx --no-cache spikes/asr/probe-auth.ts all`，再用真实 fixture 补齐结果文档；当前不应进入增量 1。
+下一步：用户回填 `probe.html` 真机结果后，增量 1 采用单 `apiKey`、`volc.seedasr.sauc.duration`、`bigmodel_async`、PCM 传输与已锁定帧规则。
