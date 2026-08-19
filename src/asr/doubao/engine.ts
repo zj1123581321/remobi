@@ -34,7 +34,7 @@ export interface WebSocketLike {
 export type WebSocketFactory = (url: string) => WebSocketLike
 
 export interface PcmCapture {
-	start(onSamples: (samples: Int16Array) => void): Promise<void>
+	start(onSamples: (samples: Int16Array) => void, onError: AsrErrorHandler): Promise<void>
 	stop(): Promise<void>
 	getPcmInFlightBytes(): number
 }
@@ -147,12 +147,13 @@ class BrowserPcmCapture implements PcmCapture {
 	private stopPromise: Promise<void> | undefined
 	private workletPosted = 0
 	private workletReceived = 0
+	private readonly muteTimers = new Map<MediaStreamTrack, ReturnType<typeof setTimeout>>()
 
 	constructor(workletUrl: string) {
 		this.workletUrl = workletUrl
 	}
 
-	async start(onSamples: (samples: Int16Array) => void): Promise<void> {
+	async start(onSamples: (samples: Int16Array) => void, onError: AsrErrorHandler): Promise<void> {
 		const previousStop = this.stopPromise
 		if (previousStop) {
 			await previousStop
@@ -202,7 +203,8 @@ class BrowserPcmCapture implements PcmCapture {
 			node = new AudioWorkletNode(context, WORKLET_PROCESSOR_NAME)
 			node.port.onmessage = (
 				event: MessageEvent<
-					{ type: 'pcm'; samples: Int16Array; posted: number } | { type: 'flush-ack' }
+					| { type: 'pcm'; samples: Int16Array; posted: number }
+					| { type: 'flush-ack' }
 				>,
 			) => {
 				if (event.data.type === 'flush-ack') {
@@ -225,6 +227,7 @@ class BrowserPcmCapture implements PcmCapture {
 				await this.disposeStartResources(stream, context, source, node)
 				return
 			}
+			this.installCaptureSignals(stream, context, epoch, onError)
 			node.port.postMessage({ type: 'start' })
 			this.onSamples = onSamples
 			this.context = context
@@ -232,6 +235,7 @@ class BrowserPcmCapture implements PcmCapture {
 			this.source = source
 			this.node = node
 		} catch (error) {
+			this.clearCaptureSignals(stream, context)
 			source?.disconnect()
 			node?.port.close()
 			node?.disconnect()
@@ -247,11 +251,51 @@ class BrowserPcmCapture implements PcmCapture {
 		source: MediaStreamAudioSourceNode | undefined,
 		node: AudioWorkletNode | undefined,
 	): Promise<void> {
+		this.clearCaptureSignals(stream, context)
 		source?.disconnect()
 		node?.port.close()
 		node?.disconnect()
 		for (const track of stream.getTracks()) track.stop()
 		if (context) await context.close()
+	}
+
+	private installCaptureSignals(
+		stream: MediaStream,
+		context: AudioContext,
+		epoch: number,
+		onError: AsrErrorHandler,
+	): void {
+		const reportInterruption = (): void => {
+			if (epoch === this.epoch) onError('audio-interrupted')
+		}
+		for (const track of stream.getTracks()) {
+			track.onended = reportInterruption
+			track.onmute = () => {
+				this.clearMuteTimer(track)
+				this.muteTimers.set(track, setTimeout(reportInterruption, 5_000))
+			}
+			track.onunmute = () => this.clearMuteTimer(track)
+		}
+		context.onstatechange = () => {
+			const state = context.state as string
+			if (state === 'interrupted' || state === 'suspended') reportInterruption()
+		}
+	}
+
+	private clearMuteTimer(track: MediaStreamTrack): void {
+		const timer = this.muteTimers.get(track)
+		if (timer) clearTimeout(timer)
+		this.muteTimers.delete(track)
+	}
+
+	private clearCaptureSignals(stream: MediaStream, context: AudioContext | undefined): void {
+		for (const track of stream.getTracks()) {
+			track.onended = null
+			track.onmute = null
+			track.onunmute = null
+			this.clearMuteTimer(track)
+		}
+		if (context) context.onstatechange = null
 	}
 
 	getPcmInFlightBytes(): number {
@@ -271,6 +315,7 @@ class BrowserPcmCapture implements PcmCapture {
 		this.node = undefined
 		this.context = undefined
 		this.onSamples = undefined
+		if (stream) this.clearCaptureSignals(stream, context)
 		source?.disconnect()
 		for (const track of stream?.getTracks() ?? []) track.stop()
 		const promise = this.stopCurrentEpoch(epoch, node, context)
@@ -421,9 +466,14 @@ export class DoubaoEngine implements AsrEngine {
 		try {
 			await this.openSocket(epoch)
 			if (!this.isCurrent(epoch, 'starting')) return
-			await this.capture.start((samples) => {
-				if (epoch === this.epoch) this.sendPcm(samples)
-			})
+			await this.capture.start(
+				(samples) => {
+					if (epoch === this.epoch) this.sendPcm(samples)
+				},
+				(code) => {
+					if (epoch === this.epoch) this.fail(code, epoch)
+				},
+			)
 			if (!this.isCurrent(epoch, 'starting')) return
 			this.transition(['starting'], 'recording', 'capture-ready')
 			this.startBackpressureMonitor(epoch)

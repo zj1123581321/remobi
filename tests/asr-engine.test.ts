@@ -254,9 +254,24 @@ class RejectingStopCapture extends FakeCapture {
 
 class FakeTrack {
 	stopCalls = 0
+	onended: (() => void) | null = null
+	onmute: (() => void) | null = null
+	onunmute: (() => void) | null = null
 
 	stop(): void {
 		this.stopCalls++
+	}
+
+	triggerEnded(): void {
+		this.onended?.()
+	}
+
+	triggerMute(): void {
+		this.onmute?.()
+	}
+
+	triggerUnmute(): void {
+		this.onunmute?.()
 	}
 }
 
@@ -322,19 +337,27 @@ class FakeAudioNode {
 
 class FakeAudioContext {
 	static readonly instances: FakeAudioContext[] = []
+	static initialState: AudioContextState = 'running'
 	readonly sampleRate = 16_000
-	readonly state = 'running'
+	state: AudioContextState = FakeAudioContext.initialState
 	readonly destination = {}
 	readonly audioWorklet = { addModule: async (_url: string) => {} }
 	readonly sources: FakeSource[] = []
 	closeCalls = 0
+	onstatechange: (() => void) | null = null
 
 	constructor(_options: { readonly sampleRate: number }) {
 		FakeAudioContext.instances.push(this)
 	}
 
 	resume(): Promise<void> {
+		this.state = 'running'
 		return Promise.resolve()
+	}
+
+	triggerState(state: AudioContextState): void {
+		this.state = state
+		this.onstatechange?.()
 	}
 
 	createMediaStreamSource(_stream: FakeStream): FakeSource {
@@ -345,6 +368,8 @@ class FakeAudioContext {
 
 	async close(): Promise<void> {
 		this.closeCalls++
+		this.state = 'closed'
+		this.onstatechange?.()
 	}
 }
 
@@ -946,6 +971,148 @@ describe('DoubaoEngine', () => {
 			expect(stream.track.stopCalls).toBe(1)
 			expect(context?.closeCalls).toBe(1)
 		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
+
+	test('fails on an ended audio track and cleans the browser capture', async () => {
+		FakeAudioContext.instances.length = 0
+		FakeAudioNode.instances.length = 0
+		const stream = new FakeStream()
+		const socket = new EpochSocket()
+		vi.stubGlobal('AudioContext', FakeAudioContext)
+		vi.stubGlobal('AudioWorkletNode', FakeAudioNode)
+		vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => stream } })
+		try {
+			const engine = new DoubaoEngine({
+				apiKey: 'test-api-key',
+				resourceId: 'volc.seedasr.sauc.duration',
+				websocketFactory: () => socket,
+			})
+			const errors: string[] = []
+			engine.onError((code) => errors.push(code))
+
+			await engine.start()
+			stream.track.triggerEnded()
+
+			expect(errors).toEqual(['audio-interrupted'])
+			await engine.stop()
+			expect(stream.track.stopCalls).toBe(1)
+			expect(FakeAudioContext.instances[0]?.closeCalls).toBe(1)
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
+
+	test('does not report a transient mute that recovers before the deadline', async () => {
+		FakeAudioContext.instances.length = 0
+		FakeAudioNode.instances.length = 0
+		const stream = new FakeStream()
+		const socket = new FinalSocket()
+		vi.useFakeTimers()
+		vi.stubGlobal('AudioContext', FakeAudioContext)
+		vi.stubGlobal('AudioWorkletNode', FakeAudioNode)
+		vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => stream } })
+		try {
+			const engine = new DoubaoEngine({
+				apiKey: 'test-api-key',
+				resourceId: 'volc.seedasr.sauc.duration',
+				websocketFactory: () => socket,
+			})
+			const errors: string[] = []
+			engine.onError((code) => errors.push(code))
+
+			await engine.start()
+			stream.track.triggerMute()
+			stream.track.triggerUnmute()
+			await vi.advanceTimersByTimeAsync(5_000)
+
+			expect(errors).toEqual([])
+			const stop = engine.stop()
+			await Promise.resolve()
+			socket.triggerMessage(serverResponse({ result: { text: 'done' } }, true))
+			await stop
+		} finally {
+			vi.useRealTimers()
+			vi.unstubAllGlobals()
+		}
+	})
+
+	test('fails when mute remains for five seconds', async () => {
+		FakeAudioContext.instances.length = 0
+		FakeAudioNode.instances.length = 0
+		const stream = new FakeStream()
+		const socket = new EpochSocket()
+		vi.useFakeTimers()
+		vi.stubGlobal('AudioContext', FakeAudioContext)
+		vi.stubGlobal('AudioWorkletNode', FakeAudioNode)
+		vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => stream } })
+		try {
+			const engine = new DoubaoEngine({
+				apiKey: 'test-api-key',
+				resourceId: 'volc.seedasr.sauc.duration',
+				websocketFactory: () => socket,
+			})
+			const errors: string[] = []
+			engine.onError((code) => errors.push(code))
+
+			await engine.start()
+			stream.track.triggerMute()
+			await vi.advanceTimersByTimeAsync(4_999)
+			expect(errors).toEqual([])
+			await vi.advanceTimersByTimeAsync(1)
+			expect(errors).toEqual(['audio-interrupted'])
+			await engine.stop()
+		} finally {
+			vi.useRealTimers()
+			vi.unstubAllGlobals()
+		}
+	})
+
+	test('fails on an interrupted audio context but ignores normal resume and active stop', async () => {
+		FakeAudioContext.instances.length = 0
+		FakeAudioNode.instances.length = 0
+		FakeAudioContext.initialState = 'suspended'
+		const stream = new FakeStream()
+		const socket = new FinalSocket()
+		vi.stubGlobal('AudioContext', FakeAudioContext)
+		vi.stubGlobal('AudioWorkletNode', FakeAudioNode)
+		vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => stream } })
+		try {
+			const engine = new DoubaoEngine({
+				apiKey: 'test-api-key',
+				resourceId: 'volc.seedasr.sauc.duration',
+				websocketFactory: () => socket,
+			})
+			const errors: string[] = []
+			engine.onError((code) => errors.push(code))
+
+			await engine.start()
+			expect(errors).toEqual([])
+			const context = FakeAudioContext.instances[0]
+			context?.triggerState('interrupted')
+			expect(errors).toEqual(['audio-interrupted'])
+			await engine.stop()
+
+			FakeAudioContext.initialState = 'running'
+			const secondStream = new FakeStream()
+			const secondSocket = new FinalSocket()
+			vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => secondStream } })
+			const secondEngine = new DoubaoEngine({
+				apiKey: 'test-api-key',
+				resourceId: 'volc.seedasr.sauc.duration',
+				websocketFactory: () => secondSocket,
+			})
+			const secondErrors: string[] = []
+			secondEngine.onError((code) => secondErrors.push(code))
+			await secondEngine.start()
+			const secondStop = secondEngine.stop()
+			await Promise.resolve()
+			secondSocket.triggerMessage(serverResponse({ result: { text: 'done' } }, true))
+			await secondStop
+			expect(secondErrors).toEqual([])
+		} finally {
+			FakeAudioContext.initialState = 'running'
 			vi.unstubAllGlobals()
 		}
 	})
