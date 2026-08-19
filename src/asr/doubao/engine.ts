@@ -1,4 +1,4 @@
-import { PCM_SAMPLE_RATE, int16ToPcmBytes } from '../pcm'
+import { PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, int16ToPcmBytes } from '../pcm'
 import type {
 	AsrEngine,
 	AsrErrorCode,
@@ -34,6 +34,7 @@ export type WebSocketFactory = (url: string) => WebSocketLike
 export interface PcmCapture {
 	start(onSamples: (samples: Int16Array) => void): Promise<void>
 	stop(): Promise<void>
+	getPcmInFlightBytes(): number
 }
 
 export interface DoubaoEngineOptions {
@@ -142,6 +143,8 @@ class BrowserPcmCapture implements PcmCapture {
 	private flushWaiter: { readonly epoch: number; readonly resolve: () => void } | undefined
 	private epoch = 0
 	private stopPromise: Promise<void> | undefined
+	private workletPosted = 0
+	private workletReceived = 0
 
 	constructor(workletUrl: string) {
 		this.workletUrl = workletUrl
@@ -154,6 +157,8 @@ class BrowserPcmCapture implements PcmCapture {
 			if (this.stopPromise === previousStop) this.stopPromise = undefined
 		}
 		const epoch = ++this.epoch
+		this.workletPosted = 0
+		this.workletReceived = 0
 		if (!globalThis.navigator?.mediaDevices?.getUserMedia || !globalThis.AudioContext) {
 			throw new Error('AudioWorklet capture is not supported')
 		}
@@ -183,10 +188,14 @@ class BrowserPcmCapture implements PcmCapture {
 		}
 		this.node = new AudioWorkletNode(this.context, WORKLET_PROCESSOR_NAME)
 		this.node.port.onmessage = (
-			event: MessageEvent<{ type: 'pcm'; samples: Int16Array } | { type: 'flush-ack' }>,
+			event: MessageEvent<{ type: 'pcm'; samples: Int16Array; posted: number } | { type: 'flush-ack' }>,
 		) => {
 			if (epoch !== this.epoch) return
-			if (event.data.type === 'pcm') this.onSamples?.(event.data.samples)
+			if (event.data.type === 'pcm') {
+				this.workletPosted = Math.max(this.workletPosted, event.data.posted)
+				this.workletReceived++
+				this.onSamples?.(event.data.samples)
+			}
 			if (event.data.type === 'flush-ack') {
 				const waiter = this.flushWaiter
 				if (waiter?.epoch === epoch) {
@@ -199,6 +208,10 @@ class BrowserPcmCapture implements PcmCapture {
 		this.source.connect(this.node)
 		this.node.connect(this.context.destination)
 		this.node.port.postMessage({ type: 'start' })
+	}
+
+	getPcmInFlightBytes(): number {
+		return Math.max(0, this.workletPosted - this.workletReceived) * PCM_CHUNK_BYTES
 	}
 
 	async stop(): Promise<void> {
@@ -454,7 +467,8 @@ export class DoubaoEngine implements AsrEngine {
 		this.backpressureTimer = setInterval(() => {
 			if (epoch !== this.epoch) return
 			const socketBytes = this.socket?.bufferedAmount ?? 0
-			if (this.queuedBytes + socketBytes > BACKPRESSURE_LIMIT_BYTES) {
+			const workletBytes = this.capture.getPcmInFlightBytes()
+			if (this.queuedBytes + workletBytes + socketBytes > BACKPRESSURE_LIMIT_BYTES) {
 				this.fail('network-too-slow', epoch)
 			}
 			if (this.socket?.readyState === CLOSING || this.socket?.readyState === CLOSED) {

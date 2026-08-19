@@ -17,6 +17,10 @@ class FakeCapture {
 		this.stopped = true
 	}
 
+	getPcmInFlightBytes(): number {
+		return 0
+	}
+
 	push(samples: Int16Array): void {
 		this.callback?.(samples)
 	}
@@ -90,6 +94,7 @@ class SlowSocket implements WebSocketLike {
 
 class BrowserWebSocketProbe {
 	static readonly instances: BrowserWebSocketProbe[] = []
+	readonly url: string
 	readonly readyState = 1
 	readonly bufferedAmount = 0
 	binaryType: BinaryType = 'blob'
@@ -98,7 +103,8 @@ class BrowserWebSocketProbe {
 	onclose: ((event: { readonly code: number; readonly reason: string }) => void) | null = null
 	onmessage: ((event: { readonly data: unknown }) => void) | null = null
 
-	constructor(readonly url: string) {
+	constructor(url: string) {
+		this.url = url
 		BrowserWebSocketProbe.instances.push(this)
 		queueMicrotask(() => this.onopen?.())
 	}
@@ -164,6 +170,12 @@ class BlockingCapture extends FakeCapture {
 	}
 }
 
+class PortBacklogCapture extends FakeCapture {
+	getPcmInFlightBytes(): number {
+		return 64_001
+	}
+}
+
 class FailingCapture {
 	readonly error: unknown
 
@@ -176,6 +188,10 @@ class FailingCapture {
 	}
 
 	async stop(): Promise<void> {}
+
+	getPcmInFlightBytes(): number {
+		return 0
+	}
 }
 
 function namedError(name: string): Error {
@@ -323,6 +339,25 @@ describe('DoubaoEngine', () => {
 		engine.onError((error) => errors.push(error))
 		await engine.start()
 		await new Promise((resolve) => setTimeout(resolve, 120))
+		expect(errors).toContain('network-too-slow')
+		expect(capture.stopped).toBe(true)
+	})
+
+	test('reports network-too-slow when the worklet port has queued PCM', async () => {
+		const capture = new PortBacklogCapture()
+		const socket = new EpochSocket()
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+		const errors: string[] = []
+		engine.onError((code) => errors.push(code))
+
+		await engine.start()
+		await new Promise((resolve) => setTimeout(resolve, 120))
+
 		expect(errors).toContain('network-too-slow')
 		expect(capture.stopped).toBe(true)
 	})

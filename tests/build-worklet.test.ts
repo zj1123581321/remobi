@@ -9,6 +9,7 @@ describe('ASR worklet build', () => {
 		const asset = await bundleWorkletAsset()
 		expect(asset).toContain('registerProcessor')
 		expect(asset).toContain('remobi-pcm-processor')
+		expect(asset).toContain('posted')
 	})
 
 	test('build overlay always writes the current source bundle', async () => {

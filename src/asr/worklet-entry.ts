@@ -13,6 +13,7 @@ type WorkletCommand = FlushMessage | StartMessage
 interface PcmMessage {
 	readonly type: 'pcm'
 	readonly samples: Int16Array
+	posted: number
 	final: boolean
 }
 
@@ -43,9 +44,11 @@ class RemobiPcmProcessor extends AudioWorkletProcessor {
 	private readonly pcmMessage: PcmMessage = {
 		type: 'pcm',
 		samples: this.intBuffer,
+		posted: 0,
 		final: false,
 	}
 	private sampleOffset = 0
+	private postedCount = 0
 
 	constructor() {
 		super()
@@ -53,6 +56,7 @@ class RemobiPcmProcessor extends AudioWorkletProcessor {
 			switch (event.data.type) {
 				case 'start':
 					this.sampleOffset = 0
+					this.postedCount = 0
 					return
 				case 'flush':
 					this.flush()
@@ -75,6 +79,7 @@ class RemobiPcmProcessor extends AudioWorkletProcessor {
 			if (sample === undefined) throw new RangeError('PCM worklet sample is missing')
 			this.intBuffer[index] = quantizePcmSample(sample)
 		}
+		this.pcmMessage.posted = ++this.postedCount
 		this.pcmMessage.final = final
 		this.port.postMessage(this.pcmMessage)
 		this.sampleOffset = 0
