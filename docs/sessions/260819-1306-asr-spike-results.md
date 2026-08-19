@@ -68,4 +68,4 @@ node_modules/.bin/tsx --no-cache spikes/asr/probe-auth.ts all
 - `docs/sessions/260819-1306-asr-spike-results.md`：本结果文档。
 - 真实 fixture：无（密钥未就位）。
 
-提交：`063382d`、`d8fc128`、`d158554`，本轮未 push、未开 PR、未修改 `src/` 或主仓 checkout。
+提交：`063382d`、`d8fc128`、`d158554`、`416c6ca`、`a214883`，本轮未 push、未开 PR、未修改 `src/` 或主仓 checkout。

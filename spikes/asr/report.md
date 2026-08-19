@@ -34,5 +34,7 @@ fixture 目录探活：`tests/fixtures/asr/` 为空，`fixture_total_bytes=0`。
 - `063382d chore(asr): add SAUC auth spike probe [codex]`
 - `d8fc128 chore(asr): add browser capability probe [codex]`
 - `d158554 test(asr): record blocked live probe run [codex]`
+- `416c6ca docs(sessions): record blocked ASR spike result [codex]`
+- `a214883 chore(asr): continue auth candidates after STS failure [codex]`
 
 等待密钥就位后应重跑 `node_modules/.bin/tsx --no-cache spikes/asr/probe-auth.ts all`，再用真实 fixture 补齐结果文档；当前不应进入增量 1。
