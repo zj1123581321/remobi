@@ -3,6 +3,7 @@ export type AsrErrorCode =
 	| 'permission-denied'
 	| 'audio-context'
 	| 'unsupported-sample-rate'
+	| 'worklet-load-failed'
 	| 'connection-failed'
 	| 'socket-closed'
 	| 'protocol-error'

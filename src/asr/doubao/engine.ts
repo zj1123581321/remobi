@@ -21,10 +21,10 @@ const FINAL_TIMEOUT_MS = 3_000
 export interface WebSocketLike {
 	readonly readyState: number
 	readonly bufferedAmount: number
-	onopen: ((event: never) => void) | null
-	onerror: ((event: never) => void) | null
-	onclose: ((event: never) => void) | null
-	onmessage: ((event: never) => void) | null
+	onopen: (() => void) | null
+	onerror: ((event: { readonly message?: string }) => void) | null
+	onclose: ((event: { readonly code: number; readonly reason: string }) => void) | null
+	onmessage: ((event: { readonly data: unknown }) => void) | null
 	send(data: Uint8Array): void
 	close(): void
 }
@@ -55,28 +55,79 @@ function errorCode(error: unknown): AsrErrorCode {
 	if (error instanceof DOMException && error.name === 'NotAllowedError') {
 		return 'permission-denied'
 	}
+	if (error instanceof Error && error.name === 'NotSupportedError') {
+		return 'audio-context'
+	}
+	if (error instanceof Error && error.name === 'UnsupportedSampleRateError') {
+		return 'unsupported-sample-rate'
+	}
+	if (error instanceof Error && error.name === 'WorkletLoadError') {
+		return 'worklet-load-failed'
+	}
 	return 'connection-failed'
 }
 
 function getText(value: unknown): string | undefined {
-	if (typeof value !== 'object' || value === null) return undefined
-	if ('text' in value && typeof value.text === 'string') return value.text
-	if ('utterances' in value && Array.isArray(value.utterances)) {
-		const text = value.utterances
-			.map((item) => getText(item))
-			.filter((item): item is string => item !== undefined)
-			.join('')
-		if (text.length > 0) return text
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+	if (!('result' in value) || typeof value.result !== 'object' || value.result === null) {
+		return undefined
 	}
-	for (const child of Object.values(value)) {
-		const text = getText(child)
-		if (text !== undefined) return text
+	const result = value.result
+	if ('text' in result && typeof result.text === 'string') return result.text
+	if (!('utterances' in result) || !Array.isArray(result.utterances)) return undefined
+	const texts: string[] = []
+	for (const utterance of result.utterances) {
+		if (typeof utterance === 'object' && utterance !== null && 'text' in utterance) {
+			if (typeof utterance.text === 'string') texts.push(utterance.text)
+		}
 	}
-	return undefined
+	return texts.length > 0 ? texts.join('') : undefined
+}
+
+class BrowserWebSocketAdapter implements WebSocketLike {
+	private readonly socket: WebSocket
+
+	constructor(socket: WebSocket) {
+		this.socket = socket
+	}
+
+	get readyState(): number {
+		return this.socket.readyState
+	}
+
+	get bufferedAmount(): number {
+		return this.socket.bufferedAmount
+	}
+
+	set onopen(handler: (() => void) | null) {
+		this.socket.onopen = handler === null ? null : () => handler()
+	}
+
+	set onerror(handler: ((event: { readonly message?: string }) => void) | null) {
+		this.socket.onerror = handler === null ? null : (event) => handler({ message: event.type })
+	}
+
+	set onclose(
+		handler: ((event: { readonly code: number; readonly reason: string }) => void) | null,
+	) {
+		this.socket.onclose = handler === null ? null : (event) => handler({ code: event.code, reason: event.reason })
+	}
+
+	set onmessage(handler: ((event: { readonly data: unknown }) => void) | null) {
+		this.socket.onmessage = handler === null ? null : (event) => handler({ data: event.data })
+	}
+
+	send(data: Uint8Array): void {
+		this.socket.send(data)
+	}
+
+	close(): void {
+		this.socket.close()
+	}
 }
 
 function browserWebSocketFactory(url: string): WebSocketLike {
-	return new WebSocket(url) as unknown as WebSocketLike
+	return new BrowserWebSocketAdapter(new WebSocket(url))
 }
 
 class BrowserPcmCapture implements PcmCapture {
@@ -93,11 +144,11 @@ class BrowserPcmCapture implements PcmCapture {
 	}
 
 	async start(onSamples: (samples: Int16Array) => void): Promise<void> {
-		if (!navigator.mediaDevices?.getUserMedia || !globalThis.AudioContext) {
+		if (!globalThis.navigator?.mediaDevices?.getUserMedia || !globalThis.AudioContext) {
 			throw new Error('AudioWorklet capture is not supported')
 		}
 		this.onSamples = onSamples
-		this.stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+		this.stream = await globalThis.navigator.mediaDevices.getUserMedia({ audio: true })
 		try {
 			this.context = new AudioContext({ sampleRate: PCM_SAMPLE_RATE })
 		} catch (error) {
@@ -108,10 +159,18 @@ class BrowserPcmCapture implements PcmCapture {
 		if (this.context.sampleRate !== PCM_SAMPLE_RATE) {
 			for (const track of this.stream.getTracks()) track.stop()
 			await this.dispose()
-			throw new Error(`AudioContext sample rate is ${this.context.sampleRate}`)
+			const error = new Error(`AudioContext sample rate is ${this.context.sampleRate}`)
+			error.name = 'UnsupportedSampleRateError'
+			throw error
 		}
 		if (this.context.state === 'suspended') await this.context.resume()
-		await this.context.audioWorklet.addModule(this.workletUrl)
+		try {
+			await this.context.audioWorklet.addModule(this.workletUrl)
+		} catch (error) {
+			const failure = new Error('AudioWorklet module failed to load', { cause: error })
+			failure.name = 'WorkletLoadError'
+			throw failure
+		}
 		this.node = new AudioWorkletNode(this.context, WORKLET_PROCESSOR_NAME)
 		this.node.port.onmessage = (
 			event: MessageEvent<{ type: 'pcm'; samples: Int16Array } | { type: 'flush-ack' }>,
@@ -177,13 +236,13 @@ export class DoubaoEngine implements AsrEngine {
 	}
 
 	isSupported(): boolean {
-		return (
-			(this.options.capture !== undefined ||
-				(Boolean(globalThis.AudioContext) &&
-					Boolean(globalThis.AudioWorkletNode) &&
-					Boolean(navigator.mediaDevices?.getUserMedia))) &&
-			Boolean(globalThis.WebSocket || this.options.websocketFactory)
-		)
+		const captureSupported =
+			this.options.capture !== undefined ||
+			(Boolean(globalThis.AudioContext) &&
+				Boolean(globalThis.AudioWorkletNode) &&
+				Boolean(globalThis.navigator?.mediaDevices?.getUserMedia))
+		const websocketSupported = this.options.websocketFactory !== undefined || Boolean(globalThis.WebSocket)
+		return captureSupported && websocketSupported
 	}
 
 	onPartial(handler: AsrTextHandler): AsrUnsubscribe {
@@ -249,15 +308,15 @@ export class DoubaoEngine implements AsrEngine {
 		})
 		const socket = this.websocketFactory(`${endpoint}?${params.toString()}`)
 		this.socket = socket
-		socket.onmessage = (event) =>
-			this.handleMessage((event as unknown as { readonly data: unknown }).data)
+		socket.onmessage = (event) => this.handleMessage(event.data)
 		socket.onclose = () => {
 			if (this.state === 'recording') this.fail('socket-closed')
 			else this.finalWaiter?.()
 		}
-		socket.onerror = () => {
+		const runtimeError = (_event: { readonly message?: string }): void => {
 			if (this.state === 'starting' || this.state === 'recording') this.fail('connection-failed')
 		}
+		socket.onerror = runtimeError
 		await new Promise<void>((resolve, reject) => {
 			socket.onopen = () => {
 				if (socket.readyState !== OPEN) {
@@ -271,8 +330,12 @@ export class DoubaoEngine implements AsrEngine {
 				)
 				resolve()
 			}
-			socket.onerror = () => reject(new Error('ASR websocket connection failed'))
+			socket.onerror = (event) => {
+				runtimeError(event)
+				reject(new Error('ASR websocket connection failed'))
+			}
 		})
+		socket.onerror = runtimeError
 	}
 
 	private handleMessage(data: unknown): void {
