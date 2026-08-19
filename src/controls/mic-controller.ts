@@ -1,10 +1,10 @@
 import { DoubaoEngine } from '../asr/doubao/engine'
 import type { AsrEngine, AsrErrorCode } from '../asr/types'
 import type { HookRegistry } from '../hooks/registry'
-import { createAsrPreview, type AsrPreview } from './asr-preview'
 import type { RemobiConfig, XTerminal } from '../types'
-import { sendData } from '../util/terminal'
 import { haptic } from '../util/haptic'
+import { sendData } from '../util/terminal'
+import { type AsrPreview, createAsrPreview } from './asr-preview'
 
 export type MicState =
 	| 'idle'
@@ -52,8 +52,7 @@ const ERROR_MESSAGES: Record<AsrErrorCode, string> = {
 /** Browser capability gate used before rendering a voice-input toolbar button. */
 export function isVoiceInputSupported(): boolean {
 	return (
-		globalThis.isSecureContext === true &&
-		Boolean(globalThis.navigator?.mediaDevices?.getUserMedia)
+		globalThis.isSecureContext === true && Boolean(globalThis.navigator?.mediaDevices?.getUserMedia)
 	)
 }
 
@@ -129,7 +128,8 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		const pointer = activePointer
 		activePointer = undefined
 		if (pointer && typeof pointer.button.releasePointerCapture === 'function') {
-			if (pointer.button.hasPointerCapture(pointer.id)) pointer.button.releasePointerCapture(pointer.id)
+			if (pointer.button.hasPointerCapture(pointer.id))
+				pointer.button.releasePointerCapture(pointer.id)
 		}
 	}
 
@@ -252,9 +252,10 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		try {
 			await engine.start()
 		} catch (error: unknown) {
-			const code: AsrErrorCode = error instanceof Error && error.name === 'NotAllowedError'
-				? 'permission-denied'
-				: 'connection-failed'
+			const code: AsrErrorCode =
+				error instanceof Error && error.name === 'NotAllowedError'
+					? 'permission-denied'
+					: 'connection-failed'
 			showError(code, sessionGeneration)
 			return
 		}
@@ -265,9 +266,13 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	}
 
 	function beginConnecting(sessionGeneration: number): void {
-		if (disposed || sessionGeneration !== generation || currentState !== 'permission-requesting') return
+		if (disposed || sessionGeneration !== generation || currentState !== 'permission-requesting')
+			return
 		transition(['permission-requesting'], 'connecting', 'hold-threshold')
-		connectTimer = setTimeout(() => showError('connection-failed', sessionGeneration), CONNECT_TIMEOUT_MS)
+		connectTimer = setTimeout(
+			() => showError('connection-failed', sessionGeneration),
+			CONNECT_TIMEOUT_MS,
+		)
 		bindEngine(sessionGeneration)
 		void startEngine(sessionGeneration)
 	}
@@ -384,9 +389,9 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		},
 		attach(button) {
 			if (buttonDisposers.has(button)) return
-			const down = (event: Event): void => pointerDown(button, event as PointerEvent)
-			const up = (event: Event): void => pointerUp(event as PointerEvent)
-			const cancel = (event: Event): void => pointerCancel(event as PointerEvent)
+			const down = (event: PointerEvent): void => pointerDown(button, event)
+			const up = (event: PointerEvent): void => pointerUp(event)
+			const cancel = (event: PointerEvent): void => pointerCancel(event)
 			button.addEventListener('pointerdown', down)
 			button.addEventListener('pointerup', up)
 			button.addEventListener('pointercancel', cancel)

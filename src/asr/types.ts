@@ -1,3 +1,10 @@
+/**
+ * Engine error conditions: unsupported means capability detection failed;
+ * permission-denied comes from getUserMedia; audio-context/worklet/sample-rate
+ * identify capture setup failures; connection/socket/provider/protocol/network
+ * codes identify provider transport or wire failures. `audio-interrupted` is
+ * reserved for a non-user-initiated microphone interruption and is never emitted by a normal stop.
+ */
 export type AsrErrorCode =
 	| 'unsupported'
 	| 'permission-denied'
