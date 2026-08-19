@@ -305,6 +305,10 @@ class FakePort {
 	close(): void {
 		this.closeCalls++
 	}
+
+	triggerMessage(data: { readonly type: string }): void {
+		this.onmessage?.({ data })
+	}
 }
 
 class FakeSource {
@@ -322,6 +326,7 @@ class FakeAudioNode {
 	static ackFlush = true
 	readonly port: FakePort
 	disconnectCalls = 0
+	onprocessorerror: (() => void) | null = null
 
 	constructor(_context: unknown, _name: string) {
 		this.port = new FakePort(FakeAudioNode.ackFlush)
@@ -329,6 +334,10 @@ class FakeAudioNode {
 	}
 
 	connect(_destination: unknown): void {}
+
+	triggerProcessorError(): void {
+		this.onprocessorerror?.()
+	}
 
 	disconnect(): void {
 		this.disconnectCalls++
@@ -1113,6 +1122,42 @@ describe('DoubaoEngine', () => {
 			expect(secondErrors).toEqual([])
 		} finally {
 			FakeAudioContext.initialState = 'running'
+			vi.unstubAllGlobals()
+		}
+	})
+
+	test.each([
+		['AudioWorklet processorerror', (node: FakeAudioNode) => node.triggerProcessorError()],
+		[
+			'AudioWorklet control error',
+			(node: FakeAudioNode) => node.port.triggerMessage({ type: 'error' }),
+		],
+	] as const)('reports %s as an audio-context failure', async (_name, trigger) => {
+		FakeAudioContext.instances.length = 0
+		FakeAudioNode.instances.length = 0
+		const stream = new FakeStream()
+		const socket = new EpochSocket()
+		vi.stubGlobal('AudioContext', FakeAudioContext)
+		vi.stubGlobal('AudioWorkletNode', FakeAudioNode)
+		vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => stream } })
+		try {
+			const engine = new DoubaoEngine({
+				apiKey: 'test-api-key',
+				resourceId: 'volc.seedasr.sauc.duration',
+				websocketFactory: () => socket,
+			})
+			const errors: string[] = []
+			engine.onError((code) => errors.push(code))
+
+			await engine.start()
+			const node = FakeAudioNode.instances[0]
+			if (!node) throw new Error('AudioWorklet node was not created')
+			trigger(node)
+
+			expect(errors).toEqual(['audio-context'])
+			await engine.stop()
+			expect(node.port.closeCalls).toBe(1)
+		} finally {
 			vi.unstubAllGlobals()
 		}
 	})

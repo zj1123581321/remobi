@@ -205,6 +205,7 @@ class BrowserPcmCapture implements PcmCapture {
 				event: MessageEvent<
 					| { type: 'pcm'; samples: Int16Array; posted: number }
 					| { type: 'flush-ack' }
+					| { type: 'error'; error: string }
 				>,
 			) => {
 				if (event.data.type === 'flush-ack') {
@@ -215,10 +216,17 @@ class BrowserPcmCapture implements PcmCapture {
 					}
 					return
 				}
+				if (event.data.type === 'error') {
+					if (epoch === this.epoch) onError('audio-context')
+					return
+				}
 				if (epoch !== this.epoch) return
 				this.workletPosted = Math.max(this.workletPosted, event.data.posted)
 				this.workletReceived++
 				this.onSamples?.(event.data.samples)
+			}
+			node.onprocessorerror = () => {
+				if (epoch === this.epoch) onError('audio-context')
 			}
 			source = context.createMediaStreamSource(stream)
 			source.connect(node)
@@ -236,6 +244,7 @@ class BrowserPcmCapture implements PcmCapture {
 			this.node = node
 		} catch (error) {
 			this.clearCaptureSignals(stream, context)
+			if (node) node.onprocessorerror = null
 			source?.disconnect()
 			node?.port.close()
 			node?.disconnect()
@@ -252,6 +261,7 @@ class BrowserPcmCapture implements PcmCapture {
 		node: AudioWorkletNode | undefined,
 	): Promise<void> {
 		this.clearCaptureSignals(stream, context)
+		if (node) node.onprocessorerror = null
 		source?.disconnect()
 		node?.port.close()
 		node?.disconnect()
@@ -277,7 +287,7 @@ class BrowserPcmCapture implements PcmCapture {
 			track.onunmute = () => this.clearMuteTimer(track)
 		}
 		context.onstatechange = () => {
-			const state = context.state as string
+			const state: string = context.state
 			if (state === 'interrupted' || state === 'suspended') reportInterruption()
 		}
 	}
@@ -316,6 +326,7 @@ class BrowserPcmCapture implements PcmCapture {
 		this.context = undefined
 		this.onSamples = undefined
 		if (stream) this.clearCaptureSignals(stream, context)
+		if (node) node.onprocessorerror = null
 		source?.disconnect()
 		for (const track of stream?.getTracks() ?? []) track.stop()
 		const promise = this.stopCurrentEpoch(epoch, node, context)
