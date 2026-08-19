@@ -322,6 +322,13 @@ export async function serve(
 		return buildSecurityHeaders(hostHeader, host, port, scriptNonce, config.asr.enabled)
 	}
 
+	function documentHeadersForRequest(hostHeader: string | undefined): Record<string, string> {
+		return {
+			...securityHeadersForRequest(hostHeader),
+			'cache-control': 'private, no-store',
+		}
+	}
+
 	const app = new Hono()
 	const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({ app })
 	wss.options.maxPayload = MAX_CLIENT_MESSAGE_BYTES
@@ -416,13 +423,13 @@ export async function serve(
 	}
 
 	app.get('/', (c) =>
-		withSecurityHeaders(c.html(html), securityHeadersForRequest(c.req.header('host'))),
+		withSecurityHeaders(c.html(html), documentHeadersForRequest(c.req.header('host'))),
 	)
 
 	const canonicalDocumentRoute = documentRoute(basePath)
 	if (canonicalDocumentRoute !== '/') {
 		app.get(canonicalDocumentRoute, (c) =>
-			withSecurityHeaders(c.html(html), securityHeadersForRequest(c.req.header('host'))),
+			withSecurityHeaders(c.html(html), documentHeadersForRequest(c.req.header('host'))),
 		)
 
 		const bareRoute = bareDocumentRoute(basePath)

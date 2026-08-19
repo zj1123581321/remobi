@@ -19,10 +19,12 @@ Repo: zj1123581321/remobi
 
 ## 关键约束（已验证，含出处）
 
-- 豆包双向流式 ASR：`wss://openspeech.bytedance.com/api/v3/sauc/bigmodel`，边听边出字，
-  鉴权 X-Api-App-Key / X-Api-Access-Key 在握手 header（volcengine docs 6561/1354869）。
-- 浏览器 WebSocket 不能自定义握手 header；火山前端 SDK（byted-ailab-speech-sdk npm 页）确认
-  前端走 **query 参数鉴权**——但「bigmodel 服务是否覆盖 query 鉴权」未经实证 → 增量 0 spike。
+- 豆包双向流式 ASR：`wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async`，边听边出字；
+  增量 0 spike 实测 Node HTTP 101、PCM 上行和 0x9 partial/final 下行，详见
+  `docs/sessions/260819-1306-asr-spike-results.md`。
+- 浏览器 WebSocket 不能自定义握手 header，因此采用 **query 参数鉴权**：
+  `api_key` + `api_resource_id`，resource 为 `volc.seedasr.sauc.duration`；header 鉴权仅作
+  对照组实测，不是浏览器路径（结论同见上述 spike 结果文档）。
 - 部署形态：单人自部署（Tailscale https），页面访问者 = 完全信任（README 既有安全模型），
   密钥下发浏览器可接受（用户已裁决，C8），文档写明口径即可。
 - iOS PWA（主屏幕 standalone）getUserMedia 受限（firt.dev 兼容表）；Safari 标签页内可用；
@@ -115,7 +117,7 @@ idle ──pointerdown──▶ permission-requesting ──granted──▶ con
 
 ### 增量 0：Spike（go/no-go，阻塞项，可丢弃，~1-2h CC）
 探针代码落 `spikes/asr/`（R9），真机验证：
-1. query 参数鉴权在 bigmodel 服务上握手成功（401/403 即 no-go，转服务端代理方案重评）
+1. query 参数鉴权在 bigmodel_async 服务上握手成功（401/403 即 no-go，转服务端代理方案重评）
 2. 音频包上传后有 partial/final 返回；真实帧存 `tests/fixtures/asr/`（进 main 供增量 1）
 3. 手机浏览器（目标设备）采集链路可用
 4. 附带探针：火山是否收 opus 帧（是则 MediaRecorder 路径重评）
@@ -150,8 +152,8 @@ getUserMedia 拒绝/不可用、非 secure context、**WS 握手拒绝**（401/4
 录音中断网（WiFi↔蜂窝切换高发）、**协议错误帧 0xF 与业务错误帧 0x9**（0x9 带 logid）、空结果（不注入不回车）、<300ms 误触不发起连接、
 锁屏/切后台 touchend 丢失（visibilitychange 兜底）、**音频会话被来电/Siri/其它 App 中断
 （R2：按 cancelled 迁移，按钮复位+提示）**、松手后尾包延迟（waiting-final + 3s 超时）、
-AudioWorklet 异常。每条：按钮可见状态 + 用户提示 + console 结构化事件
-（asr:connect/first-partial/final/error）。
+AudioWorklet 异常。增量 1 只通过引擎 `onError` 提供错误回调；按钮可见状态、用户提示与
+console 结构化事件（asr:connect/first-partial/final/error）属于增量 2 的 UI 责任边界。
 
 ## 安全
 
@@ -182,13 +184,16 @@ src/controls/mic-controller.ts — PTT 状态机 + pointer 生命周期（增量
 src/controls/asr-preview.ts    — 预览气泡渲染（增量 2）
 ```
 
+在增量 2 接线前，`src/asr/` 是包内源码，不提供 npm `./asr` 公共入口；当前发布边界仅
+交付 worklet 资产与 ASR 配置类型，禁止为没有第二消费者的引擎实现增加 export。
+
 ### E1（原开放题 1）：AudioWorklet 交付路径
 
 - `build.ts` 新增 `bundleWorkletAsset()`，镜像 `bundleClientAssets` 的双路径：
   源码运行时 esbuild 现打；发布安装走 `readPrebuiltAsset('asr-worklet.js')`（build.ts:31-47 既有模式）
 - `scripts/build-overlay.ts` 加写 `dist/asr-worklet.js`；`files[]` 已含 `dist/`，发布链路零改动
-- `serve.ts` 新增路由 `GET {basePath}asr-worklet.js?v={version}` → `text/javascript`，
-  `cache-control: no-cache`（版本参数做 busting；静态路由先例：serve.ts 图标路由）
+- `serve.ts` 新增路由 `GET {basePath}asr-worklet.js` → `text/javascript`，
+  `cache-control: no-cache`；不接入 `?v={version}`，由 no-cache 策略避免旧 worklet 复用。
 - **CSP 零改动**：same-origin worklet 走 script-src 族（script-src-elem，v5 Codex #14 修正），`'self'` 已覆盖
   （serve.ts:162 既有 header 验证过）。blob: 被否的理由消失，不引入 `'unsafe-inline'`/`blob:`
 
@@ -235,8 +240,8 @@ textarea（client-entry.ts:94-105 `setKeyboardSuppressed`），普通 preview `<
 
 - `buildSecurityHeaders` 加 asr 参数：**仅当 `asr.enabled`** 才 `microphone=(self)` +
   `connect-src += wss://openspeech.bytedance.com`（最小权限，不全局放宽）；serve.test.ts 模式覆盖
-- config：`asr: { enabled:false, provider:'doubao'(字面量), doubao:{ appKey, accessKey,
-  resourceId = 'volc.bigasr.sauc.duration'（spike 确认） }, autoEnter:false }`；
+- config：`asr: { enabled:false, provider:'doubao'(字面量), doubao:{ apiKey,
+  resourceId = 'volc.seedasr.sauc.duration'（spike 确认） }, autoEnter:false }`；
   校验报错只报路径不回显值
 - action：`{ type:'voice-input' }` 进 ButtonAction 封闭 union + valibot schema，
   未注册 fail-loud（registry-silent-false 学习）；**渲染层对该类型特判**（v5 Codex #2）：
