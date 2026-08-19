@@ -154,7 +154,8 @@ function readSequence(bytes: Uint8Array, flags: number): number | undefined {
 function parseJson(bytes: Uint8Array): { readonly payloadText: string; readonly json: unknown } {
 	const text = new TextDecoder().decode(bytes)
 	try {
-		return { payloadText: text, json: JSON.parse(text) as unknown }
+		const json: unknown = JSON.parse(text)
+		return { payloadText: text, json }
 	} catch {
 		return { payloadText: text, json: undefined }
 	}
