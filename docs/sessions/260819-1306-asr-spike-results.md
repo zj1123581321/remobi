@@ -17,7 +17,7 @@
 | 协议错误 0xF | ✅ | 45000000（尾包序列错/截断帧）、45000151（非法格式）、45000292（并发配额）均有真实帧。 |
 | 业务错误 0x9 | ❌ | 实际 0x9 是 partial/final server response；非法 opus/format 实际返回 0xF/45000151，未观察到 0x9 非零业务 code，已如实记录。 |
 | opus 附带探针 | ❌ | full request 可握手，但服务端 0xF/45000151 明确 `unsupported format opus`；增量 1 禁用 opus。 |
-| 浏览器能力页 | ✅（代码）/ ❌（真机待回填） | `probe.html` 已覆盖 16k 实际采样率、AudioWorklet、getUserMedia、Safari 标签页/PWA/Android 与中断信号；真机结果仍由用户回填。 |
+| 浏览器能力页 | ✅（代码 + 真机三环境） | `probe.html` 真机实测（2026-08-19，日志见下节）：Android Chrome 151 与 iOS 17.4（Safari 标签页 + 真 standalone PWA）`AudioContext({sampleRate:16000})` 实际输出均 16000；AudioWorklet 三环境全 ok；getUserMedia 三环境全 ok（iOS 17.4 PWA 实测可用）。中断信号见下节矩阵。 |
 | 密钥零泄露自查 | ✅ | 输出物无 key 值、完整带参 wss URL、STS token 或 STS body；fixture 仅保存帧 bytes、脱敏摘要、resourceId 和 endpoint。 |
 
 ## 实跑 stdout 摘录
@@ -44,7 +44,21 @@ protocol-error code=45000151
 4. 测试切后台、锁屏、来电/其它音频中断，保留 `track.onended`、`track.onmute`、`AudioContext.statechange`、`visibilitychange` 顺序。
 5. 复制 JSONL 日志回填本结果文档。
 
-当前真机各项仍为“待用户真机回填”，Node 网络闸门 GO 不替代采集能力验证。
+真机已回填（2026-08-19，用户设备：iPhone iOS 17.4 + Android Chrome 151，经 Tailscale Serve HTTPS）：
+
+| 环境 | 16k 实际采样率 | AudioWorklet | getUserMedia | 锁屏/切后台触发的信号 |
+| --- | --- | --- | --- | --- |
+| Android Chrome 151（标签页） | 16000 ✅ | ok ✅ | ok ✅ | 仅 `visibilitychange`(hidden→visible)；track 事件与 statechange 全程静默 |
+| iOS 17.4 Safari 标签页 | 16000 ✅（AudioContext 先 `suspended`，~150ms 后自动 `running`） | ok ✅ | ok ✅ | 仅 `visibilitychange`；后台 JS 冻结，track 事件不投递 |
+| iOS 17.4 主屏 standalone PWA | 16000 ✅（同样 suspended→running） | ok ✅ | ok ✅ | `track-mute`（比 visibilitychange hidden 早 ~0.6s）→ hidden → visible → `track-unmute`，回前台采集自动恢复，无需重新授权 |
+
+要点：
+
+- `AudioContext({sampleRate:16000})` 三环境都真给 16000——pcm.ts 线性抽取回退不建（维持设计默认路径）。
+- iOS 上 AudioContext 启动为 `suspended` 后自动转 `running`：增量 1 引擎要容忍这个启动时序（构造后校验 + 等待 running，不能假定构造即 running）。
+- 中断信号矩阵证实设计 v5 #4 的多信号 OR 是最保守正解：`visibilitychange` 三环境全覆盖；`track.onmute/onunmute` 只在 iOS PWA 真实出现（观察/unmute 恢复/超时 cancel）；`track.onended` 与 `AudioContext.statechange(interrupted)` 三环境锁屏/切后台均未触发，仅作为兜底保留。
+- 用户在书签环境（非 standalone）曾观察到中断后重新请求麦克风授权；真 standalone PWA 锁屏路径实测为 mute/unmute 自动恢复、无重新授权。来电/Siri 硬中断（track.onended 路径）本轮未制造出来，按设计「任一信号触发即 cancelled」覆盖，增量 2 e2e 用 fake track 补测。
+- 回填方法学备注：首轮「PWA」日志实际是 Safari 书签（探针页缺 `apple-mobile-web-app-capable`，`standalone:false` 露馅），补 meta 后重测才拿到真 PWA 数据——验证 PWA 结论先看 `navigator.standalone`。
 
 ## 对增量 1 的设计影响
 
@@ -53,6 +67,7 @@ protocol-error code=45000151
 - PCM 16 kHz/16-bit/mono 保持；opus 实测不支持，不重评 MediaRecorder 路径。
 - `neg-no-seq` 与 `neg-with-seq` 均可接受；带序列尾包按实测 `-(audioFrameCount+2)` 编码，0x9 final flags=`0b0011`、sequence/payload offset=12。
 - 由于正弦波没有文本，增量 1 仍需使用真实语音或 mock fixture 验证文本字段；本 spike 已提供协议层 golden 输入。
+- 真机采集能力三环境全绿（采样率/worklet/getUserMedia），iOS PWA 可用性假设成立；引擎需处理 iOS AudioContext suspended→running 启动时序，中断检测按 `visibilitychange` 全覆盖 + `track.onmute/unmute`（iOS PWA 实测）+ `track.onended` 兜底的多信号 OR。
 
 ## 产出与提交
 
@@ -64,4 +79,4 @@ protocol-error code=45000151
 
 ## 报告与后续
 
-Outcome 本轮为 `succeeded`（探针已真实运行，无论协议结论如何均按任务卡成功收口）。真机页面结果待用户回填；增量 1 可基于本 fixture 进入设计/实现评审。
+Outcome 本轮为 `succeeded`（探针已真实运行，无论协议结论如何均按任务卡成功收口）。真机三环境已于 2026-08-19 回填完毕（见上节矩阵）；增量 1 可基于本 fixture 进入设计/实现评审。
