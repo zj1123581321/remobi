@@ -148,8 +148,8 @@ class EpochSocket implements WebSocketLike {
 	onclose: ((event: { readonly code: number; readonly reason: string }) => void) | null = null
 	onmessage: ((event: { readonly data: unknown }) => void) | null = null
 
-	constructor() {
-		queueMicrotask(() => this.onopen?.())
+	constructor(autoOpen = true) {
+		if (autoOpen) queueMicrotask(() => this.onopen?.())
 	}
 
 	send(_data: Uint8Array): void {}
@@ -164,6 +164,10 @@ class EpochSocket implements WebSocketLike {
 
 	triggerMessage(data: unknown): void {
 		this.onmessage?.({ data })
+	}
+
+	triggerClose(): void {
+		this.onclose?.({ code: 1006, reason: 'closed' })
 	}
 }
 
@@ -210,6 +214,149 @@ class FailingCapture {
 	}
 }
 
+class PendingCapture extends FakeCapture {
+	startCalls = 0
+	stopCalls = 0
+	private releaseStart: (() => void) | undefined
+	private pendingCallback: ((samples: Int16Array) => void) | undefined
+
+	override async start(callback: (samples: Int16Array) => void): Promise<void> {
+		this.startCalls++
+		this.pendingCallback = callback
+		await new Promise<void>((resolve) => {
+			this.releaseStart = resolve
+		})
+		this.started = true
+	}
+
+	override async stop(): Promise<void> {
+		this.stopCalls++
+		this.stopped = true
+	}
+
+	release(): void {
+		this.releaseStart?.()
+	}
+
+	pushPending(samples: Int16Array): void {
+		this.pendingCallback?.(samples)
+	}
+}
+
+class RejectingStopCapture extends FakeCapture {
+	stopCalls = 0
+
+	override async stop(): Promise<void> {
+		this.stopCalls++
+		throw new Error('capture stop failed')
+	}
+}
+
+class FakeTrack {
+	stopCalls = 0
+
+	stop(): void {
+		this.stopCalls++
+	}
+}
+
+class FakeStream {
+	readonly track = new FakeTrack()
+
+	getTracks(): FakeTrack[] {
+		return [this.track]
+	}
+}
+
+class FakePort {
+	onmessage: ((event: { readonly data: { readonly type: string } }) => void) | null = null
+	readonly messages: unknown[] = []
+	closeCalls = 0
+	private readonly ackFlush: boolean
+
+	constructor(ackFlush = true) {
+		this.ackFlush = ackFlush
+	}
+
+	postMessage(message: unknown): void {
+		this.messages.push(message)
+		if (typeof message === 'object' && message !== null && 'type' in message) {
+			if (message.type === 'flush' && this.ackFlush) {
+				queueMicrotask(() => this.onmessage?.({ data: { type: 'flush-ack' } }))
+			}
+		}
+	}
+
+	close(): void {
+		this.closeCalls++
+	}
+}
+
+class FakeSource {
+	disconnectCalls = 0
+
+	connect(_node: unknown): void {}
+
+	disconnect(): void {
+		this.disconnectCalls++
+	}
+}
+
+class FakeAudioNode {
+	static readonly instances: FakeAudioNode[] = []
+	static ackFlush = true
+	readonly port: FakePort
+	disconnectCalls = 0
+
+	constructor(_context: unknown, _name: string) {
+		this.port = new FakePort(FakeAudioNode.ackFlush)
+		FakeAudioNode.instances.push(this)
+	}
+
+	connect(_destination: unknown): void {}
+
+	disconnect(): void {
+		this.disconnectCalls++
+	}
+}
+
+class FakeAudioContext {
+	static readonly instances: FakeAudioContext[] = []
+	readonly sampleRate = 16_000
+	readonly state = 'running'
+	readonly destination = {}
+	readonly audioWorklet = { addModule: async (_url: string) => {} }
+	readonly sources: FakeSource[] = []
+	closeCalls = 0
+
+	constructor(_options: { readonly sampleRate: number }) {
+		FakeAudioContext.instances.push(this)
+	}
+
+	resume(): Promise<void> {
+		return Promise.resolve()
+	}
+
+	createMediaStreamSource(_stream: FakeStream): FakeSource {
+		const source = new FakeSource()
+		this.sources.push(source)
+		return source
+	}
+
+	async close(): Promise<void> {
+		this.closeCalls++
+	}
+}
+
+class FinalSocket extends EpochSocket {
+	override send(data: Uint8Array): void {
+		const frame = decodeFrame(data)
+		if (frame.kind === 'audio' && frame.flags === 3) {
+			queueMicrotask(() => this.triggerMessage(serverResponse({ result: { text: 'done' } }, true)))
+		}
+	}
+}
+
 function namedError(name: string): Error {
 	const error = new Error(name)
 	error.name = name
@@ -225,6 +372,18 @@ function serverResponse(json: unknown, final = false): ArrayBuffer {
 	if (final) view.setInt32(4, 1)
 	view.setUint32(final ? 8 : 4, payload.byteLength)
 	bytes.set(payload, payloadOffset)
+	return bytes.buffer
+}
+
+function rawServerResponse(payload: string, final = false): ArrayBuffer {
+	const encoded = new TextEncoder().encode(payload)
+	const payloadOffset = final ? 12 : 8
+	const bytes = new Uint8Array(payloadOffset + encoded.byteLength)
+	bytes.set([0x11, final ? 0x93 : 0x90, 0x10, 0])
+	const view = new DataView(bytes.buffer)
+	if (final) view.setInt32(4, 1)
+	view.setUint32(final ? 8 : 4, encoded.byteLength)
+	bytes.set(encoded, payloadOffset)
 	return bytes.buffer
 }
 
@@ -494,5 +653,275 @@ describe('DoubaoEngine', () => {
 
 		expect(partials).toEqual(['hello'])
 		expect(finals).toEqual(['done'])
+	})
+
+	test('cancels pending capture start and rejects concurrent start without double opening', async () => {
+		const capture = new PendingCapture()
+		const sockets: EpochSocket[] = []
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => {
+				const socket = new EpochSocket()
+				sockets.push(socket)
+				return socket
+			},
+			capture,
+		})
+
+		const firstStart = engine.start()
+		await vi.waitFor(() => expect(capture.startCalls).toBe(1))
+		await expect(engine.start()).rejects.toThrow('busy')
+		const firstStop = engine.stop()
+		expect(engine.stop()).toBe(firstStop)
+		capture.release()
+		await Promise.all([firstStart, firstStop])
+
+		expect(capture.stopCalls).toBe(1)
+		expect(sockets).toHaveLength(1)
+		const secondStart = engine.start()
+		await vi.waitFor(() => expect(capture.startCalls).toBe(2))
+		capture.release()
+		await secondStart
+		expect(sockets).toHaveLength(2)
+		sockets[1]?.triggerClose()
+		await engine.stop()
+	})
+
+	test('invalidates a pending capture when the provider fails before recording', async () => {
+		const capture = new PendingCapture()
+		const socket = new EpochSocket()
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+		const errors: string[] = []
+		engine.onError((code) => errors.push(code))
+
+		const start = engine.start()
+		await vi.waitFor(() => expect(capture.startCalls).toBe(1))
+		socket.triggerMessage(providerErrorFrame())
+		expect(errors).toEqual(['provider-error'])
+		capture.release()
+		await start
+		await engine.stop()
+		expect(capture.stopCalls).toBe(1)
+	})
+
+	test('reports websocket close during stopping once and preserves its stop promise', async () => {
+		const capture = new BlockingCapture()
+		const socket = new EpochSocket()
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+		const errors: string[] = []
+		engine.onError((code) => errors.push(code))
+
+		await engine.start()
+		const stop = engine.stop()
+		await Promise.resolve()
+		socket.triggerClose()
+		expect(errors).toEqual(['socket-closed'])
+		expect(engine.stop()).toBe(stop)
+		capture.releaseStop()
+		await stop
+	})
+
+	test('reports handshake close and reaches idle without starting capture', async () => {
+		const socket = new EpochSocket(false)
+		const capture = new FakeCapture()
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+		const errors: string[] = []
+		engine.onError((code) => errors.push(code))
+
+		const start = engine.start()
+		socket.triggerClose()
+		await expect(start).rejects.toThrow()
+		await engine.stop()
+
+		expect(errors).toEqual(['connection-failed'])
+		expect(capture.started).toBe(false)
+	})
+
+	test('cancels a websocket handshake when stop wins before open', async () => {
+		const socket = new EpochSocket(false)
+		const capture = new FakeCapture()
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+
+		const start = engine.start()
+		const stop = engine.stop()
+		await stop
+		await start
+		expect(capture.started).toBe(false)
+	})
+
+	test('turns malformed JSON into one protocol error while ignoring valid empty results', async () => {
+		const socket = new EpochSocket()
+		const capture = new FakeCapture()
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => socket,
+			capture,
+		})
+		const errors: string[] = []
+		const partials: string[] = []
+		engine.onError((code) => errors.push(code))
+		engine.onPartial((text) => partials.push(text))
+
+		await engine.start()
+		socket.triggerMessage(serverResponse({ result: { status: 'empty' } }))
+		expect(errors).toEqual([])
+		expect(partials).toEqual([])
+		socket.triggerMessage(rawServerResponse('{'))
+		expect(errors).toEqual(['protocol-error'])
+		await engine.stop()
+	})
+
+	test('capture stop rejection reports once, settles, and permits a new start', async () => {
+		const capture = new RejectingStopCapture()
+		const sockets: EpochSocket[] = []
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => {
+				const socket = new EpochSocket()
+				sockets.push(socket)
+				return socket
+			},
+			capture,
+		})
+		const errors: string[] = []
+		engine.onError((code) => errors.push(code))
+
+		await engine.start()
+		const stop = engine.stop()
+		expect(engine.stop()).toBe(stop)
+		await stop
+		expect(errors).toEqual(['connection-failed'])
+		expect(capture.stopCalls).toBe(1)
+
+		await engine.start()
+		expect(sockets).toHaveLength(2)
+		const secondStop = engine.stop()
+		await secondStop
+		expect(errors).toEqual(['connection-failed', 'connection-failed'])
+	})
+
+	test('cleans real BrowserPcmCapture resources through the flush-ack port seam', async () => {
+		FakeAudioContext.instances.length = 0
+		FakeAudioNode.instances.length = 0
+		const stream = new FakeStream()
+		const socket = new FinalSocket()
+		vi.stubGlobal('AudioContext', FakeAudioContext)
+		vi.stubGlobal('AudioWorkletNode', FakeAudioNode)
+		vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => stream } })
+		try {
+			const engine = new DoubaoEngine({
+				apiKey: 'test-api-key',
+				resourceId: 'volc.seedasr.sauc.duration',
+				websocketFactory: () => socket,
+			})
+			await engine.start()
+			await engine.stop()
+
+			const context = FakeAudioContext.instances[0]
+			const node = FakeAudioNode.instances[0]
+			const source = context?.sources[0]
+			expect(node?.port.messages).toContainEqual({ type: 'flush' })
+			expect(node?.port.closeCalls).toBe(1)
+			expect(node?.disconnectCalls).toBe(1)
+			expect(source?.disconnectCalls).toBe(1)
+			expect(stream.track.stopCalls).toBe(1)
+			expect(context?.closeCalls).toBe(1)
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
+
+	test('fails the BrowserPcmCapture stop contract when flush ack never arrives', async () => {
+		FakeAudioContext.instances.length = 0
+		FakeAudioNode.instances.length = 0
+		FakeAudioNode.ackFlush = false
+		vi.useFakeTimers()
+		const stream = new FakeStream()
+		const socket = new EpochSocket()
+		vi.stubGlobal('AudioContext', FakeAudioContext)
+		vi.stubGlobal('AudioWorkletNode', FakeAudioNode)
+		vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => stream } })
+		try {
+			const engine = new DoubaoEngine({
+				apiKey: 'test-api-key',
+				resourceId: 'volc.seedasr.sauc.duration',
+				websocketFactory: () => socket,
+			})
+			const errors: string[] = []
+			engine.onError((code) => errors.push(code))
+			await engine.start()
+			const stop = engine.stop()
+			await vi.advanceTimersByTimeAsync(3_000)
+			await stop
+			expect(errors).toEqual(['connection-failed'])
+		} finally {
+			FakeAudioNode.ackFlush = true
+			vi.useRealTimers()
+			vi.unstubAllGlobals()
+		}
+	})
+
+	test('stops a late BrowserPcmCapture permission result without creating audio resources', async () => {
+		FakeAudioContext.instances.length = 0
+		FakeAudioNode.instances.length = 0
+		const stream = new FakeStream()
+		let release: ((value: FakeStream) => void) | undefined
+		let calls = 0
+		const permission = new Promise<FakeStream>((resolve) => {
+			release = resolve
+		})
+		const socket = new EpochSocket()
+		vi.stubGlobal('AudioContext', FakeAudioContext)
+		vi.stubGlobal('AudioWorkletNode', FakeAudioNode)
+		vi.stubGlobal('navigator', {
+			mediaDevices: {
+				getUserMedia: () => {
+					calls++
+					return permission
+				},
+			},
+		})
+		try {
+			const engine = new DoubaoEngine({
+				apiKey: 'test-api-key',
+				resourceId: 'volc.seedasr.sauc.duration',
+				websocketFactory: () => socket,
+			})
+			const start = engine.start()
+			await vi.waitFor(() => expect(calls).toBe(1))
+			const stop = engine.stop()
+			await stop
+			release?.(stream)
+			await start
+
+			expect(stream.track.stopCalls).toBe(1)
+			expect(FakeAudioContext.instances).toHaveLength(0)
+			expect(FakeAudioNode.instances).toHaveLength(0)
+		} finally {
+			vi.unstubAllGlobals()
+		}
 	})
 })

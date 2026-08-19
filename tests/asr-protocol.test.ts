@@ -69,6 +69,11 @@ describe('doubao SAUC protocol', () => {
 		expect(frame.payloadText).toContain('body too short')
 	})
 
+	test('rejects a server response with invalid JSON payload', () => {
+		const bytes = Uint8Array.from([0x11, 0x90, 0x10, 0, 0, 0, 0, 1, 0x7b])
+		expect(() => decodeFrame(bytes)).toThrow('payload is not valid JSON')
+	})
+
 	test.each([
 		new Uint8Array(),
 		Uint8Array.from([0x11, 0x10, 0x10, 0]),
