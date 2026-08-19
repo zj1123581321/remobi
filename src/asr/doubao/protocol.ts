@@ -145,6 +145,12 @@ function readInt32(bytes: Uint8Array, offset: number): number {
 	return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getInt32(offset)
 }
 
+function readSequence(bytes: Uint8Array, flags: number): number | undefined {
+	if (flags !== 3) return undefined
+	if (bytes.byteLength < 12) malformed('sequence frame is truncated')
+	return readInt32(bytes, 4)
+}
+
 function parseJson(bytes: Uint8Array): { readonly payloadText: string; readonly json: unknown } {
 	const text = new TextDecoder().decode(bytes)
 	try {
@@ -189,7 +195,7 @@ function decodeFullRequest(bytes: Uint8Array, flags: number): DecodedFullRequest
 
 function decodeAudio(bytes: Uint8Array, flags: number): DecodedAudioFrame {
 	if (flags !== 0 && flags !== 2 && flags !== 3) malformed('unsupported audio flags')
-	const sequence = flags === 3 ? readInt32(bytes, 4) : undefined
+	const sequence = readSequence(bytes, flags)
 	const payload = payloadSlice(bytes, flags === 3 ? 8 : 4)
 	if ((flags === 2 || flags === 3) && payload.byteLength !== 0) {
 		malformed('end frame must have an empty payload')
@@ -201,7 +207,7 @@ function decodeAudio(bytes: Uint8Array, flags: number): DecodedAudioFrame {
 
 function decodeServerResponse(bytes: Uint8Array, flags: number): DecodedServerResponse {
 	if (flags !== 0 && flags !== 3) malformed('unsupported server response flags')
-	const sequence = flags === 3 ? readInt32(bytes, 4) : undefined
+	const sequence = readSequence(bytes, flags)
 	const payload = payloadSlice(bytes, flags === 3 ? 8 : 4)
 	const parsed = parseJson(payload)
 	return sequence === undefined

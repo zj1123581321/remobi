@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import {
 	PCM_CHUNK_BYTES,
 	chunkPcm16,
+	downmixToMonoSample,
 	float32ToInt16,
 	float32ToPcm16,
 	int16ToPcmBytes,
@@ -19,11 +20,31 @@ describe('ASR PCM pipeline', () => {
 		expect(quantizePcmSample(2)).toBe(32_767)
 	})
 
+	test.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+		'rejects non-finite sample %s',
+		(sample) => {
+			expect(() => quantizePcmSample(sample)).toThrow(RangeError)
+		},
+	)
+
 	test('writes PCM samples as little-endian bytes', () => {
 		const samples = float32ToInt16(Float32Array.from([-1, -0.5, 0.5, 1]))
 		const bytes = int16ToPcmBytes(samples)
 		expect([...bytes]).toEqual([0, 128, 0, 192, 0, 64, 255, 127])
 		expect(float32ToPcm16(Float32Array.from([-1, 1]))).toEqual(Uint8Array.from([0, 128, 255, 127]))
+	})
+
+	test('downmixes stereo samples before byte-level PCM encoding', () => {
+		const channels = [
+			Float32Array.from([0.5, -1]),
+			Float32Array.from([0.25, 1]),
+		]
+		const mono = Float32Array.from([
+			downmixToMonoSample(channels, 0),
+			downmixToMonoSample(channels, 1),
+		])
+
+		expect(float32ToPcm16(mono)).toEqual(Uint8Array.from([0, 48, 0, 0]))
 	})
 
 	test('creates 100ms chunks and keeps a short final chunk', () => {

@@ -80,6 +80,24 @@ describe('doubao SAUC protocol', () => {
 		expect(() => decodeFrame(bytes)).toThrow('Invalid SAUC frame')
 	})
 
+	test.each([4, 5, 6, 7, 8, 9, 10, 11])(
+		'rejects truncated sequence audio frame of length %i',
+		(length) => {
+			const bytes = new Uint8Array(length)
+			bytes.set([0x11, 0x23, 0x10, 0])
+			expect(() => decodeFrame(bytes)).toThrow('Invalid SAUC frame')
+		},
+	)
+
+	test.each([4, 5, 6, 7, 8, 9, 10, 11])(
+		'rejects truncated sequence response frame of length %i',
+		(length) => {
+			const bytes = new Uint8Array(length)
+			bytes.set([0x11, 0x93, 0x10, 0])
+			expect(() => decodeFrame(bytes)).toThrow('Invalid SAUC frame')
+		},
+	)
+
 	test('does not mutate input payloads during encoding', () => {
 		const source = Uint8Array.from([1, 2, 3])
 		const result = encodeAudioFrame(source)

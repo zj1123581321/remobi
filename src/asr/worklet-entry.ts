@@ -1,4 +1,4 @@
-import { PCM_CHUNK_SAMPLES, quantizePcmSample } from './pcm'
+import { PCM_CHUNK_SAMPLES, downmixToMonoSample, quantizePcmSample } from './pcm'
 
 interface FlushMessage {
 	readonly type: 'flush'
@@ -18,6 +18,11 @@ interface PcmMessage {
 
 interface FlushAckMessage {
 	readonly type: 'flush-ack'
+}
+
+interface WorkletErrorMessage {
+	readonly type: 'error'
+	readonly error: 'unknown-worklet-command'
 }
 
 declare abstract class AudioWorkletProcessor {
@@ -45,17 +50,30 @@ class RemobiPcmProcessor extends AudioWorkletProcessor {
 	constructor() {
 		super()
 		this.port.onmessage = (event: MessageEvent<WorkletCommand>) => {
-			if (event.data.type === 'start') {
-				this.sampleOffset = 0
-				return
+			switch (event.data.type) {
+				case 'start':
+					this.sampleOffset = 0
+					return
+				case 'flush':
+					this.flush()
+					return
+				default: {
+					const error: WorkletErrorMessage = {
+						type: 'error',
+						error: 'unknown-worklet-command',
+					}
+					this.port.postMessage(error)
+					return
+				}
 			}
-			this.flush()
 		}
 	}
 
 	private emitChunk(final: boolean): void {
 		for (let index = 0; index < this.sampleOffset; index++) {
-			this.intBuffer[index] = quantizePcmSample(this.sampleBuffer[index] ?? 0)
+			const sample = this.sampleBuffer[index]
+			if (sample === undefined) throw new RangeError('PCM worklet sample is missing')
+			this.intBuffer[index] = quantizePcmSample(sample)
 		}
 		this.pcmMessage.final = final
 		this.port.postMessage(this.pcmMessage)
@@ -73,10 +91,12 @@ class RemobiPcmProcessor extends AudioWorkletProcessor {
 		_outputs: readonly (readonly Float32Array[])[],
 		_parameters: Record<string, Float32Array>,
 	): boolean {
-		const channel = inputs[0]?.[0]
-		if (!channel) return true
-		for (let index = 0; index < channel.length; index++) {
-			this.sampleBuffer[this.sampleOffset++] = channel[index] ?? 0
+		const channels = inputs[0]
+		if (channels === undefined || channels.length === 0) return true
+		const firstChannel = channels[0]
+		if (firstChannel === undefined) return true
+		for (let index = 0; index < firstChannel.length; index++) {
+			this.sampleBuffer[this.sampleOffset++] = downmixToMonoSample(channels, index)
 			if (this.sampleOffset === PCM_CHUNK_SAMPLES) this.emitChunk(false)
 		}
 		return true

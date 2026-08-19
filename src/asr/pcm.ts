@@ -6,9 +6,27 @@ export const PCM_CHUNK_BYTES = PCM_CHUNK_SAMPLES * PCM_SAMPLE_BYTES
 
 /** Quantise one normalised float sample to signed 16-bit PCM. */
 export function quantizePcmSample(sample: number): number {
+	if (!Number.isFinite(sample)) throw new RangeError('PCM sample must be finite')
 	if (sample <= -1) return -32_768
 	if (sample >= 1) return 32_767
 	return sample < 0 ? Math.round(sample * 32_768) : Math.round(sample * 32_767)
+}
+
+/** Average all input channels into one mono sample without allocating. */
+export function downmixToMonoSample(
+	channels: readonly Float32Array[],
+	sampleIndex: number,
+): number {
+	if (channels.length === 0) throw new RangeError('PCM input has no channels')
+	let total = 0
+	for (let channelIndex = 0; channelIndex < channels.length; channelIndex++) {
+		const channel = channels[channelIndex]
+		if (channel === undefined) throw new RangeError('PCM input channel is missing')
+		const sample = channel[sampleIndex]
+		if (sample === undefined) throw new RangeError('PCM input channel is shorter than the first channel')
+		total += sample
+	}
+	return total / channels.length
 }
 
 /** Convert float samples to an Int16Array. The optional target avoids allocation in callers. */
@@ -20,7 +38,9 @@ export function float32ToInt16(
 		throw new RangeError('PCM target is smaller than the source sample array')
 	}
 	for (let index = 0; index < samples.length; index++) {
-		target[index] = quantizePcmSample(samples[index] ?? 0)
+		const sample = samples[index]
+		if (sample === undefined) throw new RangeError('PCM source sample is missing')
+		target[index] = quantizePcmSample(sample)
 	}
 	return target.subarray(0, samples.length)
 }
@@ -30,7 +50,9 @@ export function int16ToPcmBytes(samples: Int16Array): Uint8Array {
 	const bytes = new Uint8Array(samples.length * PCM_SAMPLE_BYTES)
 	const view = new DataView(bytes.buffer)
 	for (let index = 0; index < samples.length; index++) {
-		view.setInt16(index * PCM_SAMPLE_BYTES, samples[index] ?? 0, true)
+		const sample = samples[index]
+		if (sample === undefined) throw new RangeError('PCM source sample is missing')
+		view.setInt16(index * PCM_SAMPLE_BYTES, sample, true)
 	}
 	return bytes
 }
