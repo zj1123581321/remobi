@@ -515,29 +515,7 @@ async function main(): Promise<void> {
 	const requested = process.argv.slice(2)
 	const runAll = requested.length === 0 || requested.includes('all')
 	const keys = loadKeys()
-	const results: ProbeResult[] = []
-	const run = async (mode: ProbeMode, token?: string): Promise<ProbeResult> => {
-		const result = await runProbe(optionsFor(mode, keys, token))
-		results.push(result)
-		return result
-	}
-
-	let jwtToken: string | undefined
-	if (runAll || requested.includes('query-jwt')) {
-		jwtToken = await getStsToken(keys)
-		await run('query-jwt', jwtToken)
-	}
-	if (runAll || requested.includes('query-raw')) await run('query-raw')
-	if (runAll || requested.includes('header')) await run('header')
-
-	const anyHandshake = results.some((result) => result.handshake === 'ok')
-	if (anyHandshake && (runAll || requested.includes('end-variant')))
-		await run('end-variant-neg-no-seq', jwtToken)
-	if (anyHandshake && (runAll || requested.includes('opus'))) await run('opus', jwtToken)
-	if (anyHandshake && (runAll || requested.includes('protocol-error')))
-		await run('protocol-error', jwtToken)
-	if (anyHandshake && (runAll || requested.includes('business-error')))
-		await run('business-error', jwtToken)
+	const { results } = await runAuthCandidates(keys, requested, runAll)
 
 	console.log('\n===== 汇总（不含密钥与完整带参 URL） =====')
 	for (const result of results)
@@ -547,6 +525,45 @@ async function main(): Promise<void> {
 			'结论：query 鉴权未成功，直连 no-go；请结合 header 对照组区分密钥问题与 query 鉴权支持问题。',
 		)
 	}
+}
+
+async function runAuthCandidates(
+	keys: Keys,
+	requested: string[],
+	runAll: boolean,
+): Promise<{ results: ProbeResult[]; jwtToken?: string }> {
+	const results: ProbeResult[] = []
+	let jwtToken: string | undefined
+	const run = async (mode: ProbeMode, token?: string): Promise<ProbeResult> => {
+		const result = await runProbe(optionsFor(mode, keys, token))
+		results.push(result)
+		return result
+	}
+
+	for (const mode of ['query-raw', 'query-jwt', 'header'] as const) {
+		if (!runAll && !requested.includes(mode)) continue
+		if (mode === 'query-jwt') {
+			try {
+				jwtToken = await getStsToken(keys)
+				await run(mode, jwtToken)
+			} catch (error: unknown) {
+				const detail = `STS 阶段失败：${error instanceof Error ? error.message : String(error)}`
+				console.error(`  query-jwt 中止：${detail}`)
+				results.push({ handshake: 'fail', detail, mode, directory: 'not-created' })
+			}
+		} else {
+			await run(mode)
+		}
+	}
+	const anyHandshake = results.some((result) => result.handshake === 'ok')
+	const followups: [boolean, ProbeMode][] = [
+		[runAll || requested.includes('end-variant'), 'end-variant-neg-no-seq'],
+		[runAll || requested.includes('opus'), 'opus'],
+		[runAll || requested.includes('protocol-error'), 'protocol-error'],
+		[runAll || requested.includes('business-error'), 'business-error'],
+	]
+	for (const [enabled, mode] of followups) if (anyHandshake && enabled) await run(mode, jwtToken)
+	return { results, jwtToken }
 }
 
 main().catch((error: unknown) => {
