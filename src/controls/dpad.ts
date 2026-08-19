@@ -30,7 +30,7 @@ const DPAD_KEYS: ReadonlyArray<{
 	null,
 ]
 
-export interface Dpad {
+interface Dpad {
 	readonly element: HTMLDivElement
 	readonly toggle: () => void
 	readonly isOpen: () => boolean
