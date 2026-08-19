@@ -118,6 +118,52 @@ class RuntimeErrorSocket extends SlowSocket {
 	}
 }
 
+class EpochSocket implements WebSocketLike {
+	readyState = 1
+	readonly bufferedAmount = 0
+	onopen: (() => void) | null = null
+	onerror: ((event: { readonly message?: string }) => void) | null = null
+	onclose: ((event: { readonly code: number; readonly reason: string }) => void) | null = null
+	onmessage: ((event: { readonly data: unknown }) => void) | null = null
+
+	constructor() {
+		queueMicrotask(() => this.onopen?.())
+	}
+
+	send(_data: Uint8Array): void {}
+
+	close(): void {
+		this.readyState = 3
+	}
+
+	triggerError(): void {
+		this.onerror?.({ message: 'stale runtime failure' })
+	}
+
+	triggerMessage(data: unknown): void {
+		this.onmessage?.({ data })
+	}
+}
+
+class BlockingCapture extends FakeCapture {
+	stopCalls = 0
+	private releaseFirstStop: (() => void) | undefined
+
+	override async stop(): Promise<void> {
+		this.stopCalls++
+		if (this.stopCalls === 1) {
+			await new Promise<void>((resolve) => {
+				this.releaseFirstStop = resolve
+			})
+		}
+		this.stopped = true
+	}
+
+	releaseStop(): void {
+		this.releaseFirstStop?.()
+	}
+}
+
 class FailingCapture {
 	readonly error: unknown
 
@@ -147,6 +193,17 @@ function serverResponse(json: unknown, final = false): ArrayBuffer {
 	if (final) view.setInt32(4, 1)
 	view.setUint32(final ? 8 : 4, payload.byteLength)
 	bytes.set(payload, payloadOffset)
+	return bytes.buffer
+}
+
+function providerErrorFrame(): ArrayBuffer {
+	const payload = new TextEncoder().encode('{"error":"provider"}')
+	const bytes = new Uint8Array(12 + payload.byteLength)
+	bytes.set([0x11, 0xf0, 0x10, 0])
+	const view = new DataView(bytes.buffer)
+	view.setUint32(4, 45000151)
+	view.setUint32(8, payload.byteLength)
+	bytes.set(payload, 12)
 	return bytes.buffer
 }
 
@@ -288,6 +345,45 @@ describe('DoubaoEngine', () => {
 
 		expect(errors).toEqual(['connection-failed'])
 		expect(capture.stopped).toBe(true)
+	})
+
+	test('serializes interleaved stop and provider failure across capture epochs', async () => {
+		const capture = new BlockingCapture()
+		const sockets: EpochSocket[] = []
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			websocketFactory: () => {
+				const socket = new EpochSocket()
+				sockets.push(socket)
+				return socket
+			},
+			capture,
+		})
+		const errors: string[] = []
+		engine.onError((code) => errors.push(code))
+
+		await engine.start()
+		const firstSocket = sockets[0]
+		const firstStop = engine.stop()
+		await Promise.resolve()
+		expect(capture.stopCalls).toBe(1)
+
+		firstSocket?.triggerMessage(providerErrorFrame())
+		expect(errors).toEqual(['provider-error'])
+		expect(capture.stopCalls).toBe(1)
+		capture.releaseStop()
+		await firstStop
+
+		await engine.start()
+		const secondSocket = sockets[1]
+		firstSocket?.triggerError()
+		expect(errors).toEqual(['provider-error'])
+
+		const secondStop = engine.stop()
+		await Promise.resolve()
+		secondSocket?.triggerMessage(serverResponse({ result: { text: 'done' } }, true))
+		await secondStop
 	})
 
 	test.each([

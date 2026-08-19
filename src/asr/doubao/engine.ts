@@ -139,13 +139,21 @@ class BrowserPcmCapture implements PcmCapture {
 	private source: MediaStreamAudioSourceNode | undefined
 	private node: AudioWorkletNode | undefined
 	private onSamples: ((samples: Int16Array) => void) | undefined
-	private flushWaiter: (() => void) | undefined
+	private flushWaiter: { readonly epoch: number; readonly resolve: () => void } | undefined
+	private epoch = 0
+	private stopPromise: Promise<void> | undefined
 
 	constructor(workletUrl: string) {
 		this.workletUrl = workletUrl
 	}
 
 	async start(onSamples: (samples: Int16Array) => void): Promise<void> {
+		const previousStop = this.stopPromise
+		if (previousStop) {
+			await previousStop
+			if (this.stopPromise === previousStop) this.stopPromise = undefined
+		}
+		const epoch = ++this.epoch
 		if (!globalThis.navigator?.mediaDevices?.getUserMedia || !globalThis.AudioContext) {
 			throw new Error('AudioWorklet capture is not supported')
 		}
@@ -177,8 +185,15 @@ class BrowserPcmCapture implements PcmCapture {
 		this.node.port.onmessage = (
 			event: MessageEvent<{ type: 'pcm'; samples: Int16Array } | { type: 'flush-ack' }>,
 		) => {
+			if (epoch !== this.epoch) return
 			if (event.data.type === 'pcm') this.onSamples?.(event.data.samples)
-			if (event.data.type === 'flush-ack') this.flushWaiter?.()
+			if (event.data.type === 'flush-ack') {
+				const waiter = this.flushWaiter
+				if (waiter?.epoch === epoch) {
+					this.flushWaiter = undefined
+					waiter.resolve()
+				}
+			}
 		}
 		this.source = this.context.createMediaStreamSource(this.stream)
 		this.source.connect(this.node)
@@ -187,21 +202,39 @@ class BrowserPcmCapture implements PcmCapture {
 	}
 
 	async stop(): Promise<void> {
-		this.source?.disconnect()
-		for (const track of this.stream?.getTracks() ?? []) track.stop()
-		if (this.node) {
-			await new Promise<void>((resolve) => {
-				this.flushWaiter = resolve
-				this.node?.port.postMessage({ type: 'flush' })
-			})
-			this.flushWaiter = undefined
-		}
-		this.node?.port.close()
-		this.node?.disconnect()
-		await this.dispose()
+		if (this.stopPromise) return this.stopPromise
+		const epoch = this.epoch
+		const promise = this.stopCurrentEpoch(epoch)
+		this.stopPromise = promise
+		void promise.then(
+			() => {
+				if (this.stopPromise === promise) this.stopPromise = undefined
+			},
+			() => {
+				if (this.stopPromise === promise) this.stopPromise = undefined
+			},
+		)
+		return promise
 	}
 
-	private async dispose(): Promise<void> {
+	private async stopCurrentEpoch(epoch: number): Promise<void> {
+		this.source?.disconnect()
+		for (const track of this.stream?.getTracks() ?? []) track.stop()
+		const node = this.node
+		if (node) {
+			await new Promise<void>((resolve) => {
+				this.flushWaiter = { epoch, resolve }
+				node.port.postMessage({ type: 'flush' })
+			})
+			if (this.flushWaiter?.epoch === epoch) this.flushWaiter = undefined
+		}
+		node?.port.close()
+		node?.disconnect()
+		await this.dispose(epoch)
+	}
+
+	private async dispose(epoch = this.epoch): Promise<void> {
+		if (epoch !== this.epoch) return
 		this.source = undefined
 		this.node = undefined
 		this.onSamples = undefined
@@ -222,6 +255,8 @@ export class DoubaoEngine implements AsrEngine {
 	private readonly capture: PcmCapture
 	private socket: WebSocketLike | undefined
 	private state: 'idle' | 'starting' | 'recording' | 'stopping' = 'idle'
+	private epoch = 0
+	private captureStopPromise: Promise<void> | undefined
 	private audioFrameCount = 0
 	private queuedAudio: Uint8Array[] = []
 	private queuedBytes = 0
@@ -262,22 +297,32 @@ export class DoubaoEngine implements AsrEngine {
 
 	async start(): Promise<void> {
 		if (this.state !== 'idle') return
+		const epoch = ++this.epoch
 		this.state = 'starting'
 		this.reportedError = false
 		this.audioFrameCount = 0
 		this.queuedAudio = []
 		this.queuedBytes = 0
+		const previousStop = this.captureStopPromise
+		if (previousStop) {
+			await previousStop
+			if (this.captureStopPromise === previousStop) this.captureStopPromise = undefined
+		}
 		if (!this.isSupported()) {
-			this.fail('unsupported')
+			this.fail('unsupported', epoch)
 			throw new Error('ASR is not supported in this browser')
 		}
 		try {
-			await this.openSocket()
-			await this.capture.start((samples) => this.sendPcm(samples))
+			await this.openSocket(epoch)
+			if (epoch !== this.epoch) return
+			await this.capture.start((samples) => {
+				if (epoch === this.epoch) this.sendPcm(samples)
+			})
+			if (epoch !== this.epoch) return
 			this.state = 'recording'
-			this.startBackpressureMonitor()
+			this.startBackpressureMonitor(epoch)
 		} catch (error) {
-			this.fail(errorCode(error))
+			this.fail(errorCode(error), epoch)
 			throw error
 		}
 	}
@@ -285,16 +330,19 @@ export class DoubaoEngine implements AsrEngine {
 	async stop(): Promise<void> {
 		if (this.state === 'idle') return
 		if (this.state === 'stopping') return this.waitForFinal()
+		const epoch = this.epoch
 		this.state = 'stopping'
 		this.stopBackpressureMonitor()
-		await this.capture.stop()
+		await this.requestCaptureStop()
+		if (epoch !== this.epoch || this.reportedError) return
 		this.flushQueue()
 		if (!this.socket || this.socket.readyState !== OPEN) {
-			this.fail('socket-closed')
+			this.fail('socket-closed', epoch)
 			return
 		}
 		this.socket.send(encodeEndFrame(-(this.audioFrameCount + 2)))
 		await this.waitForFinal()
+		if (epoch !== this.epoch) return
 		this.cleanup()
 	}
 
@@ -303,7 +351,7 @@ export class DoubaoEngine implements AsrEngine {
 		this.sendPcm(samples)
 	}
 
-	private async openSocket(): Promise<void> {
+	private async openSocket(epoch: number): Promise<void> {
 		const endpoint = this.options.endpoint ?? DEFAULT_ENDPOINT
 		const params = new URLSearchParams({
 			api_key: this.options.apiKey,
@@ -311,17 +359,27 @@ export class DoubaoEngine implements AsrEngine {
 		})
 		const socket = this.websocketFactory(`${endpoint}?${params.toString()}`)
 		this.socket = socket
-		socket.onmessage = (event) => this.handleMessage(event.data)
+		socket.onmessage = (event) => {
+			if (epoch === this.epoch) this.handleMessage(event.data, epoch)
+		}
 		socket.onclose = () => {
-			if (this.state === 'recording') this.fail('socket-closed')
+			if (epoch !== this.epoch) return
+			if (this.state === 'recording') this.fail('socket-closed', epoch)
 			else this.finalWaiter?.()
 		}
 		const runtimeError = (_event: { readonly message?: string }): void => {
-			if (this.state === 'starting' || this.state === 'recording') this.fail('connection-failed')
+			if (epoch !== this.epoch) return
+			if (this.state === 'starting' || this.state === 'recording') {
+				this.fail('connection-failed', epoch)
+			}
 		}
 		socket.onerror = runtimeError
 		await new Promise<void>((resolve, reject) => {
-			socket.onopen = () => {
+			 socket.onopen = () => {
+				if (epoch !== this.epoch) {
+					resolve()
+					return
+				}
 				if (socket.readyState !== OPEN) {
 					reject(new Error('ASR websocket did not open'))
 					return
@@ -341,9 +399,9 @@ export class DoubaoEngine implements AsrEngine {
 		socket.onerror = runtimeError
 	}
 
-	private handleMessage(data: unknown): void {
+	private handleMessage(data: unknown, epoch: number): void {
 		if (!(data instanceof ArrayBuffer) && !ArrayBuffer.isView(data)) {
-			this.fail('protocol-error')
+			this.fail('protocol-error', epoch)
 			return
 		}
 		const bytes =
@@ -353,11 +411,11 @@ export class DoubaoEngine implements AsrEngine {
 		try {
 			const frame = decodeFrame(bytes)
 			if (frame.kind === 'error') {
-				this.fail('provider-error')
+				this.fail('provider-error', epoch)
 				return
 			}
 			if (frame.kind !== 'server-response') {
-				this.fail('protocol-error')
+				this.fail('protocol-error', epoch)
 				return
 			}
 			const text = getText(frame.json)
@@ -369,7 +427,7 @@ export class DoubaoEngine implements AsrEngine {
 				for (const handler of this.partialHandlers) handler(text)
 			}
 		} catch {
-			this.fail('protocol-error')
+			this.fail('protocol-error', epoch)
 		}
 	}
 
@@ -392,14 +450,15 @@ export class DoubaoEngine implements AsrEngine {
 		this.queuedBytes = 0
 	}
 
-	private startBackpressureMonitor(): void {
+	private startBackpressureMonitor(epoch: number): void {
 		this.backpressureTimer = setInterval(() => {
+			if (epoch !== this.epoch) return
 			const socketBytes = this.socket?.bufferedAmount ?? 0
 			if (this.queuedBytes + socketBytes > BACKPRESSURE_LIMIT_BYTES) {
-				this.fail('network-too-slow')
+				this.fail('network-too-slow', epoch)
 			}
 			if (this.socket?.readyState === CLOSING || this.socket?.readyState === CLOSED) {
-				this.fail('socket-closed')
+				this.fail('socket-closed', epoch)
 			}
 		}, BACKPRESSURE_INTERVAL_MS)
 	}
@@ -425,14 +484,34 @@ export class DoubaoEngine implements AsrEngine {
 		})
 	}
 
-	private fail(code: AsrErrorCode): void {
-		if (this.reportedError) return
+	private requestCaptureStop(): Promise<void> {
+		if (this.captureStopPromise) return this.captureStopPromise
+		const promise = this.capture.stop()
+		this.captureStopPromise = promise
+		void promise.then(
+			() => {
+				if (this.captureStopPromise === promise) this.captureStopPromise = undefined
+			},
+			() => {
+				if (this.captureStopPromise === promise) this.captureStopPromise = undefined
+			},
+		)
+		return promise
+	}
+
+	private fail(code: AsrErrorCode, epoch: number): void {
+		if (epoch !== this.epoch || this.reportedError) return
 		this.reportedError = true
-		for (const handler of this.errorHandlers) handler(code)
-		this.stopBackpressureMonitor()
+		this.epoch++
 		this.state = 'idle'
+		this.stopBackpressureMonitor()
+		this.finalWaiter?.()
+		this.finalWaiter = undefined
+		if (this.finalTimer) clearTimeout(this.finalTimer)
+		this.finalTimer = undefined
+		for (const handler of this.errorHandlers) handler(code)
 		this.socket?.close()
-		void this.capture.stop()
+		void this.requestCaptureStop()
 	}
 
 	private cleanup(): void {
@@ -444,6 +523,7 @@ export class DoubaoEngine implements AsrEngine {
 		this.socket = undefined
 		this.queuedAudio = []
 		this.queuedBytes = 0
+		this.epoch++
 		this.state = 'idle'
 	}
 }
