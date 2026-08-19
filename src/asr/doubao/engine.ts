@@ -17,6 +17,7 @@ const CLOSED = 3
 const BACKPRESSURE_INTERVAL_MS = 100
 const BACKPRESSURE_LIMIT_BYTES = PCM_SAMPLE_RATE * 2 * 2
 const FINAL_TIMEOUT_MS = 3_000
+const CAPTURE_FLUSH_TIMEOUT_MS = 3_000
 
 export interface WebSocketLike {
 	readonly readyState: number
@@ -162,54 +163,94 @@ class BrowserPcmCapture implements PcmCapture {
 		if (!globalThis.navigator?.mediaDevices?.getUserMedia || !globalThis.AudioContext) {
 			throw new Error('AudioWorklet capture is not supported')
 		}
-		this.onSamples = onSamples
-		this.stream = await globalThis.navigator.mediaDevices.getUserMedia({ audio: true })
+		const stream = await globalThis.navigator.mediaDevices.getUserMedia({ audio: true })
+		if (epoch !== this.epoch) {
+			await this.disposeStartResources(stream, undefined, undefined, undefined)
+			return
+		}
+		let context: AudioContext | undefined
+		let source: MediaStreamAudioSourceNode | undefined
+		let node: AudioWorkletNode | undefined
 		try {
-			this.context = new AudioContext({ sampleRate: PCM_SAMPLE_RATE })
-		} catch (error) {
-			for (const track of this.stream.getTracks()) track.stop()
-			this.stream = undefined
-			throw error
-		}
-		if (this.context.sampleRate !== PCM_SAMPLE_RATE) {
-			for (const track of this.stream.getTracks()) track.stop()
-			await this.dispose()
-			const error = new Error(`AudioContext sample rate is ${this.context.sampleRate}`)
-			error.name = 'UnsupportedSampleRateError'
-			throw error
-		}
-		if (this.context.state === 'suspended') await this.context.resume()
-		try {
-			await this.context.audioWorklet.addModule(this.workletUrl)
-		} catch (error) {
-			const failure = new Error('AudioWorklet module failed to load', { cause: error })
-			failure.name = 'WorkletLoadError'
-			throw failure
-		}
-		this.node = new AudioWorkletNode(this.context, WORKLET_PROCESSOR_NAME)
-		this.node.port.onmessage = (
-			event: MessageEvent<
-				{ type: 'pcm'; samples: Int16Array; posted: number } | { type: 'flush-ack' }
-			>,
-		) => {
-			if (epoch !== this.epoch) return
-			if (event.data.type === 'pcm') {
+			context = new AudioContext({ sampleRate: PCM_SAMPLE_RATE })
+			if (epoch !== this.epoch) {
+				await this.disposeStartResources(stream, context, source, node)
+				return
+			}
+			if (context.sampleRate !== PCM_SAMPLE_RATE) {
+				const error = new Error(`AudioContext sample rate is ${context.sampleRate}`)
+				error.name = 'UnsupportedSampleRateError'
+				throw error
+			}
+			if (context.state === 'suspended') await context.resume()
+			if (epoch !== this.epoch) {
+				await this.disposeStartResources(stream, context, source, node)
+				return
+			}
+			try {
+				await context.audioWorklet.addModule(this.workletUrl)
+			} catch (error) {
+				const failure = new Error('AudioWorklet module failed to load', { cause: error })
+				failure.name = 'WorkletLoadError'
+				throw failure
+			}
+			if (epoch !== this.epoch) {
+				await this.disposeStartResources(stream, context, source, node)
+				return
+			}
+			node = new AudioWorkletNode(context, WORKLET_PROCESSOR_NAME)
+			node.port.onmessage = (
+				event: MessageEvent<
+					{ type: 'pcm'; samples: Int16Array; posted: number } | { type: 'flush-ack' }
+				>,
+			) => {
+				if (event.data.type === 'flush-ack') {
+					const waiter = this.flushWaiter
+					if (waiter?.epoch === epoch) {
+						this.flushWaiter = undefined
+						waiter.resolve()
+					}
+					return
+				}
+				if (epoch !== this.epoch) return
 				this.workletPosted = Math.max(this.workletPosted, event.data.posted)
 				this.workletReceived++
 				this.onSamples?.(event.data.samples)
 			}
-			if (event.data.type === 'flush-ack') {
-				const waiter = this.flushWaiter
-				if (waiter?.epoch === epoch) {
-					this.flushWaiter = undefined
-					waiter.resolve()
-				}
+			source = context.createMediaStreamSource(stream)
+			source.connect(node)
+			node.connect(context.destination)
+			if (epoch !== this.epoch) {
+				await this.disposeStartResources(stream, context, source, node)
+				return
 			}
+			node.port.postMessage({ type: 'start' })
+			this.onSamples = onSamples
+			this.context = context
+			this.stream = stream
+			this.source = source
+			this.node = node
+		} catch (error) {
+			source?.disconnect()
+			node?.port.close()
+			node?.disconnect()
+			for (const track of stream.getTracks()) track.stop()
+			if (context) await context.close()
+			throw error
 		}
-		this.source = this.context.createMediaStreamSource(this.stream)
-		this.source.connect(this.node)
-		this.node.connect(this.context.destination)
-		this.node.port.postMessage({ type: 'start' })
+	}
+
+	private async disposeStartResources(
+		stream: MediaStream,
+		context: AudioContext | undefined,
+		source: MediaStreamAudioSourceNode | undefined,
+		node: AudioWorkletNode | undefined,
+	): Promise<void> {
+		source?.disconnect()
+		node?.port.close()
+		node?.disconnect()
+		for (const track of stream.getTracks()) track.stop()
+		if (context) await context.close()
 	}
 
 	getPcmInFlightBytes(): number {
@@ -219,7 +260,19 @@ class BrowserPcmCapture implements PcmCapture {
 	async stop(): Promise<void> {
 		if (this.stopPromise) return this.stopPromise
 		const epoch = this.epoch
-		const promise = this.stopCurrentEpoch(epoch)
+		this.epoch++
+		const source = this.source
+		const stream = this.stream
+		const node = this.node
+		const context = this.context
+		this.source = undefined
+		this.stream = undefined
+		this.node = undefined
+		this.context = undefined
+		this.onSamples = undefined
+		source?.disconnect()
+		for (const track of stream?.getTracks() ?? []) track.stop()
+		const promise = this.stopCurrentEpoch(epoch, node, context)
 		this.stopPromise = promise
 		void promise.then(
 			() => {
@@ -232,33 +285,63 @@ class BrowserPcmCapture implements PcmCapture {
 		return promise
 	}
 
-	private async stopCurrentEpoch(epoch: number): Promise<void> {
-		this.source?.disconnect()
-		for (const track of this.stream?.getTracks() ?? []) track.stop()
-		const node = this.node
-		if (node) {
-			await new Promise<void>((resolve) => {
-				this.flushWaiter = { epoch, resolve }
-				node.port.postMessage({ type: 'flush' })
-			})
+	private async stopCurrentEpoch(
+		epoch: number,
+		node: AudioWorkletNode | undefined,
+		context: AudioContext | undefined,
+	): Promise<void> {
+		try {
+			if (node) {
+				await new Promise<void>((resolve, reject) => {
+					let timer: ReturnType<typeof setTimeout>
+					const settle = (): void => {
+						clearTimeout(timer)
+						if (this.flushWaiter?.epoch === epoch) this.flushWaiter = undefined
+						resolve()
+					}
+					timer = setTimeout(() => {
+						if (this.flushWaiter?.epoch === epoch) this.flushWaiter = undefined
+						reject(new Error('AudioWorklet flush acknowledgement timed out'))
+					}, CAPTURE_FLUSH_TIMEOUT_MS)
+					this.flushWaiter = { epoch, resolve: settle }
+					try {
+						node.port.postMessage({ type: 'flush' })
+					} catch (error) {
+						clearTimeout(timer)
+						this.flushWaiter = undefined
+						reject(error)
+					}
+				})
+			}
+		} finally {
 			if (this.flushWaiter?.epoch === epoch) this.flushWaiter = undefined
+			node?.port.close()
+			node?.disconnect()
+			if (context) await context.close()
 		}
-		node?.port.close()
-		node?.disconnect()
-		await this.dispose(epoch)
-	}
-
-	private async dispose(epoch = this.epoch): Promise<void> {
-		if (epoch !== this.epoch) return
-		this.source = undefined
-		this.node = undefined
-		this.onSamples = undefined
-		this.stream = undefined
-		const context = this.context
-		this.context = undefined
-		if (context) await context.close()
 	}
 }
+
+/**
+ * Engine lifecycle migration table (the implementation below is the sole state writer):
+ *
+ * idle + start -> starting: increment epoch, wait prior capture cleanup, open WS/capture.
+ * starting + WS error/close -> failing: report connection-failed once, cancel handshake,
+ *   stop capture, then idle; capture has not started yet.
+ * starting + capture pending + stop -> stopping: invalidate epoch, stop capture, cleanup -> idle.
+ * starting + capture pending + late resource -> discarded: stop tracks/close context/node,
+ *   and never publish the stale resource.
+ * starting + provider/protocol failure -> failing: report once, invalidate epoch, cleanup -> idle.
+ * recording + stop -> stopping: stop monitor/capture, flush queued PCM, send tail, await final/3s,
+ *   cleanup -> idle.
+ * recording + WS/provider/protocol/backpressure failure -> failing: report once, stop/close, idle.
+ * stopping + provider/WS/protocol/stop failure -> stopping: report once, resolve final waiter,
+ *   keep the shared stop promise, then cleanup -> idle.
+ * stopping + stop -> same promise; stopping/failing + start -> reject (no second session).
+ * any + second start while capture pending -> reject; malformed JSON -> protocol-error;
+ * legal JSON without text -> ignore. Epoch-mismatched callbacks cannot touch current state.
+ */
+type EngineState = 'idle' | 'starting' | 'recording' | 'stopping' | 'failing'
 
 /** Browser-direct Doubao SAUC engine. The optional capture/websocket seams are test-only injection points. */
 export class DoubaoEngine implements AsrEngine {
@@ -269,16 +352,20 @@ export class DoubaoEngine implements AsrEngine {
 	private readonly websocketFactory: WebSocketFactory
 	private readonly capture: PcmCapture
 	private socket: WebSocketLike | undefined
-	private state: 'idle' | 'starting' | 'recording' | 'stopping' = 'idle'
+	private state: EngineState = 'idle'
 	private epoch = 0
 	private captureStopPromise: Promise<void> | undefined
+	private stopPromise: Promise<void> | undefined
 	private audioFrameCount = 0
 	private queuedAudio: Uint8Array[] = []
 	private queuedBytes = 0
 	private backpressureTimer: ReturnType<typeof setInterval> | undefined
 	private finalTimer: ReturnType<typeof setTimeout> | undefined
 	private finalWaiter: (() => void) | undefined
+	private finalReceived = false
+	private failedDuringStop = false
 	private reportedError = false
+	private handshakeReject: ((reason: Error) => void) | undefined
 
 	constructor(options: DoubaoEngineOptions) {
 		this.options = options
@@ -311,54 +398,53 @@ export class DoubaoEngine implements AsrEngine {
 	}
 
 	async start(): Promise<void> {
-		if (this.state !== 'idle') return
+		if (this.state !== 'idle') throw new Error('ASR engine is busy')
 		const epoch = ++this.epoch
-		this.state = 'starting'
+		this.transition(['idle'], 'starting', 'start')
 		this.reportedError = false
+		this.failedDuringStop = false
+		this.finalReceived = false
 		this.audioFrameCount = 0
 		this.queuedAudio = []
 		this.queuedBytes = 0
 		const previousStop = this.captureStopPromise
 		if (previousStop) {
 			await previousStop
-			if (this.captureStopPromise === previousStop) this.captureStopPromise = undefined
+			if (!this.isCurrent(epoch, 'starting')) return
 		}
+		if (!this.isCurrent(epoch, 'starting')) return
 		if (!this.isSupported()) {
 			this.fail('unsupported', epoch)
 			throw new Error('ASR is not supported in this browser')
 		}
 		try {
 			await this.openSocket(epoch)
-			if (epoch !== this.epoch) return
+			if (!this.isCurrent(epoch, 'starting')) return
 			await this.capture.start((samples) => {
 				if (epoch === this.epoch) this.sendPcm(samples)
 			})
-			if (epoch !== this.epoch) return
-			this.state = 'recording'
+			if (!this.isCurrent(epoch, 'starting')) return
+			this.transition(['starting'], 'recording', 'capture-ready')
 			this.startBackpressureMonitor(epoch)
 		} catch (error) {
+			if (epoch !== this.epoch && !this.reportedError) return
 			this.fail(errorCode(error), epoch)
 			throw error
 		}
 	}
 
-	async stop(): Promise<void> {
-		if (this.state === 'idle') return
-		if (this.state === 'stopping') return this.waitForFinal()
-		const epoch = this.epoch
-		this.state = 'stopping'
-		this.stopBackpressureMonitor()
-		await this.requestCaptureStop()
-		if (epoch !== this.epoch || this.reportedError) return
-		this.flushQueue()
-		if (!this.socket || this.socket.readyState !== OPEN) {
-			this.fail('socket-closed', epoch)
-			return
+	stop(): Promise<void> {
+		if (this.state === 'idle') return Promise.resolve()
+		if (this.state === 'stopping' || this.state === 'failing') {
+			return this.stopPromise ?? Promise.resolve()
 		}
-		this.socket.send(encodeEndFrame(-(this.audioFrameCount + 2)))
-		await this.waitForFinal()
-		if (epoch !== this.epoch) return
-		this.cleanup()
+		const epoch = this.epoch
+		const recording = this.state === 'recording'
+		this.transition([this.state], 'stopping', recording ? 'stop' : 'cancel-start')
+		this.stopBackpressureMonitor()
+		this.finalReceived = false
+		if (!recording) this.epoch++
+		return this.trackStopPromise(this.finishStop(epoch, recording))
 	}
 
 	/** Test seam for a captured worklet chunk; browser capture calls the same path. */
@@ -374,22 +460,39 @@ export class DoubaoEngine implements AsrEngine {
 		})
 		const socket = this.websocketFactory(`${endpoint}?${params.toString()}`)
 		this.socket = socket
+		let opened = false
+		let rejectHandshake: ((reason: Error) => void) | undefined
 		socket.onmessage = (event) => {
 			if (epoch === this.epoch) this.handleMessage(event.data, epoch)
 		}
-		socket.onclose = () => {
-			if (epoch !== this.epoch) return
-			if (this.state === 'recording') this.fail('socket-closed', epoch)
-			else this.finalWaiter?.()
-		}
 		const runtimeError = (_event: { readonly message?: string }): void => {
 			if (epoch !== this.epoch) return
-			if (this.state === 'starting' || this.state === 'recording') {
+			if (this.state === 'starting' || this.state === 'recording' || this.state === 'stopping') {
 				this.fail('connection-failed', epoch)
+			}
+		}
+		socket.onclose = () => {
+			if (epoch !== this.epoch) {
+				if (!opened) rejectHandshake?.(new Error('ASR websocket handshake cancelled'))
+				return
+			}
+			if (!opened) {
+				this.fail('connection-failed', epoch)
+				rejectHandshake?.(new Error('ASR websocket closed during handshake'))
+				return
+			}
+			if (this.state === 'recording') {
+				this.fail('socket-closed', epoch)
+			} else if (this.state === 'stopping' && !this.finalReceived) {
+				this.fail('socket-closed', epoch)
+			} else {
+				this.resolveFinalWaiter()
 			}
 		}
 		socket.onerror = runtimeError
 		await new Promise<void>((resolve, reject) => {
+			rejectHandshake = reject
+			this.handshakeReject = reject
 			socket.onopen = () => {
 				if (epoch !== this.epoch) {
 					resolve()
@@ -399,17 +502,17 @@ export class DoubaoEngine implements AsrEngine {
 					reject(new Error('ASR websocket did not open'))
 					return
 				}
-				socket.send(
-					createFullRequest({
-						uid: this.options.uid,
-					}),
-				)
+				opened = true
+				socket.send(createFullRequest({ uid: this.options.uid }))
 				resolve()
 			}
 			socket.onerror = (event) => {
 				runtimeError(event)
 				reject(new Error('ASR websocket connection failed'))
 			}
+		}).finally(() => {
+			rejectHandshake = undefined
+			this.handshakeReject = undefined
 		})
 		socket.onerror = runtimeError
 	}
@@ -433,7 +536,10 @@ export class DoubaoEngine implements AsrEngine {
 				this.fail('protocol-error', epoch)
 				return
 			}
-			if (frame.flags === 3) this.finalWaiter?.()
+			if (frame.flags === 3 && this.state === 'stopping') {
+				this.finalReceived = true
+				this.resolveFinalWaiter()
+			}
 			const text = getText(frame.json)
 			if (text === undefined) return
 			if (frame.flags === 3) {
@@ -485,19 +591,18 @@ export class DoubaoEngine implements AsrEngine {
 	}
 
 	private waitForFinal(): Promise<void> {
-		if (this.finalWaiter) {
-			return new Promise((resolve) => {
-				const previous = this.finalWaiter
-				this.finalWaiter = () => {
-					previous?.()
-					resolve()
-				}
-			})
-		}
 		return new Promise((resolve) => {
 			this.finalWaiter = resolve
-			this.finalTimer = setTimeout(resolve, FINAL_TIMEOUT_MS)
+			this.finalTimer = setTimeout(() => this.resolveFinalWaiter(), FINAL_TIMEOUT_MS)
 		})
+	}
+
+	private resolveFinalWaiter(): void {
+		const waiter = this.finalWaiter
+		this.finalWaiter = undefined
+		if (this.finalTimer) clearTimeout(this.finalTimer)
+		this.finalTimer = undefined
+		waiter?.()
 	}
 
 	private requestCaptureStop(): Promise<void> {
@@ -515,31 +620,121 @@ export class DoubaoEngine implements AsrEngine {
 		return promise
 	}
 
-	private fail(code: AsrErrorCode, epoch: number): void {
-		if (epoch !== this.epoch || this.reportedError) return
-		this.reportedError = true
-		this.epoch++
-		this.state = 'idle'
-		this.stopBackpressureMonitor()
-		this.finalWaiter?.()
-		this.finalWaiter = undefined
-		if (this.finalTimer) clearTimeout(this.finalTimer)
-		this.finalTimer = undefined
-		for (const handler of this.errorHandlers) handler(code)
-		this.socket?.close()
-		void this.requestCaptureStop()
+	private finishStop(epoch: number, recording: boolean): Promise<void> {
+		return (async () => {
+			try {
+				await this.requestCaptureStop()
+				if (this.failedDuringStop) return
+				if (!recording) {
+					this.cleanupSession()
+					return
+				}
+				this.flushQueue()
+				if (!this.socket || this.socket.readyState !== OPEN) {
+					this.reportStopError('socket-closed', epoch)
+					return
+				}
+				this.socket.send(encodeEndFrame(-(this.audioFrameCount + 2)))
+				await this.waitForFinal()
+			} catch (error) {
+				this.reportStopError(errorCode(error), epoch)
+			} finally {
+				if (this.state === 'stopping') this.cleanupSession()
+			}
+		})()
 	}
 
-	private cleanup(): void {
+	private finishFailure(): Promise<void> {
+		return (async () => {
+			try {
+				await this.requestCaptureStop()
+			} catch {
+				// The initiating failure already produced the single error callback.
+			} finally {
+				if (this.state === 'failing') this.cleanupSession()
+			}
+		})()
+	}
+
+	private trackStopPromise(promise: Promise<void>): Promise<void> {
+		this.stopPromise = promise
+		void promise.then(
+			() => {
+				if (this.stopPromise === promise) this.stopPromise = undefined
+			},
+			() => {
+				if (this.stopPromise === promise) this.stopPromise = undefined
+			},
+		)
+		return promise
+	}
+
+	private fail(code: AsrErrorCode, epoch: number): void {
+		if (epoch !== this.epoch || this.state === 'idle') return
+		if (this.state === 'stopping') {
+			this.reportStopError(code, epoch)
+			return
+		}
+		if (this.state !== 'starting' && this.state !== 'recording') return
+		this.transition([this.state], 'failing', `fail:${code}`)
+		this.epoch++
 		this.stopBackpressureMonitor()
-		if (this.finalTimer) clearTimeout(this.finalTimer)
-		this.finalTimer = undefined
-		this.finalWaiter = undefined
-		this.socket?.close()
+		this.resolveFinalWaiter()
+		this.trackStopPromise(this.finishFailure())
+		this.reportError(code)
+		this.detachAndCloseSocket()
+	}
+
+	private reportStopError(code: AsrErrorCode, epoch: number): void {
+		if (this.failedDuringStop || (epoch !== this.epoch && this.state !== 'stopping')) return
+		this.failedDuringStop = true
+		this.epoch++
+		this.stopBackpressureMonitor()
+		this.resolveFinalWaiter()
+		this.reportError(code)
+		this.detachAndCloseSocket()
+	}
+
+	private reportError(code: AsrErrorCode): void {
+		if (this.reportedError) return
+		this.reportedError = true
+		for (const handler of this.errorHandlers) handler(code)
+	}
+
+	private detachAndCloseSocket(): void {
+		const handshakeReject = this.handshakeReject
+		this.handshakeReject = undefined
+		handshakeReject?.(new Error('ASR websocket lifecycle cancelled'))
+		const socket = this.socket
 		this.socket = undefined
+		if (!socket) return
+		socket.onopen = null
+		socket.onmessage = null
+		socket.onerror = null
+		socket.onclose = null
+		socket.close()
+	}
+
+	private cleanupSession(): void {
+		this.stopBackpressureMonitor()
+		this.resolveFinalWaiter()
+		this.detachAndCloseSocket()
 		this.queuedAudio = []
 		this.queuedBytes = 0
+		this.finalReceived = false
+		this.failedDuringStop = false
 		this.epoch++
-		this.state = 'idle'
+		this.transition(['stopping', 'failing'], 'idle', 'cleanup')
+	}
+
+	private isCurrent(epoch: number, state: EngineState): boolean {
+		return epoch === this.epoch && this.state === state
+	}
+
+	private transition(from: readonly EngineState[], to: EngineState, event: string): void {
+		if (!from.includes(this.state)) {
+			throw new Error(`Invalid ASR lifecycle transition ${this.state} -> ${to} (${event})`)
+		}
+		this.state = to
 	}
 }

@@ -157,7 +157,7 @@ function parseJson(bytes: Uint8Array): { readonly payloadText: string; readonly 
 		const json: unknown = JSON.parse(text)
 		return { payloadText: text, json }
 	} catch {
-		return { payloadText: text, json: undefined }
+		malformed('payload is not valid JSON')
 	}
 }
 
