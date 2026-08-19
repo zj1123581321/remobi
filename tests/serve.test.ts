@@ -1,4 +1,10 @@
-import { describe, expect, test } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { request as httpRequest } from 'node:http'
+import { createServer } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, test } from 'vitest'
+import { sleep, spawnProcess } from '../src/util/node-compat'
 import {
 	buildSecurityHeaders,
 	describeCommandForLogs,
@@ -8,6 +14,100 @@ import {
 	resolveRequestAuthority,
 	withSecurityHeaders,
 } from '../src/serve'
+
+const repoRoot = join(import.meta.dirname, '..')
+const runningProcesses: ReturnType<typeof spawnProcess>[] = []
+const tempDirs: string[] = []
+
+afterEach(async () => {
+	while (runningProcesses.length > 0) {
+		const proc = runningProcesses.pop()
+		if (!proc) continue
+		proc.kill('SIGINT')
+		await proc.exited
+	}
+	while (tempDirs.length > 0) {
+		const dir = tempDirs.pop()
+		if (dir) rmSync(dir, { recursive: true, force: true })
+	}
+})
+
+async function reservePort(): Promise<number> {
+	const server = createServer()
+	await new Promise<void>((resolve, reject) => {
+		server.once('error', reject)
+		server.listen(0, '127.0.0.1', () => resolve())
+	})
+	const address = server.address()
+	if (!address || typeof address === 'string') {
+		server.close()
+		throw new Error('failed to reserve test port')
+	}
+	await new Promise<void>((resolve, reject) => {
+		server.close((error) => (error ? reject(error) : resolve()))
+	})
+	return address.port
+}
+
+async function waitForHttp(url: string): Promise<void> {
+	const deadline = Date.now() + 10_000
+	while (Date.now() < deadline) {
+		try {
+			const statusCode = await requestStatus(url)
+			if (statusCode >= 200 && statusCode < 300) return
+		} catch {
+			// The serve process may still be starting.
+		}
+		await sleep(100)
+	}
+	throw new Error(`timed out waiting for ${url}`)
+}
+
+function requestStatus(url: string): Promise<number> {
+	return new Promise((resolve, reject) => {
+		const request = httpRequest(url, (response) => {
+			response.resume()
+			response.once('end', () => resolve(response.statusCode ?? 0))
+		})
+		request.once('error', reject)
+		request.end()
+	})
+}
+
+async function startServe(asrEnabled: boolean): Promise<{ port: number; url: string }> {
+	const port = await reservePort()
+	const configDir = mkdtempSync(join(tmpdir(), 'remobi-serve-test-'))
+	tempDirs.push(configDir)
+	const configPath = join(configDir, 'remobi.config.ts')
+	writeFileSync(
+		configPath,
+		`export default ${JSON.stringify({
+			asr: { enabled: asrEnabled, doubao: { apiKey: 'serve-test-key' } },
+		})}`,
+	)
+	const proc = spawnProcess(
+		[
+			'pnpm',
+			'exec',
+			'tsx',
+			'cli.ts',
+			'serve',
+			'--config',
+			configPath,
+			'--port',
+			String(port),
+			'--',
+			'bash',
+			'--norc',
+			'--noprofile',
+		],
+		{ cwd: repoRoot, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
+	)
+	runningProcesses.push(proc)
+	const url = `http://127.0.0.1:${port}`
+	await waitForHttp(url)
+	return { port, url }
+}
 
 describe('isLoopbackHost', () => {
 	test('accepts loopback hosts', () => {
@@ -133,6 +233,24 @@ describe('withSecurityHeaders', () => {
 		)
 		expect(response.headers.get('content-security-policy')).toContain('ws://127.0.0.1:7681')
 		expect(await response.text()).toBe('ok')
+	})
+})
+
+describe('serve document route', () => {
+	test('does not allow enabled-ASR HTML to be cached', async () => {
+		const { url } = await startServe(true)
+		const response = await new Promise<{ cacheControl: string | undefined }>((resolve, reject) => {
+			const request = httpRequest(url, (httpResponse) => {
+				httpResponse.resume()
+				httpResponse.once('end', () =>
+					resolve({ cacheControl: httpResponse.headers['cache-control'] }),
+				)
+			})
+			request.once('error', reject)
+			request.end()
+		})
+
+		expect(response.cacheControl).toBe('private, no-store')
 	})
 })
 
