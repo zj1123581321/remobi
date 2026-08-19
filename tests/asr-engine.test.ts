@@ -88,6 +88,30 @@ class SlowSocket implements WebSocketLike {
 	close(): void {}
 }
 
+class BrowserWebSocketProbe {
+	static readonly instances: BrowserWebSocketProbe[] = []
+	readonly readyState = 1
+	readonly bufferedAmount = 0
+	binaryType: BinaryType = 'blob'
+	onopen: (() => void) | null = null
+	onerror: ((event: { readonly type: string }) => void) | null = null
+	onclose: ((event: { readonly code: number; readonly reason: string }) => void) | null = null
+	onmessage: ((event: { readonly data: unknown }) => void) | null = null
+
+	constructor(readonly url: string) {
+		BrowserWebSocketProbe.instances.push(this)
+		queueMicrotask(() => this.onopen?.())
+	}
+
+	send(_data: Uint8Array): void {}
+
+	close(): void {}
+
+	triggerClose(): void {
+		this.onclose?.({ code: 1000, reason: '' })
+	}
+}
+
 class RuntimeErrorSocket extends SlowSocket {
 	triggerError(): void {
 		this.onerror?.({ message: 'runtime failure' })
@@ -127,6 +151,26 @@ function serverResponse(json: unknown, final = false): ArrayBuffer {
 }
 
 describe('DoubaoEngine', () => {
+	test('sets browser websocket binaryType to arraybuffer', async () => {
+		vi.stubGlobal('WebSocket', BrowserWebSocketProbe)
+		BrowserWebSocketProbe.instances.length = 0
+		const capture = new FakeCapture()
+		const engine = new DoubaoEngine({
+			apiKey: 'test-api-key',
+			resourceId: 'volc.seedasr.sauc.duration',
+			capture,
+		})
+
+		try {
+			await engine.start()
+			const socket = BrowserWebSocketProbe.instances[0]
+			expect(socket?.binaryType).toBe('arraybuffer')
+			socket?.triggerClose()
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
+
 	test('requires websocket support even when capture is injected', () => {
 		vi.stubGlobal('WebSocket', undefined)
 		try {

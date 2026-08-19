@@ -89,6 +89,7 @@ class BrowserWebSocketAdapter implements WebSocketLike {
 
 	constructor(socket: WebSocket) {
 		this.socket = socket
+		this.socket.binaryType = 'arraybuffer'
 	}
 
 	get readyState(): number {
