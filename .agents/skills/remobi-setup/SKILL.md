@@ -316,7 +316,7 @@ Tell the user:
 Exactly these — validation rejects anything else:
 
 ```
-name  theme  font  toolbar  drawer  gestures  mobile  floatingButtons  scrollButtons  pwa  reconnect
+name  theme  font  toolbar  drawer  gestures  mobile  floatingButtons  scrollButtons  pwa  reconnect  asr
 ```
 
 ### ButtonAction union
@@ -480,6 +480,20 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `pwa.enabled` | `true` | Set `false` to disable manifest + icons |
 | `pwa.themeColor` | `'#1e1e2e'` | Status bar colour on mobile |
 | `pwa.shortName` | (none) | Short name for home screen icon, falls back to `name` |
+
+### ASR voice input
+
+ASR is disabled by default. Enable the browser-direct Doubao provider only when the user has
+chosen to expose an API key to the browser; keep the key in `remobi.config.local.ts` (never in
+the shared config file).
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `asr.enabled` | `false` | Enables microphone permission and the Doubao websocket origin |
+| `asr.provider` | `'doubao'` | The only provider in the current release |
+| `asr.doubao.apiKey` | `''` | Single query-auth API key; keep it in the `.local` config |
+| `asr.doubao.resourceId` | `'volc.seedasr.sauc.duration'` | Volcengine SAUC resource id |
+| `asr.autoEnter` | `false` | Reserved for the voice-input flow; PTT UI is separate from the engine |
 
 ### Hooks (advanced)
 

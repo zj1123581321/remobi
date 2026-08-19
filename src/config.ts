@@ -282,6 +282,16 @@ const defaultPwa: PwaConfig = {
 	themeColor: '#1e1e2e',
 }
 
+const defaultAsr: RemobiConfig['asr'] = {
+	enabled: false,
+	provider: 'doubao',
+	doubao: {
+		apiKey: '',
+		resourceId: 'volc.seedasr.sauc.duration',
+	},
+	autoEnter: false,
+}
+
 /** Complete default configuration */
 export const defaultConfig: RemobiConfig = {
 	name: 'remobi',
@@ -295,6 +305,7 @@ export const defaultConfig: RemobiConfig = {
 	scrollButtons: { enabled: false },
 	pwa: defaultPwa,
 	reconnect: { enabled: true },
+	asr: defaultAsr,
 }
 
 /** Deep merge two objects, with `override` taking precedence */

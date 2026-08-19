@@ -96,6 +96,18 @@ describe('buildSecurityHeaders', () => {
 		expect(csp).toContain('ws://192.168.1.10:7681')
 		expect(csp).toContain('wss://192.168.1.10:7681')
 	})
+
+	test('does not grant microphone or Doubao access when ASR is disabled', () => {
+		const headers = buildSecurityHeaders('127.0.0.1:7681', '127.0.0.1', 7681, 'nonce-123', false)
+		expect(headers['permissions-policy']).toBe('camera=(), microphone=(), geolocation=()')
+		expect(headers['content-security-policy']).not.toContain('openspeech.bytedance.com')
+	})
+
+	test('grants only microphone and the Doubao origin when ASR is enabled', () => {
+		const headers = buildSecurityHeaders('127.0.0.1:7681', '127.0.0.1', 7681, 'nonce-123', true)
+		expect(headers['permissions-policy']).toBe('camera=(), microphone=(self), geolocation=()')
+		expect(headers['content-security-policy']).toContain('wss://openspeech.bytedance.com')
+	})
 })
 
 describe('withSecurityHeaders', () => {

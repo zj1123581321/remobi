@@ -106,6 +106,26 @@ describe('defineConfig', () => {
 		expect(config.pwa.enabled).toBe(true)
 		expect(config.pwa.themeColor).toBe('#1e1e2e')
 	})
+
+	test('has disabled Doubao ASR defaults with the spike resource id', () => {
+		expect(defaultConfig.asr).toEqual({
+			enabled: false,
+			provider: 'doubao',
+			doubao: { apiKey: '', resourceId: 'volc.seedasr.sauc.duration' },
+			autoEnter: false,
+		})
+	})
+
+	test('merges nested ASR overrides without dropping defaults', () => {
+		const config = defineConfig({ asr: { enabled: true, doubao: { apiKey: 'sk-test' } } })
+		expect(config.asr.enabled).toBe(true)
+		expect(config.asr.provider).toBe('doubao')
+		expect(config.asr.doubao).toEqual({
+			apiKey: 'sk-test',
+			resourceId: 'volc.seedasr.sauc.duration',
+		})
+		expect(config.asr.autoEnter).toBe(false)
+	})
 })
 
 describe('defaultConfig', () => {
