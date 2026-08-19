@@ -30,6 +30,7 @@ const fontSizeActionSchema = v.strictObject({
 })
 const helpActionSchema = v.strictObject({ type: v.literal('help') })
 const keyboardToggleActionSchema = v.strictObject({ type: v.literal('keyboard-toggle') })
+const dpadToggleActionSchema = v.strictObject({ type: v.literal('dpad-toggle') })
 
 const buttonActionSchema = v.variant('type', [
 	sendActionSchema,
@@ -41,6 +42,7 @@ const buttonActionSchema = v.variant('type', [
 	fontSizeActionSchema,
 	helpActionSchema,
 	keyboardToggleActionSchema,
+	dpadToggleActionSchema,
 ])
 
 // --- Control button ---

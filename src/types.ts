@@ -9,6 +9,7 @@ export type ButtonAction =
 	| { readonly type: 'font-size'; readonly delta: number }
 	| { readonly type: 'help' }
 	| { readonly type: 'keyboard-toggle' }
+	| { readonly type: 'dpad-toggle' }
 
 /** A generic control button definition used by toolbar and drawer */
 export interface ControlButton {
