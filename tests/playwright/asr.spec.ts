@@ -3,6 +3,12 @@ import { expect, test } from '@playwright/test'
 import asrConfig from './asr.config'
 import { startIsolatedServe } from './isolated-serve'
 
+declare global {
+	interface Window {
+		__pttConnectionStates?: boolean[]
+	}
+}
+
 const repoRoot = join(import.meta.dirname, '../..')
 const configPath = join(repoRoot, 'tests/playwright/asr.config.ts')
 const voiceButton = asrConfig.toolbar.row1.at(0)
@@ -41,6 +47,7 @@ test.describe('PTT voice input', () => {
 		if (!server) throw new Error('PTT test server was not started')
 		const partial = serverFrame(0, 'partial')
 		const asrFrames: Buffer[] = []
+		const frameCounts = { fullRequest: 0, audio: 0, end: 0 }
 		let currentText = ''
 		await page.routeWebSocket('wss://openspeech.bytedance.com/**', (socket) => {
 			let partialSent = false
@@ -50,9 +57,13 @@ test.describe('PTT voice input', () => {
 				const buffer = Buffer.isBuffer(message) ? message : Buffer.from(message)
 				asrFrames.push(buffer)
 				const frame = frameType(buffer)
+				if (frame.type === 1) frameCounts.fullRequest++
 				if (frame.type !== 2) return
-				if (frame.flags === 2 || frame.flags === 3) socket.send(final())
-				else if (!partialSent) {
+				frameCounts.audio++
+				if (frame.flags === 2 || frame.flags === 3) {
+					frameCounts.end++
+					socket.send(final())
+				} else if (!partialSent) {
 					partialSent = true
 					socket.send(partial)
 				}
@@ -60,7 +71,9 @@ test.describe('PTT voice input', () => {
 		})
 
 		for (let attempt = 0; attempt < 5; attempt++) {
-			currentText = `printf "ptt-e2e-${attempt}\\n"`
+			currentText = `printf '\\x4f\\x55\\x54\\x50\\x55\\x54-${attempt}\\n'`
+			const outputMarker = `OUTPUT-${attempt}`
+			expect(currentText).not.toContain(outputMarker)
 			const suffix = attempt === 0 ? '' : `-${attempt}`
 			await page.goto(server.url)
 			await page.waitForSelector('#wt-toolbar [data-remobi-action="voice-input"]')
@@ -81,10 +94,55 @@ test.describe('PTT voice input', () => {
 			await page.screenshot({ path: `test-results/ptt-preview${suffix}.png` })
 
 			await page.locator('#wt-asr-preview button', { hasText: 'Send' }).click()
-			await expect(page.locator('body')).toContainText(`ptt-e2e-${attempt}`, { timeout: 5_000 })
+			await expect(page.locator('#terminal .xterm-rows')).toContainText(outputMarker, {
+				timeout: 5_000,
+			})
 			await page.screenshot({ path: `test-results/ptt-injected${suffix}.png` })
 		}
 		expect(asrFrames.some((frame) => ((frame[1] ?? 0) & 0x0f) === 3)).toBe(true)
+		expect(frameCounts.fullRequest).toBeGreaterThanOrEqual(5)
+		expect(frameCounts.audio).toBeGreaterThan(0)
+		expect(frameCounts.end).toBeGreaterThanOrEqual(5)
+	})
+
+	test('connection observer replays a disconnected state to late subscribers', async ({ page }) => {
+		if (!server) throw new Error('PTT test server was not started')
+		await page.goto(server.url)
+		await page.waitForSelector('#terminal .xterm')
+		await expect.poll(() => page.evaluate(() => window.__remobiSockets?.[0]?.readyState)).toBe(1)
+		await page.evaluate(() => window.__remobiSockets?.[0]?.close())
+		await expect
+			.poll(() => page.evaluate(() => window.__remobiSockets?.[0]?.readyState), { timeout: 5_000 })
+			.toBe(3)
+		await page.evaluate(() => {
+			window.__pttConnectionStates = []
+			window.term?.onConnectionChange((connected) => {
+				window.__pttConnectionStates?.push(connected)
+			})
+		})
+		await expect.poll(() => page.evaluate(() => window.__pttConnectionStates)).toEqual([false])
+	})
+
+	test('socket error followed by close emits one disconnected transition', async ({ page }) => {
+		if (!server) throw new Error('PTT test server was not started')
+		await page.goto(server.url)
+		await page.waitForSelector('#terminal .xterm')
+		await expect.poll(() => page.evaluate(() => window.__remobiSockets?.[0]?.readyState)).toBe(1)
+		await page.evaluate(() => {
+			window.__pttConnectionStates = []
+			window.term?.onConnectionChange((connected) => {
+				window.__pttConnectionStates?.push(connected)
+			})
+			const socket = window.__remobiSockets?.[0]
+			socket?.close()
+			socket?.dispatchEvent(new Event('error'))
+		})
+		await expect
+			.poll(
+				() => page.evaluate(() => window.__pttConnectionStates?.filter((state) => !state).length),
+				{ timeout: 5_000 },
+			)
+			.toBe(1)
 	})
 })
 
