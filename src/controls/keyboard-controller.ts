@@ -6,6 +6,15 @@ import { isKeyboardOpen } from '../util/keyboard'
 const KEYBOARD_TOGGLE_DEBOUNCE_MS = 300
 
 /**
+ * Suppress the synthesised mousedown after touchend so the button never
+ * steals focus from the terminal textarea (探针③). Shared by keyboard-toggle
+ * buttons and the floating d-pad keys.
+ */
+export function suppressSynthesisedMouse(button: HTMLButtonElement): void {
+	button.addEventListener('touchend', (e) => e.preventDefault())
+}
+
+/**
  * Decorate a keyboard-toggle button: marker class (indicator + error-state
  * wiring) and the touchend guard against the synthesised-mousedown focus
  * steal (探针③). Shared by the toolbar, drawer, and floating renderers.
@@ -16,7 +25,7 @@ export function decorateKeyboardToggleButton(button: HTMLButtonElement): void {
 	// to the button — an unlock focus() would be lost and the keyboard would
 	// never open. preventDefault suppresses the synthesised mouse events for
 	// this button only. Locking is unaffected (it blurs anyway).
-	button.addEventListener('touchend', (e) => e.preventDefault())
+	suppressSynthesisedMouse(button)
 }
 
 /** Reflect the controller's indicator state on every keyboard-toggle button */
