@@ -225,7 +225,6 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	let heartbeatPingId: string | null = null
 	let immediateAttemptQueued = false
 	let pageHidden = document.visibilityState === 'hidden'
-	let preSyncFailureHandled = false
 	const connectionListeners = new Set<(connected: boolean) => void>()
 	const connectionStatusListeners = new Set<(status: ConnectionStatus) => void>()
 	let lastConnectedState: boolean | undefined
@@ -367,8 +366,6 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	}
 
 	function recordPreSyncFailure(reason: ConnectionFailureReason): void {
-		if (preSyncFailureHandled) return
-		preSyncFailureHandled = true
 		connectionStatus = {
 			state: 'disconnected',
 			consecutivePreSyncFailures: connectionStatus.consecutivePreSyncFailures + 1,
@@ -391,7 +388,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	function scheduleReconnect(): void {
 		if (pageHidden || reconnectTimer !== undefined) return
 		const backoffIndex = Math.min(
-			connectionStatus.consecutivePreSyncFailures,
+			Math.max(connectionStatus.consecutivePreSyncFailures - 1, 0),
 			RECONNECT_BACKOFF_MS.length - 1,
 		)
 		setConnectionStatus('reconnecting')
@@ -452,11 +449,11 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	function applySnapshot(myEpoch: number, data: string, outputWatermark: number): void {
 		if (myEpoch !== currentEpoch || snapshotLoaded || snapshotApplying) return
 		snapshotApplying = true
-		clearTimer(snapshotDeadlineTimer)
-		snapshotDeadlineTimer = undefined
 		term.reset()
 		term.write(data, () => {
 			if (myEpoch !== currentEpoch || !snapshotApplying) return
+			clearTimer(snapshotDeadlineTimer)
+			snapshotDeadlineTimer = undefined
 			snapshotApplying = false
 			snapshotLoaded = true
 			connectionStatus = {
@@ -464,7 +461,6 @@ function main(config: RemobiConfig, version: string | undefined): void {
 				consecutivePreSyncFailures: 0,
 				lastFailureReason: null,
 			}
-			preSyncFailureHandled = false
 			notSentNoticeShown = false
 			for (const listener of connectionStatusListeners) listener(connectionStatus)
 			notifyConnectionChange()
@@ -573,7 +569,6 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		snapshotLoaded = false
 		snapshotApplying = false
 		clearPendingOutput()
-		preSyncFailureHandled = false
 		setConnectionStatus('reconnecting')
 
 		const nextSocket = new WebSocket(createSocketUrl())
@@ -591,10 +586,6 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		})
 		nextSocket.addEventListener('close', () => {
 			if (myEpoch !== currentEpoch) return
-			if (connectionStatus.state === 'synced') {
-				failConnection(myEpoch, 'socket-closed')
-				return
-			}
 			failConnection(myEpoch, 'socket-closed')
 		})
 		nextSocket.addEventListener('error', () => {

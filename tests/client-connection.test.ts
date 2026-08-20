@@ -82,6 +82,10 @@ class FakeSocket extends EventTarget {
 	}
 }
 
+function receive(socket: FakeSocket, message: Record<string, unknown>): void {
+	socket.receive(JSON.stringify(message))
+}
+
 vi.mock('@xterm/xterm', () => ({ Terminal: FakeTerminal }))
 vi.mock('@xterm/addon-fit', () => ({
 	FitAddon: class {
@@ -137,28 +141,14 @@ describe('client connection state machine', () => {
 		terminal.rows = 40
 		window.__remobiResize?.()
 
-		socket.receive(
-			JSON.stringify({
-				type: 'output',
-				data: 'five',
-				seq: 5,
-			}),
-		)
-		socket.receive(
-			JSON.stringify({
-				type: 'output',
-				data: 'four',
-				seq: 4,
-			}),
-		)
-		socket.receive(
-			JSON.stringify({
-				type: 'snapshot',
-				data: 'snapshot',
-				sessionId: 'session-1',
-				outputWatermark: 3,
-			}),
-		)
+		receive(socket, { type: 'output', data: 'five', seq: 5 })
+		receive(socket, { type: 'output', data: 'four', seq: 4 })
+		receive(socket, {
+			type: 'snapshot',
+			data: 'snapshot',
+			sessionId: 'session-1',
+			outputWatermark: 3,
+		})
 
 		expect(window.term?.isConnected()).toBe(true)
 		expect(socket.sent).toHaveLength(2)
@@ -179,5 +169,24 @@ describe('client connection state machine', () => {
 		await vi.advanceTimersByTimeAsync(1)
 		expect(socket.sent).toHaveLength(3)
 		expect(JSON.parse(socket.sent[2] as string).type).toBe('ping')
+	})
+
+	test('isolates old epochs and treats snapshot timeout as a backoff failure', async () => {
+		const writesBeforeClose = [...(harness.terminals[0] as FakeTerminal).writes]
+		socket.close()
+		receive(socket, { type: 'snapshot', data: 'stale', sessionId: 'old', outputWatermark: 0 })
+		expect((harness.terminals[0] as FakeTerminal).writes).toEqual(writesBeforeClose)
+		await vi.advanceTimersByTimeAsync(1_000)
+		const nextSocket = harness.sockets[1] as FakeSocket
+		nextSocket.open()
+		await vi.advanceTimersByTimeAsync(9_999)
+		expect(nextSocket.readyState).toBe(FakeSocket.OPEN)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(nextSocket.readyState).toBe(FakeSocket.CLOSED)
+		expect(window.term?.getConnectionStatus?.()).toMatchObject({
+			state: 'reconnecting',
+			consecutivePreSyncFailures: 1,
+			lastFailureReason: 'snapshot-timeout',
+		})
 	})
 })
