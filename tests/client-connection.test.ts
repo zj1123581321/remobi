@@ -757,14 +757,19 @@ describe('client connection state machine', () => {
 		expect(getStatus().state).toBe('synced')
 	})
 
-	test('dispose removes freeze and resume listeners', async () => {
-		const socket = await freshSynced()
-		const socketCount = harness.sockets.length
+	test('beforeunload does not dispose lifecycle listeners', async () => {
+		const oldSocket = await freshSynced()
 		window.dispatchEvent(new Event('beforeunload'))
-		expect(socket.readyState).toBe(FakeSocket.CLOSED)
-		document.dispatchEvent(new Event('freeze'))
-		document.dispatchEvent(new Event('resume'))
-		await vi.advanceTimersByTimeAsync(20_000)
-		expect(harness.sockets).toHaveLength(socketCount)
+		expect(oldSocket.readyState).toBe(FakeSocket.OPEN)
+
+		setVisibility('hidden')
+		document.dispatchEvent(new Event('visibilitychange'))
+		expect(oldSocket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().state).toBe('disconnected')
+
+		setVisibility('visible')
+		document.dispatchEvent(new Event('visibilitychange'))
+		await vi.advanceTimersByTimeAsync(0)
+		expect(currentSocket()).not.toBe(oldSocket)
 	})
 })

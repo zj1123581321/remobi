@@ -711,7 +711,6 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	window.addEventListener('pageshow', onPageShow)
 	window.addEventListener('online', onOnline)
 	window.addEventListener('offline', onOffline)
-	window.addEventListener('beforeunload', dispose)
 
 	connect()
 
