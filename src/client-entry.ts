@@ -410,6 +410,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 
 	function failConnection(myEpoch: number, reason: ConnectionFailureReason, notice?: string): void {
 		if (myEpoch !== currentEpoch) return
+		const sessionEnded = exitReceived
 		const failedSocket = socket
 		invalidateConnection()
 		socket = null
@@ -421,8 +422,13 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		} else {
 			setConnectionStatus('disconnected', reason)
 		}
+		if (sessionEnded) {
+			const sessionEndedNotice = 'Session ended — restart remobi to start a new one.'
+			window.dispatchEvent(new CustomEvent('remobi-connection-notice', { detail: sessionEndedNotice }))
+			showSessionStatus(sessionEndedNotice)
+		}
 		failedSocket?.close()
-		scheduleReconnect()
+		if (!sessionEnded) scheduleReconnect()
 	}
 
 	function sendHeartbeat(myEpoch: number): void {
@@ -522,7 +528,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 			return
 		}
 
-		switch (message.type) {
+			switch (message.type) {
 			case 'snapshot':
 				applySnapshot(myEpoch, message.data, message.outputWatermark)
 				return
@@ -531,7 +537,6 @@ function main(config: RemobiConfig, version: string | undefined): void {
 				return
 			case 'exit':
 				exitReceived = true
-				showSessionStatus('Session ended')
 				return
 			case 'error':
 				console.error(`remobi: ${message.message}`)
@@ -598,13 +603,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		})
 		nextSocket.addEventListener('close', () => {
 			if (myEpoch !== currentEpoch) return
-			const sessionEnded = exitReceived
 			failConnection(myEpoch, 'socket-closed')
-			if (sessionEnded) {
-				window.dispatchEvent(
-					new CustomEvent('remobi-connection-notice', { detail: 'Connection lost' }),
-				)
-			}
 		})
 		nextSocket.addEventListener('error', () => {
 			if (myEpoch !== currentEpoch) return
