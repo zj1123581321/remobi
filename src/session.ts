@@ -1,11 +1,13 @@
+import { randomUUID } from 'node:crypto'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import XtermHeadless from '@xterm/headless'
 import { type IPty, spawnPty } from './pty'
-import type { ClientMessage, ServerMessage } from './session-protocol'
+import type { ClientMessage, InputRejectedReason, ServerMessage } from './session-protocol'
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
+const TERMINAL_ERROR = 'Terminal failed; restart remobi.'
 
 const HeadlessTerminal = XtermHeadless.Terminal
 type HeadlessTerminalInstance = InstanceType<typeof HeadlessTerminal>
@@ -71,6 +73,7 @@ export function buildSessionEnv(sourceEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv
 }
 
 export class SharedTerminalSession {
+	private readonly sessionId = randomUUID()
 	private readonly pty: IPty
 	private readonly mirror: HeadlessTerminalInstance
 	private readonly serializeAddon: SerializeAddon
@@ -79,6 +82,9 @@ export class SharedTerminalSession {
 	private exitResolve: ((exit: SessionExit) => void) | null = null
 	private exited: SessionExit | null = null
 	private pendingMirrorWrite: Promise<void> = Promise.resolve()
+	private outputSeq = 0
+	private terminalFailed = false
+	private readonly inputActions = new Map<string, string>()
 
 	constructor(command: readonly string[]) {
 		const { file, args } = normaliseCommand(command)
@@ -110,16 +116,19 @@ export class SharedTerminalSession {
 		})
 
 		this.pty.onData((data) => {
+			const seq = ++this.outputSeq
 			this.pendingMirrorWrite = this.pendingMirrorWrite
-				.then(
-					() =>
-						new Promise<void>((resolve) => {
-							this.mirror.write(data, resolve)
-						}),
-				)
-				.catch(() => {})
+				.then(() => {
+					if (this.terminalFailed) return
+					return new Promise<void>((resolve) => {
+						this.mirror.write(data, resolve)
+					})
+				})
+				.catch(() => {
+					this.failTerminal()
+				})
 
-			this.broadcast({ type: 'output', data })
+			this.broadcast({ type: 'output', data, seq })
 		})
 
 		this.pty.onExit(({ exitCode, signal }) => {
@@ -144,10 +153,19 @@ export class SharedTerminalSession {
 	}
 
 	async addClient(client: SessionClient): Promise<void> {
+		if (this.terminalFailed) {
+			this.rejectUnavailable(client)
+			return
+		}
+
 		const exitedBeforeSnapshot = this.exited
 		if (exitedBeforeSnapshot) {
 			const snapshot = await this.snapshot()
-			client.send({ type: 'snapshot', data: snapshot })
+			if (this.terminalFailed) {
+				this.rejectUnavailable(client)
+				return
+			}
+			client.send({ type: 'snapshot', ...snapshot, sessionId: this.sessionId })
 			client.send({
 				type: 'exit',
 				exitCode: exitedBeforeSnapshot.exitCode,
@@ -159,7 +177,15 @@ export class SharedTerminalSession {
 
 		this.clients.add(client)
 		const snapshot = await this.snapshot()
-		client.send({ type: 'snapshot', data: snapshot })
+		if (this.terminalFailed) {
+			if (this.clients.delete(client)) {
+				this.rejectUnavailable(client)
+			} else {
+				client.close()
+			}
+			return
+		}
+		client.send({ type: 'snapshot', ...snapshot, sessionId: this.sessionId })
 
 		const exitedAfterSnapshot = this.exited
 		if (exitedAfterSnapshot) {
@@ -180,7 +206,7 @@ export class SharedTerminalSession {
 	handleClientMessage(client: SessionClient, message: ClientMessage): void {
 		switch (message.type) {
 			case 'input':
-				if (this.exited) return
+				if (this.exited || this.terminalFailed) return
 				this.pty.write(message.data)
 				return
 
@@ -191,7 +217,11 @@ export class SharedTerminalSession {
 				return
 
 			case 'ping':
-				client.send({ type: 'pong' })
+				client.send({ type: 'pong', id: message.id })
+				return
+
+			case 'input-action':
+				this.handleInputAction(client, message.id, message.data)
 				return
 		}
 	}
@@ -208,9 +238,69 @@ export class SharedTerminalSession {
 		}
 	}
 
-	private async snapshot(): Promise<string> {
-		await this.pendingMirrorWrite
-		return this.serializeAddon.serialize() + this.serializeMouseEncoding()
+	private async snapshot(): Promise<{ data: string; outputWatermark: number }> {
+		for (;;) {
+			const pending = this.pendingMirrorWrite
+			await pending
+			if (this.pendingMirrorWrite !== pending) continue
+			return {
+				data: this.serializeAddon.serialize() + this.serializeMouseEncoding(),
+				outputWatermark: this.outputSeq,
+			}
+		}
+	}
+
+	private handleInputAction(client: SessionClient, id: string, data: string): void {
+		if (this.exited || this.terminalFailed) {
+			this.sendInputRejected(client, id, 'session-unavailable')
+			client.close()
+			this.clients.delete(client)
+			return
+		}
+
+		const recordedData = this.inputActions.get(id)
+		if (recordedData !== undefined) {
+			if (recordedData === data) {
+				client.send({ type: 'input-accepted', id })
+			} else {
+				this.sendInputRejected(client, id, 'id-conflict')
+			}
+			return
+		}
+
+		try {
+			this.pty.write(data)
+		} catch {
+			this.sendInputRejected(client, id, 'session-unavailable')
+			this.failTerminal()
+			return
+		}
+
+		this.inputActions.set(id, data)
+		if (this.inputActions.size > 128) {
+			const oldestId = this.inputActions.keys().next().value
+			if (oldestId !== undefined) this.inputActions.delete(oldestId)
+		}
+		client.send({ type: 'input-accepted', id })
+	}
+
+	private sendInputRejected(client: SessionClient, id: string, reason: InputRejectedReason): void {
+		client.send({ type: 'input-rejected', id, reason })
+	}
+
+	private rejectUnavailable(client: SessionClient): void {
+		client.send({ type: 'error', message: TERMINAL_ERROR })
+		client.close()
+	}
+
+	private failTerminal(): void {
+		if (this.terminalFailed) return
+		this.terminalFailed = true
+		this.broadcast({ type: 'error', message: TERMINAL_ERROR })
+		for (const client of this.clients) {
+			client.close()
+		}
+		this.clients.clear()
 	}
 
 	// Without ?1006h in the snapshot, late-joining browser clients fall back
