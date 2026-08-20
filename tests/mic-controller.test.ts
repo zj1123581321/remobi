@@ -272,7 +272,7 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		harness.controller.dispose()
 	})
 
-	test('idle close and backdrop discard without starting the engine', () => {
+	test('idle close button discards while composer clicks do not', () => {
 		const harness = createHarness()
 		dispatchTap(harness.composerButton)
 		harness.controller.preview.input.value = 'discard me'
@@ -282,8 +282,8 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		expect(harness.controller.state).toBe('idle')
 		expect(harness.engine.starts).toBe(0)
 		expect(harness.engine.stops).toBe(0)
-		expect(harness.controller.preview.isOpen()).toBe(false)
-		dispatchTap(harness.composerButton)
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.getText()).toBe('discard me')
 		dispatchPreviewTap(harness, 'close')
 		expect(harness.engine.stops).toBe(0)
 		expect(harness.controller.preview.isOpen()).toBe(false)

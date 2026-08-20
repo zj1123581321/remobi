@@ -1,6 +1,6 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { lockDocumentHeight, viewportHeight } from '../src/viewport/height'
+import { bottomChromeHeight, lockDocumentHeight, viewportHeight } from '../src/viewport/height'
 import { checkLandscapeKeyboard } from '../src/viewport/landscape'
 
 beforeEach(() => {
@@ -115,6 +115,21 @@ describe('viewportHeight', () => {
 	test('falls back to innerHeight when no visual viewport', () => {
 		expect(viewportHeight(null, 900, false)).toBe(900)
 	})
+})
+
+describe('bottomChromeHeight', () => {
+	test.each([
+		['keyboard takes priority', true, true, 80, 160, 0],
+		['composer replaces toolbar', false, true, 80, 160, 160],
+		['toolbar is the default', false, false, 80, 160, 80],
+	] as const)(
+		'%s',
+		(_label, keyboardOpen, composerOpen, toolbarHeight, composerHeight, expected) => {
+			expect(bottomChromeHeight(keyboardOpen, composerOpen, toolbarHeight, composerHeight)).toBe(
+				expected,
+			)
+		},
+	)
 })
 
 describe('lockDocumentHeight', () => {

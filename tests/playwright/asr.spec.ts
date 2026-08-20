@@ -89,6 +89,18 @@ test.describe('Voice composer tap-to-toggle input', () => {
 			await expect(composer).toBeVisible()
 			await expect(composer.locator('input')).toHaveAttribute('placeholder', 'Speak or type…')
 			await expect(composer.locator('input')).not.toBeFocused()
+			await expect(page.locator('#terminal .xterm-rows')).toBeVisible()
+			await expect(page.locator('#wt-toolbar')).toBeHidden()
+			await expect(page.locator('body')).toHaveClass(/wt-composer-open/)
+			const composerBox = await composer.boundingBox()
+			if (!composerBox) throw new Error('voice composer must have a visible bounding box')
+			expect(composerBox.y).toBeGreaterThan((await page.evaluate(() => window.innerHeight)) / 2)
+			const composerStyle = await composer.evaluate((element) => {
+				const style = getComputedStyle(element)
+				return { top: style.top, backgroundColor: style.backgroundColor }
+			})
+			expect(Number.parseFloat(composerStyle.top)).toBeGreaterThan(0)
+			expect(composerStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0.58)')
 			await expect(composer.locator('[data-remobi-control="composer-mic"]')).toHaveAttribute(
 				'data-mic-state',
 				'idle',
