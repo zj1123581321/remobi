@@ -9,4 +9,4 @@ RestartSec=3
 Environment=HOME=%h
 Environment=PATH=/home/zlx/.local/share/fnm/aliases/default/bin:/home/zlx/.local/bin:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=/home/zlx/projects/oss/remobi
-ExecStart=pnpm exec tsx cli.ts serve --host 127.0.0.1 --port 7691 --base-path /remobi --config /home/zlx/projects/oss/remobi/.omo/remobi-debug.config.ts -- herdr session attach remobi-dev
+ExecStart=/home/zlx/.local/share/fnm/aliases/default/bin/pnpm exec tsx cli.ts serve --host 127.0.0.1 --port 7691 --base-path /remobi --config /home/zlx/projects/oss/remobi/.omo/remobi-debug.config.ts -- herdr session attach remobi-dev
