@@ -86,6 +86,43 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
  */
 const defaultRow2: RemobiConfig['toolbar']['row2'] = []
 
+/** Default toolbar entry for the optional two-layer voice composer. */
+export const voiceComposerButton: ControlButton = {
+	id: 'voice-input',
+	label: 'Voice',
+	description: 'Open voice composer',
+	action: { type: 'voice-input' },
+}
+
+/** Purely inject the voice entry into the reachable toolbar when ASR is enabled. */
+export function withVoiceComposerEntry(config: RemobiConfig): RemobiConfig {
+	if (!config.asr.enabled) return config
+
+	const rows = [config.toolbar.row1, config.toolbar.row2]
+	if (rows.flat().some((button) => button.action.type === 'voice-input')) return config
+
+	const keyboardRow = rows.findIndex((row) =>
+		row.some((button) => button.action.type === 'keyboard-toggle'),
+	)
+	const drawerRow = rows.findIndex((row) => row.some((button) => button.action.type === 'drawer-toggle'))
+	const rowIndex = keyboardRow >= 0 ? keyboardRow : drawerRow >= 0 ? drawerRow : 0
+	const row = rows[rowIndex] ?? []
+	const anchorType = keyboardRow >= 0 ? 'keyboard-toggle' : 'drawer-toggle'
+	const anchorIndex = row.findIndex((button) => button.action.type === anchorType)
+	const insertIndex = anchorIndex >= 0 && anchorType === 'keyboard-toggle' ? anchorIndex + 1 : anchorIndex
+	const nextRow = [...row]
+	if (insertIndex >= 0) nextRow.splice(insertIndex, 0, voiceComposerButton)
+	else nextRow.push(voiceComposerButton)
+
+	return {
+		...config,
+		toolbar: {
+			row1: rowIndex === 0 ? nextRow : config.toolbar.row1,
+			row2: rowIndex === 1 ? nextRow : config.toolbar.row2,
+		},
+	}
+}
+
 /** Default drawer commands */
 export const defaultDrawerButtons: readonly ControlButton[] = [
 	{
