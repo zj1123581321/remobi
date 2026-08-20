@@ -132,6 +132,12 @@ draft --点击提交--> pending(已持久化) --同 sessionId 且 synced--> sent
 - 协议不再提供不可触发的 `pty-write-failed` reason。能够同步观察到的 `pty.write` 异常属于 PTY 层严重故障：它与 mirror 写失败共用唯一的粘性 `terminalFailed` fail-loud 路径，触发方先收到 `session-unavailable`，随后当前 client 收到不含终端正文的 `Terminal failed; restart remobi.` 并被关闭；后续 attach 被拒，后续 action 也只能收到 `session-unavailable`。
 - 已否决三条试图侦测异步失败的修法：拦截全局 `console.error` 不可靠且会混入无关错误；monkey-patch node-pty 会改变依赖行为；绕过 node-pty 直接用 `pty.fd` 调 `fs.write` 会与 node-pty 的 `_writeQueue` 争用同一 fd，破坏 `handleFlowControl` 的流控。remobi 不采用这些修法，也不伪称跨进程 exactly-once。
 
+## Invariants
+
+- **I1：停止运行或链路不可达必使 `synced` 失效。** `src/client-entry.ts` 的 `suspendConnection()` 负责递增 epoch、清理计时器、停止心跳并关闭当前 socket；`onVisibilityChange`、`onPageHide`、`onOffline` 和既有失败路径都复用它或 `failConnection()`。`tests/client-connection.test.ts` 的 `freeze suspends a synced socket through the pagehide path`、`offline immediately invalidates synced and closes its socket` 以及 stale freshness 参数化用例锁死该行为。
+- **I2：恢复运行必经新 epoch 与完整 snapshot。** `src/client-entry.ts` 的 `onPageShow()` 复用 `queueImmediateConnect(true)`，新连接只有 `applySnapshot()` 成功后才进入 `synced`；`beforeunload` 不再调用连接状态机的 dispose，避免页面仍存活时丢失恢复监听。`tests/client-connection.test.ts` 的 `resume starts a new epoch and requires a new snapshot`、`resume merged with visible and pageshow creates one socket`、`fresh snapshot restores input after freshness-triggered reconnect` 和 `beforeunload does not dispose lifecycle listeners` 锁死该行为。
+- **I3：不得用“没有收到坏消息”证明状态良好。** 这是三轮 finding 的共同根因：会话结束后的错误重连落在生命周期边界；冻结后的旧 epoch 依赖缺席的 lifecycle 事件；离线 OPEN socket 依赖缺席的错误事件与 `send()` 返回值。`src/client-entry.ts` 现在只把当前 epoch 的 snapshot 成功应用和匹配 ID 的 pong 写入 `lastProvenFreshAt`，`send()` 对普通 input 使用 25 秒 `FRESHNESS_WINDOW_MS` 的真实时间证明；`tests/client-connection.test.ts` 的 snapshot/pong、24 秒不误伤、26 秒与 30 分钟无事件失效、错误 pong、5 分钟连续心跳和恢复后重发用例锁死该证据链。
+
 ## Validation Unknowns
 
 - 真机上从 Wi-Fi 切蜂窝、锁屏再恢复时，`online`、`pageshow`、`visibilitychange` 和 WebSocket close 的实际触发顺序，需要先录一次 Android 与 iOS 基线。
