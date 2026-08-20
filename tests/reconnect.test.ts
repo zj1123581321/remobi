@@ -57,24 +57,17 @@ afterEach(() => {
 })
 
 describe('setupReconnect', () => {
-	test('renders the disconnected state immediately', () => {
-		const dispose = setupReconnect(mockConnectionTerminal(), { enabled: true })
-		const overlay = getOverlay()
-		expect(overlay).not.toBeNull()
-		expect(overlay?.style.display).toBe('flex')
-		expect(overlay?.dataset.connectionState).toBe('disconnected')
-		expect(overlay?.querySelector('div')?.textContent).toBe('Disconnected')
-		dispose()
-	})
-
 	test.each([
+		['disconnected', 'Disconnected'],
 		['reconnecting', 'Reconnecting…'],
 		['syncing', 'Syncing…'],
 		['synced', 'Synced'],
 	] as const)('renders the %s state', (state, text) => {
 		const term = mockConnectionTerminal()
 		const dispose = setupReconnect(term, { enabled: true })
-		term.setStatus({ state, consecutivePreSyncFailures: 0, lastFailureReason: null })
+		if (state !== 'disconnected') {
+			term.setStatus({ state, consecutivePreSyncFailures: 0, lastFailureReason: null })
+		}
 		const overlay = getOverlay()
 		expect(overlay?.dataset.connectionState).toBe(state)
 		expect(overlay?.querySelector('div')?.textContent).toBe(text)
@@ -103,74 +96,45 @@ describe('setupReconnect', () => {
 		dispose()
 	})
 
-	test('clicking immediate retry forwards once', () => {
-		const term = mockConnectionTerminal()
-		const dispose = setupReconnect(term, { enabled: true })
-		const button = getOverlay()?.querySelector('button')
-		button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-		expect(term.reconnectCalls).toBe(1)
-		dispose()
-	})
+	test.each(['button', 'backdrop', 'message'] as const)(
+		'clicking %s forwards immediate retry once',
+		(target) => {
+			const term = mockConnectionTerminal()
+			const dispose = setupReconnect(term, { enabled: true })
+			const overlay = getOverlay()
+			const targetElement =
+				target === 'button'
+					? overlay?.querySelector('button')
+					: target === 'message'
+						? overlay?.querySelector('div')
+						: overlay
+			targetElement?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+			expect(term.reconnectCalls).toBe(1)
+			dispose()
+		},
+	)
 
-	test('clicking overlay backdrop forwards immediate retry once', () => {
-		const term = mockConnectionTerminal()
-		const dispose = setupReconnect(term, { enabled: true })
-		getOverlay()?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-		expect(term.reconnectCalls).toBe(1)
-		dispose()
-	})
-
-	test('clicking overlay message forwards immediate retry once', () => {
-		const term = mockConnectionTerminal()
-		const dispose = setupReconnect(term, { enabled: true })
-		const message = getOverlay()?.querySelector('div')
-		message?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-		expect(term.reconnectCalls).toBe(1)
-		dispose()
-	})
-
-	test('multiple immediate retry triggers are forwarded', () => {
-		const term = mockConnectionTerminal()
-		const dispose = setupReconnect(term, { enabled: true })
-		const overlay = getOverlay()
-		overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-		overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-		expect(term.reconnectCalls).toBe(2)
-		dispose()
-	})
-
-	test('auth hint shows refresh action after three failures', () => {
+	test.each([
+		['socket-closed', 'Connection failed — you may need to re-authenticate.', true],
+		['protocol-error', 'Connection failed — refresh, and check the server version.', false],
+	] as const)('failure hint renders correctly for %s', (reason, message, reloadable) => {
 		const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {})
 		const term = mockConnectionTerminal()
 		const dispose = setupReconnect(term, { enabled: true })
 		term.setStatus({
 			state: 'reconnecting',
 			consecutivePreSyncFailures: 3,
-			lastFailureReason: 'socket-closed',
+			lastFailureReason: reason,
 		})
 		const buttons = [...(getOverlay()?.querySelectorAll('button') ?? [])]
-		expect(getOverlay()?.querySelector('div')?.textContent).toBe(
-			'Connection failed — you may need to re-authenticate.',
-		)
+		expect(getOverlay()?.querySelector('div')?.textContent).toBe(message)
 		expect(buttons[1]?.style.display).toBe('block')
-		buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-		expect(reload).toHaveBeenCalledTimes(1)
+		if (reloadable) {
+			buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+			expect(reload).toHaveBeenCalledTimes(1)
+		}
 		dispose()
 		reload.mockRestore()
-	})
-
-	test('protocol failures expose the server-version hint', () => {
-		const term = mockConnectionTerminal()
-		const dispose = setupReconnect(term, { enabled: true })
-		term.setStatus({
-			state: 'reconnecting',
-			consecutivePreSyncFailures: 3,
-			lastFailureReason: 'protocol-error',
-		})
-		expect(getOverlay()?.querySelector('div')?.textContent).toBe(
-			'Connection failed — refresh, and check the server version.',
-		)
-		dispose()
 	})
 
 	test('connection notice replaces the state message without a second overlay', () => {

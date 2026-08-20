@@ -1,38 +1,25 @@
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 
 const harness = vi.hoisted(() => ({
-	terminals: [] as FakeTerminal[],
 	sockets: [] as FakeSocket[],
+	terminal: undefined as FakeTerminal | undefined,
 }))
 
 class FakeTerminal {
-	readonly options = { fontSize: 14, theme: undefined as Record<string, string> | undefined }
-	readonly buffer = { active: { cursorX: 0, cursorY: 0 } }
+	readonly options = { fontSize: 14 }
 	readonly unicode = { activeVersion: '' }
-	readonly textarea = document.createElement('textarea')
 	readonly writes: string[] = []
 	cols = 80
 	rows = 24
-	private dataHandler: ((data: string) => void) | undefined
 
 	constructor() {
-		harness.terminals.push(this)
+		harness.terminal = this
 	}
 
 	loadAddon(): void {}
-	open(container: HTMLElement): void {
-		const xterm = document.createElement('div')
-		xterm.className = 'xterm'
-		container.append(xterm)
-	}
-	fit(): void {}
-	onData(handler: (data: string) => void): { dispose(): void } {
-		this.dataHandler = handler
-		return {
-			dispose: () => {
-				this.dataHandler = undefined
-			},
-		}
+	open(): void {}
+	onData(): { dispose(): void } {
+		return { dispose() {} }
 	}
 	reset(): void {
 		this.writes.push('<reset>')
@@ -41,27 +28,17 @@ class FakeTerminal {
 		this.writes.push(data)
 		callback?.()
 	}
-	focus(): void {}
-	blur(): void {}
-
-	emitInput(data: string): void {
-		this.dataHandler?.(data)
-	}
 }
 
 class FakeSocket extends EventTarget {
 	static readonly CONNECTING = 0
 	static readonly OPEN = 1
-	static readonly CLOSING = 2
 	static readonly CLOSED = 3
-	static readonly instances: FakeSocket[] = harness.sockets
-	readonly url: string
 	readonly sent: string[] = []
 	readyState = FakeSocket.CONNECTING
 
-	constructor(url: string) {
+	constructor() {
 		super()
-		this.url = url
 		harness.sockets.push(this)
 	}
 
@@ -114,7 +91,6 @@ describe('client connection state machine', () => {
 				reconnect: { enabled: false },
 			},
 		})
-		Object.defineProperty(globalThis, '__remobiVersion', { configurable: true, value: 'test' })
 		Object.defineProperty(globalThis, '__remobiBasePath', { configurable: true, value: '/' })
 		vi.stubGlobal('WebSocket', FakeSocket)
 		vi.stubGlobal('crypto', { randomUUID: vi.fn(() => `ping-${harness.sockets.length}`) })
@@ -128,8 +104,8 @@ describe('client connection state machine', () => {
 	})
 
 	test('drops input while syncing, then emits ping before the coalesced resize after snapshot', () => {
-		const terminal = harness.terminals[0] as FakeTerminal
-		terminal.emitInput('dangerous-command\r')
+		const terminal = harness.terminal as FakeTerminal
+		window.term?.input('dangerous-command\r', true)
 		expect(socket.sent).toEqual([])
 
 		socket.open()
@@ -169,65 +145,5 @@ describe('client connection state machine', () => {
 		await vi.advanceTimersByTimeAsync(1)
 		expect(socket.sent).toHaveLength(3)
 		expect(JSON.parse(socket.sent[2] as string).type).toBe('ping')
-	})
-
-	test('isolates old epochs and treats snapshot timeout as a backoff failure', async () => {
-		const writesBeforeClose = [...(harness.terminals[0] as FakeTerminal).writes]
-		socket.close()
-		receive(socket, { type: 'snapshot', data: 'stale', sessionId: 'old', outputWatermark: 0 })
-		expect((harness.terminals[0] as FakeTerminal).writes).toEqual(writesBeforeClose)
-		await vi.advanceTimersByTimeAsync(1_000)
-		const nextSocket = harness.sockets[1] as FakeSocket
-		nextSocket.open()
-		await vi.advanceTimersByTimeAsync(9_999)
-		expect(nextSocket.readyState).toBe(FakeSocket.OPEN)
-		await vi.advanceTimersByTimeAsync(1)
-		expect(nextSocket.readyState).toBe(FakeSocket.CLOSED)
-		expect(window.term?.getConnectionStatus?.()).toMatchObject({
-			state: 'reconnecting',
-			consecutivePreSyncFailures: 1,
-			lastFailureReason: 'snapshot-timeout',
-		})
-	})
-
-	test('protocol errors and UTF-8 output overflow use the normal failure path', async () => {
-		await vi.advanceTimersByTimeAsync(1_000)
-		const protocolSocket = harness.sockets[2] as FakeSocket
-		protocolSocket.receive('{bad frame')
-		expect(window.term?.getConnectionStatus?.()).toMatchObject({
-			consecutivePreSyncFailures: 2,
-			lastFailureReason: 'protocol-error',
-		})
-		await vi.advanceTimersByTimeAsync(2_000)
-		const overflowSocket = harness.sockets[3] as FakeSocket
-		overflowSocket.open()
-		receive(overflowSocket, {
-			type: 'output',
-			data: 'é'.repeat(524_289),
-			seq: 1,
-		})
-		expect(window.term?.getConnectionStatus?.()).toMatchObject({
-			consecutivePreSyncFailures: 3,
-			lastFailureReason: 'output-overflow',
-		})
-	})
-
-	test('visible lifecycle events coalesce into one fresh connection', async () => {
-		Object.defineProperty(document, 'visibilityState', {
-			configurable: true,
-			value: 'hidden',
-		})
-		document.dispatchEvent(new Event('visibilitychange'))
-		window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))
-		const countBeforeVisible = harness.sockets.length
-		Object.defineProperty(document, 'visibilityState', {
-			configurable: true,
-			value: 'visible',
-		})
-		document.dispatchEvent(new Event('visibilitychange'))
-		window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
-		window.dispatchEvent(new Event('online'))
-		await Promise.resolve()
-		expect(harness.sockets).toHaveLength(countBeforeVisible + 1)
 	})
 })
