@@ -125,6 +125,13 @@ draft --点击提交--> pending(已持久化) --同 sessionId 且 synced--> sent
 - 普通键盘逐键确认、离线终端输入、多设备草稿同步。
 - 多标签页同时编辑同一个 composer；同 origin 下最后一次 localStorage 写入覆盖前值，个人使用时只保留一个活动 composer 页面。
 
+## Known Limitations
+
+- `node-pty@1.1.0` 的 `pty.write(data)` 没有 Promise、回调或错误事件。真实 Linux PTY 实测中，把 write stream 的 fd 换成非法 fd 后，调用仍然同步返回 `undefined`、不抛异常；随后底层 `fs.write` 异步回调只执行 `this._writeQueue.length = 0` 和 `console.error(...)`，不 emit、不回调（`node_modules/node-pty/lib/unixTerminal.js:314-327`）。因此 `input-accepted` 只证明 remobi 已把 `data` 交给当前 PTY 的写入队列并记入 session 内去重账本，不保证操作系统层面写入成功，更不代表 Herdr 已执行完成。
+- 这个不可观测窗口发生在 PTY 已进入失败态（fd 关闭、`EBADF`，或子进程已退出但 `onExit` 尚未到达）而客户端恰好提交 action 时。此时服务端会照常记账并发送 accepted；同一 ID 重送只会再次 accepted，不会重写 PTY。原始丢失无法自动恢复，用户只能从终端画面自行判断，并用新 ID 重发。
+- 协议不再提供不可触发的 `pty-write-failed` reason。能够同步观察到的 `pty.write` 异常属于 PTY 层严重故障：它与 mirror 写失败共用唯一的粘性 `terminalFailed` fail-loud 路径，触发方先收到 `session-unavailable`，随后当前 client 收到不含终端正文的 `Terminal failed; restart remobi.` 并被关闭；后续 attach 被拒，后续 action 也只能收到 `session-unavailable`。
+- 已否决三条试图侦测异步失败的修法：拦截全局 `console.error` 不可靠且会混入无关错误；monkey-patch node-pty 会改变依赖行为；绕过 node-pty 直接用 `pty.fd` 调 `fs.write` 会与 node-pty 的 `_writeQueue` 争用同一 fd，破坏 `handleFlowControl` 的流控。remobi 不采用这些修法，也不伪称跨进程 exactly-once。
+
 ## Validation Unknowns
 
 - 真机上从 Wi-Fi 切蜂窝、锁屏再恢复时，`online`、`pageshow`、`visibilitychange` 和 WebSocket close 的实际触发顺序，需要先录一次 Android 与 iOS 基线。
