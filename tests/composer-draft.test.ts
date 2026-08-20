@@ -4,6 +4,7 @@ import { createAsrPreview } from '../src/controls/asr-preview'
 
 const COMPOSER_STORAGE_KEY = 'remobi:composer:v1:/'
 const DRAFT_RESTORE_FAILURE = 'Draft could not be restored; stored copy left untouched.'
+const DRAFT_CORRUPT_RESET = 'Draft storage was corrupt and has been reset; your text is saved.'
 const DRAFT_STORAGE_FAILURE = 'Draft is not protected on this device.'
 let localStorageDescriptor: PropertyDescriptor | undefined
 
@@ -69,6 +70,26 @@ describe('composer draft persistence', () => {
 
 		composer.resetDraft()
 		expect(readStoredComposer()).toEqual({ version: 1, draft: '', pending })
+	})
+
+	test('typing over corrupt storage replaces it with the current draft', () => {
+		localStorage.setItem(COMPOSER_STORAGE_KEY, '{ corrupt json')
+		const composer = createAsrPreview()
+
+		composer.input.value = 'new draft after recovery'
+		composer.input.dispatchEvent(new Event('input', { bubbles: true }))
+
+		expect(readStoredComposer()).toEqual({
+			version: 1,
+			draft: 'new draft after recovery',
+			pending: null,
+		})
+		expect(composer.message.textContent).toBe(DRAFT_CORRUPT_RESET)
+
+		composer.input.value = 'second draft'
+		composer.input.dispatchEvent(new Event('input', { bubbles: true }))
+		expect(readStoredComposer()).toEqual({ version: 1, draft: 'second draft', pending: null })
+		expect(composer.message.textContent).toBe(DRAFT_CORRUPT_RESET)
 	})
 
 	test('partial text does not change the serialised draft', () => {

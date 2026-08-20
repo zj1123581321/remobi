@@ -21,11 +21,12 @@ type StoredComposer = Omit<ComposerStore, 'pending'> & { pending: unknown }
 type StorageReadResult =
 	| { readonly kind: 'missing'; readonly storage: Storage }
 	| { readonly kind: 'valid'; readonly storage: Storage; readonly value: StoredComposer }
-	| { readonly kind: 'invalid' }
+	| { readonly kind: 'invalid'; readonly storage: Storage }
 	| { readonly kind: 'unavailable'; readonly error: unknown }
 
 const COMPOSER_STORAGE_KEY_PREFIX = 'remobi:composer:v1:'
 const DRAFT_RESTORE_FAILURE = 'Draft could not be restored; stored copy left untouched.'
+const DRAFT_CORRUPT_RESET = 'Draft storage was corrupt and has been reset; your text is saved.'
 const DRAFT_STORAGE_FAILURE = 'Draft is not protected on this device.'
 
 function composerStorageKey(): string {
@@ -57,10 +58,10 @@ function readComposerStore(): StorageReadResult {
 	try {
 		parsed = JSON.parse(raw)
 	} catch {
-		return { kind: 'invalid' }
+		return { kind: 'invalid', storage }
 	}
 	if (!isRecord(parsed) || parsed.version !== 1 || typeof parsed.draft !== 'string') {
-		return { kind: 'invalid' }
+		return { kind: 'invalid', storage }
 	}
 
 	return {
@@ -191,20 +192,18 @@ export function createAsrPreview(): AsrPreview {
 
 	function persistDraft(draft: string): void {
 		const stored = readComposerStore()
-		if (stored.kind === 'invalid') {
-			showRestoreFailure()
-			return
-		}
 		if (stored.kind === 'unavailable') {
 			showStorageFailure(stored.error)
 			return
 		}
-		const pending = stored.kind === 'missing' ? null : stored.value.pending
+		const corrupt = stored.kind === 'invalid'
+		const pending = stored.kind === 'valid' ? stored.value.pending : null
 		try {
 			stored.storage.setItem(
 				composerStorageKey(),
 				JSON.stringify({ version: 1 satisfies ComposerStore['version'], draft, pending }),
 			)
+			if (corrupt) showMessage(DRAFT_CORRUPT_RESET)
 		} catch (error: unknown) {
 			showStorageFailure(error)
 		}
