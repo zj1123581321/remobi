@@ -92,7 +92,7 @@ describe('setupReconnect', () => {
 		const dispose = setupReconnect(mockConnectionTerminal(), { enabled: true })
 		const overlay = getOverlay()
 		const buttons = [...(overlay?.querySelectorAll('button') ?? [])]
-		expect(buttons.map((button) => button.textContent)).toEqual(['立即重试', '重新认证'])
+		expect(buttons.map((button) => button.textContent)).toEqual(['Retry now', 'Re-authenticate'])
 		dispose()
 	})
 
