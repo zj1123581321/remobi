@@ -52,7 +52,7 @@ export function createAsrPreview(): AsrPreview {
 	const title = el('h3', {}, 'Voice composer')
 	const closeButton = el('button', {
 		type: 'button',
-		'class': 'wt-asr-composer-close',
+		class: 'wt-asr-composer-close',
 		'aria-label': 'Close voice composer',
 	})
 	closeButton.textContent = '×'
@@ -68,7 +68,7 @@ export function createAsrPreview(): AsrPreview {
 	const actions = el('div', { class: 'wt-asr-composer-actions' })
 	const micButton = el('button', {
 		type: 'button',
-		'class': 'wt-composer-mic',
+		class: 'wt-composer-mic',
 		'aria-label': 'Toggle microphone',
 		'aria-pressed': 'false',
 		'data-remobi-control': 'composer-mic',
@@ -76,7 +76,7 @@ export function createAsrPreview(): AsrPreview {
 	micButton.appendChild(createMicIcon())
 	const sendButton = el('button', {
 		type: 'button',
-		'class': 'wt-composer-send',
+		class: 'wt-composer-send',
 	})
 	sendButton.textContent = 'Send'
 	actions.append(micButton, sendButton)
@@ -135,10 +135,7 @@ export function createAsrPreview(): AsrPreview {
 		setOpen(false)
 	}
 
-	function register(
-		target: HTMLButtonElement,
-		handler: () => void,
-	): { dispose(): void } {
+	function register(target: HTMLButtonElement, handler: () => void): { dispose(): void } {
 		const callback = (event: Event): void => {
 			event.stopPropagation()
 			handler()

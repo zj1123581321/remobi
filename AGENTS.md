@@ -157,4 +157,4 @@ CLI + build:
 - Tests use happy-dom for DOM environment (e2e/CLI tests use node environment)
 - Agent skill: `.agents/skills/remobi-setup/SKILL.md` provides AI agents with onboarding and config guidance. When config shape, CLI commands, action types, or validation rules change, update the skill to stay in sync.
 - Agent onboarding: when helping a user set up remobi (not develop it), read `.agents/skills/remobi-setup/SKILL.md` and follow its workflow. Critical: `set -g mouse on` must be enabled in the user's tmux config for touch scroll to work — the skill covers this but agents skipping it is the most common setup failure.
-- Voice input: `{ type: 'voice-input' }` is a toolbar-only push-to-talk action; it requires `asr.enabled`, HTTPS (except localhost), and a private `.local` provider key. Drawer/floating placement is invalid.
+- Voice input: `{ type: 'voice-input' }` is a toolbar-only voice-composer entry; it opens the second-layer composer, whose internal Mic uses tap-to-toggle. It requires `asr.enabled`, HTTPS (except localhost), and a private `.local` provider key. Drawer/floating placement is invalid.

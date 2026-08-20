@@ -104,12 +104,15 @@ export function withVoiceComposerEntry(config: RemobiConfig): RemobiConfig {
 	const keyboardRow = rows.findIndex((row) =>
 		row.some((button) => button.action.type === 'keyboard-toggle'),
 	)
-	const drawerRow = rows.findIndex((row) => row.some((button) => button.action.type === 'drawer-toggle'))
+	const drawerRow = rows.findIndex((row) =>
+		row.some((button) => button.action.type === 'drawer-toggle'),
+	)
 	const rowIndex = keyboardRow >= 0 ? keyboardRow : drawerRow >= 0 ? drawerRow : 0
 	const row = rows[rowIndex] ?? []
 	const anchorType = keyboardRow >= 0 ? 'keyboard-toggle' : 'drawer-toggle'
 	const anchorIndex = row.findIndex((button) => button.action.type === anchorType)
-	const insertIndex = anchorIndex >= 0 && anchorType === 'keyboard-toggle' ? anchorIndex + 1 : anchorIndex
+	const insertIndex =
+		anchorIndex >= 0 && anchorType === 'keyboard-toggle' ? anchorIndex + 1 : anchorIndex
 	const nextRow = [...row]
 	if (insertIndex >= 0) nextRow.splice(insertIndex, 0, voiceComposerButton)
 	else nextRow.push(voiceComposerButton)

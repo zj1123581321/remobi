@@ -106,6 +106,17 @@ function setupKeyboard(
 	return { effectiveConfig, keyboard }
 }
 
+/** Mount the composer and attach its internal Mic after capability gating. */
+function attachVoiceComposerMic(controller: MicController | undefined): void {
+	if (!controller) return
+	document.body.appendChild(controller.preview.element)
+	const micButton = controller.preview.element.querySelector<HTMLButtonElement>(
+		'[data-remobi-control="composer-mic"]',
+	)
+	if (!micButton) throw new Error('remobi: voice composer is missing its microphone button')
+	controller.attachMicButton(micButton)
+}
+
 /**
  * Initialise the remobi overlay.
  * Called automatically when loaded in a browser (via the IIFE in build output).
@@ -185,21 +196,14 @@ export function init(
 				keyboard = setup.keyboard
 				const effectiveConfig = withVoiceComposerEntry(setup.effectiveConfig)
 				const keyboardController = setup.keyboard
-				let closeComposerOverlays = (): void => {}
+				let closeComposerOverlays = (): void => comboPicker.close()
 				micController = createMicController({
 					term,
 					config: effectiveConfig,
 					hooks,
 					closeComposerOverlays: () => closeComposerOverlays(),
 				})
-				if (micController) {
-					document.body.appendChild(micController.preview.element)
-					const micButton = micController.preview.element.querySelector<HTMLButtonElement>(
-						'[data-remobi-control="composer-mic"]',
-					)
-					if (!micButton) throw new Error('remobi: voice composer is missing its microphone button')
-					micController.attachMicButton(micButton)
-				}
+				attachVoiceComposerMic(micController)
 
 				// Floating d-pad — created before the action registry so
 				// dpad-toggle buttons wire up via DI (same pattern as ⌨).

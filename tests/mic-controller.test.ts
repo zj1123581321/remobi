@@ -290,12 +290,12 @@ describe('mic-controller tap-to-toggle state machine', () => {
 
 	test('tap starts connecting immediately and a second tap cancels', async () => {
 		const harness = createHarness()
-	expect(harness.button.getAttribute('aria-label')).toBe('Toggle microphone')
+		expect(harness.button.getAttribute('aria-label')).toBe('Toggle microphone')
 		expect(harness.button.getAttribute('aria-pressed')).toBe('false')
 		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('connecting')
 		expect(harness.engine.starts).toBe(1)
-	expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.isOpen()).toBe(true)
 		expect(harness.controller.preview.message.textContent).toContain('Connecting to voice service')
 		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('idle')
@@ -610,8 +610,8 @@ describe('preview injection', () => {
 		dispatchTap(harness.button)
 		harness.engine.emitFinal('typed command', 1)
 		harness.controller.preview.input.value = 'typed command'
-			harness.controller.preview.element
-				.querySelector('.wt-composer-send')
+		harness.controller.preview.element
+			.querySelector('.wt-composer-send')
 			?.dispatchEvent(new Event('click'))
 		for (let index = 0; index < 8; index++) await Promise.resolve()
 		expect(harness.term.sent).toEqual(['typed command'])

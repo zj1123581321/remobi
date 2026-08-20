@@ -304,6 +304,15 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		haptic()
 	}
 
+	function canSendComposerText(sessionGeneration: number, wasOpen: boolean): boolean {
+		return (
+			!disposed &&
+			sessionGeneration === generation &&
+			wasOpen &&
+			(currentState === 'preview' || currentState === 'idle')
+		)
+	}
+
 	function tapToggle(): void {
 		if (disposed) return
 		const kbWasOpen = isKeyboardOpen()
@@ -358,13 +367,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 				kbWasOpen: false,
 				data: rawText,
 			})
-			if (
-				disposed ||
-				sessionGeneration !== generation ||
-				!wasOpen ||
-				(currentState !== 'preview' && currentState !== 'idle')
-			)
-				return
+			if (!canSendComposerText(sessionGeneration, wasOpen)) return
 			if (before.blocked) return
 			const text = sanitizeVoiceText(before.data)
 			if (!text) {
@@ -384,13 +387,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 				kbWasOpen: false,
 				data: text,
 			})
-			if (
-				disposed ||
-				sessionGeneration !== generation ||
-				!wasOpen ||
-				(currentState !== 'preview' && currentState !== 'idle')
-			)
-				return
+			if (!canSendComposerText(sessionGeneration, wasOpen)) return
 			if (options.config.asr.autoEnter) {
 				if (!options.term.isConnected()) {
 					preview.showMessage('Terminal disconnected; text is kept here until it reconnects.')
