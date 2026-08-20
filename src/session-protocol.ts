@@ -11,23 +11,34 @@ export interface ResizeMessage {
 
 export interface PingMessage {
 	readonly type: 'ping'
+	readonly id: string
 }
 
-export type ClientMessage = InputMessage | ResizeMessage | PingMessage
+export interface InputActionMessage {
+	readonly type: 'input-action'
+	readonly id: string
+	readonly data: string
+}
+
+export type ClientMessage = InputMessage | ResizeMessage | PingMessage | InputActionMessage
 
 export const MAX_CLIENT_MESSAGE_BYTES = 256 * 1024
 export const MAX_CLIENT_INPUT_BYTES = 256 * 1024
+export const MAX_ACTION_ID_BYTES = 128
 export const MAX_RESIZE_COLS = 500
 export const MAX_RESIZE_ROWS = 200
 
 export interface SnapshotMessage {
 	readonly type: 'snapshot'
 	readonly data: string
+	readonly sessionId: string
+	readonly outputWatermark: number
 }
 
 export interface OutputMessage {
 	readonly type: 'output'
 	readonly data: string
+	readonly seq: number
 }
 
 export interface ExitMessage {
@@ -43,6 +54,20 @@ export interface ErrorMessage {
 
 export interface PongMessage {
 	readonly type: 'pong'
+	readonly id: string
+}
+
+export interface InputAcceptedMessage {
+	readonly type: 'input-accepted'
+	readonly id: string
+}
+
+export type InputRejectedReason = 'id-conflict' | 'pty-write-failed' | 'session-unavailable'
+
+export interface InputRejectedMessage {
+	readonly type: 'input-rejected'
+	readonly id: string
+	readonly reason: InputRejectedReason
 }
 
 export type ServerMessage =
@@ -51,6 +76,8 @@ export type ServerMessage =
 	| ExitMessage
 	| ErrorMessage
 	| PongMessage
+	| InputAcceptedMessage
+	| InputRejectedMessage
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -64,6 +91,14 @@ const utf8Encoder = new TextEncoder()
 
 function isInputWithinLimit(value: string): boolean {
 	return utf8Encoder.encode(value).byteLength <= MAX_CLIENT_INPUT_BYTES
+}
+
+function isActionId(value: unknown): value is string {
+	return (
+		typeof value === 'string' &&
+		value.length > 0 &&
+		utf8Encoder.encode(value).byteLength <= MAX_ACTION_ID_BYTES
+	)
 }
 
 export function serialiseClientMessage(message: ClientMessage): string {
@@ -96,7 +131,14 @@ export function parseClientMessage(payload: string): ClientMessage | null {
 					: null
 
 			case 'ping':
-				return { type: 'ping' }
+				return isActionId(parsed.id) ? { type: 'ping', id: parsed.id } : null
+
+			case 'input-action':
+				return isActionId(parsed.id) &&
+					typeof parsed.data === 'string' &&
+					isInputWithinLimit(parsed.data)
+					? { type: 'input-action', id: parsed.id, data: parsed.data }
+					: null
 
 			default:
 				return null
@@ -115,10 +157,27 @@ export function parseServerMessage(payload: string): ServerMessage | null {
 
 		switch (parsed.type) {
 			case 'snapshot':
-				return typeof parsed.data === 'string' ? { type: 'snapshot', data: parsed.data } : null
+				return typeof parsed.data === 'string' &&
+					typeof parsed.sessionId === 'string' &&
+					parsed.sessionId.length > 0 &&
+					Number.isInteger(parsed.outputWatermark) &&
+					typeof parsed.outputWatermark === 'number' &&
+					parsed.outputWatermark >= 0
+					? {
+							type: 'snapshot',
+							data: parsed.data,
+							sessionId: parsed.sessionId,
+							outputWatermark: parsed.outputWatermark,
+						}
+					: null
 
 			case 'output':
-				return typeof parsed.data === 'string' ? { type: 'output', data: parsed.data } : null
+				return typeof parsed.data === 'string' &&
+					Number.isInteger(parsed.seq) &&
+					typeof parsed.seq === 'number' &&
+					parsed.seq > 0
+					? { type: 'output', data: parsed.data, seq: parsed.seq }
+					: null
 
 			case 'exit':
 				return typeof parsed.exitCode === 'number' &&
@@ -136,7 +195,18 @@ export function parseServerMessage(payload: string): ServerMessage | null {
 					: null
 
 			case 'pong':
-				return { type: 'pong' }
+				return isActionId(parsed.id) ? { type: 'pong', id: parsed.id } : null
+
+			case 'input-accepted':
+				return isActionId(parsed.id) ? { type: 'input-accepted', id: parsed.id } : null
+
+			case 'input-rejected':
+				return isActionId(parsed.id) &&
+					(parsed.reason === 'id-conflict' ||
+						parsed.reason === 'pty-write-failed' ||
+						parsed.reason === 'session-unavailable')
+					? { type: 'input-rejected', id: parsed.id, reason: parsed.reason }
+					: null
 
 			default:
 				return null
