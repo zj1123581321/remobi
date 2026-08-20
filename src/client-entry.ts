@@ -46,6 +46,7 @@ const HEARTBEAT_DEADLINE_MS = 15_000
 const RECONNECT_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000] as const
 const PRE_SYNC_FAILURES_BEFORE_AUTH_HINT = 3
 const MAX_PRE_SNAPSHOT_OUTPUT_BYTES = 1024 * 1024
+const BUFFERED_AMOUNT_FAILURE_STREAK = 2
 const utf8Encoder = new TextEncoder()
 
 function createTermBridge(
@@ -243,14 +244,22 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	let pendingOutputBytes = 0
 	let pendingResize: { cols: number; rows: number } | null = null
 	let notSentNoticeShown = false
+	let bufferedAmountFailureStreak = 0
 	let exitReceived = false
 	let statusOverlay: SessionStatusOverlay | null = null
 
 	function send(message: ClientMessage): void {
 		if (connectionStatus.state === 'synced' && socket?.readyState === WebSocket.OPEN) {
 			if (message.type === 'input' && socket.bufferedAmount > 0) {
-				failConnection(currentEpoch, 'socket-error')
+				bufferedAmountFailureStreak += 1
+				if (bufferedAmountFailureStreak >= BUFFERED_AMOUNT_FAILURE_STREAK) {
+					failConnection(currentEpoch, 'socket-error')
+				} else {
+					socket.send(serialiseClientMessage(message))
+					return
+				}
 			} else {
+				bufferedAmountFailureStreak = 0
 				socket.send(serialiseClientMessage(message))
 				return
 			}
@@ -475,6 +484,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 				lastFailureReason: null,
 			}
 			notSentNoticeShown = false
+			bufferedAmountFailureStreak = 0
 			for (const listener of connectionStatusListeners) listener(connectionStatus)
 			notifyConnectionChange()
 

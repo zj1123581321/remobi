@@ -698,21 +698,25 @@ describe('client connection state machine', () => {
 		expect(frames[1]).toEqual({ type: 'resize', cols: 120, rows: 40 })
 	})
 
-	test('buffered input detects a stuck OPEN socket before sending', async () => {
+	test('buffered input detects a persistently stuck OPEN socket before sending', async () => {
 		const socket = await freshSynced()
 		socket.bufferedAmount = 1
 		const sentBefore = socket.sent.length
+		window.term?.input('transient-buffer', true)
+		expect(socket.sent).toHaveLength(sentBefore + 1)
+		socket.bufferedAmount = 1
 		window.term?.input('buffered-must-drop', true)
-		expect(socket.sent).toHaveLength(sentBefore)
+		expect(socket.sent).toHaveLength(sentBefore + 1)
 		expect(socket.readyState).toBe(FakeSocket.CLOSED)
 		expect(getStatus().state).toBe('reconnecting')
 		expect(getStatus().lastFailureReason).toBe('socket-error')
 	})
 
-	test('normal input with an empty buffer remains sendable', async () => {
+	test('normal input with a transient buffer remains sendable', async () => {
 		const socket = await freshSynced()
-		socket.bufferedAmount = 0
+		socket.bufferedAmount = 1
 		window.term?.input('one', true)
+		socket.bufferedAmount = 0
 		window.term?.input('two', true)
 		const frames = socket.sent
 			.map((payload) => JSON.parse(payload) as Record<string, unknown>)
