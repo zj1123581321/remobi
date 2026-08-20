@@ -3,9 +3,13 @@
 # and branch names (H0 freeze mandates SHAs), not user-facing prose.
 # tests/fixtures holds recorded protocol evidence (hex dumps, server payloads) —
 # bytes must stay verbatim, never "corrected".
-extend-exclude = ["CHANGELOG.md", "docs/sessions/**", "tests/fixtures/**"]
+# retro/ holds acceptance scorecards whose notes cite commit SHAs as evidence
+# pointers (e.g. a2b80ba reads as a typo of "by"/"be") — same reason as docs/sessions.
+extend-exclude = ["CHANGELOG.md", "docs/sessions/**", "tests/fixtures/**", "retro/**"]
 
 [default.extend-words]
 # Real proper nouns: byted-ailab-speech-sdk (npm package), firt.dev (mobile web compat reference)
 byted = "byted"
 firt = "firt"
+# Column label in generated review-report tables: short for "Observability".
+Observ = "Observ"
