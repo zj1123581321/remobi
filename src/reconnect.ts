@@ -110,9 +110,11 @@ export function setupReconnect(term: XTerminal, config: ReconnectConfig): () => 
 		() => location.reload(),
 	)
 	document.body.appendChild(overlay)
+	let notice: string | null = null
 
 	function render(status: ConnectionStatus): void {
-		message.textContent = statusMessage(status)
+		if (status.state === 'synced') notice = null
+		message.textContent = notice ?? statusMessage(status)
 		overlay.dataset.connectionState = status.state
 		authButton.style.display = status.consecutivePreSyncFailures >= 3 ? 'block' : 'none'
 		overlay.style.display = status.state === 'synced' ? 'none' : 'flex'
@@ -121,9 +123,10 @@ export function setupReconnect(term: XTerminal, config: ReconnectConfig): () => 
 	const statusSubscription = term.onConnectionStatusChange(render)
 	const onNotice = (event: Event): void => {
 		if (!(event instanceof CustomEvent)) return
-		const notice: unknown = event.detail
-		if (typeof notice !== 'string') return
-		message.textContent = notice
+		const detail: unknown = event.detail
+		if (typeof detail !== 'string') return
+		notice = detail
+		message.textContent = detail
 		overlay.style.display = 'flex'
 	}
 	window.addEventListener('remobi-connection-notice', onNotice)
