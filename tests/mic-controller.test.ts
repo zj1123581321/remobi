@@ -183,6 +183,7 @@ async function startRecording(harness: TestHarness): Promise<void> {
 
 beforeEach(() => {
 	GlobalRegistrator.register()
+	localStorage.clear()
 	Object.defineProperty(document, 'visibilityState', {
 		configurable: true,
 		value: 'visible',
@@ -191,6 +192,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+	localStorage.clear()
 	_resetTouchGuard()
 	GlobalRegistrator.unregister()
 	vi.useRealTimers()
@@ -696,6 +698,7 @@ describe('preview injection', () => {
 		// The controller's hook registry is fixed at construction; use a new
 		// harness-shaped controller to assert the actual injection seam.
 		harness.controller.dispose()
+		localStorage.clear()
 		const engine = new FakeEngine()
 		const term = harness.term
 		const config = defineConfig({
@@ -755,6 +758,48 @@ describe('preview injection', () => {
 		expect(harness.term.sent).toEqual(['typed command'])
 		expect(harness.controller.state).toBe('preview')
 		expect(harness.controller.preview.message.textContent).toContain('disconnected')
+		harness.controller.dispose()
+	})
+
+	test('pageshow restores only an empty composer and opening keeps its draft', () => {
+		localStorage.setItem(
+			'remobi:composer:v1:/',
+			JSON.stringify({ version: 1, draft: 'stored draft', pending: null }),
+		)
+		const harness = createHarness()
+		expect(harness.controller.preview.getText()).toBe('stored draft')
+
+		harness.controller.preview.open()
+		expect(harness.controller.preview.getText()).toBe('stored draft')
+		harness.controller.preview.input.value = 'newer draft'
+		window.dispatchEvent(new Event('pageshow'))
+		expect(harness.controller.preview.getText()).toBe('newer draft')
+
+		harness.controller.preview.input.value = ''
+		window.dispatchEvent(new Event('pageshow'))
+		expect(harness.controller.preview.getText()).toBe('stored draft')
+		harness.controller.dispose()
+	})
+
+	test('background cancellation drops partial text but keeps the persisted base draft', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'typed base'
+		harness.controller.preview.input.dispatchEvent(new Event('input', { bubbles: true }))
+		await startRecording(harness)
+		harness.engine.emitPartial('discarded partial')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('typed base discarded partial')
+
+		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+		document.dispatchEvent(new Event('visibilitychange'))
+
+		expect(harness.controller.preview.getText()).toBe('typed base')
+		expect(JSON.parse(localStorage.getItem('remobi:composer:v1:/') ?? '')).toEqual({
+			version: 1,
+			draft: 'typed base',
+			pending: null,
+		})
 		harness.controller.dispose()
 	})
 

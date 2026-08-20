@@ -448,15 +448,22 @@ export function createMicController(options: MicControllerOptions): MicControlle
 
 	function onVisibilityChange(): void {
 		if (document.visibilityState === 'hidden' && currentState !== 'idle') {
+			const preservedDraft = baseDraft
 			cancelSession(generation)
+			if (preservedDraft) preview.show(preservedDraft)
 			preview.showMessage('Recording cancelled because the app went into the background.')
 			setComposerExpanded(true)
 		}
 	}
 
+	function onPageShow(): void {
+		preview.restoreDraft()
+	}
+
 	const previewConfirm = preview.onConfirm(confirmPreview)
 	const previewCancel = preview.onCancel(cancelPreview)
 	document.addEventListener('visibilitychange', onVisibilityChange)
+	window.addEventListener('pageshow', onPageShow)
 	const connection = options.term.onConnectionChange((connected) => {
 		if (!connected && currentState === 'preview' && preview.getText()) {
 			preview.showMessage('Terminal disconnected; text is kept here until it reconnects.')
@@ -503,6 +510,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			previewCancel.dispose()
 			connection.dispose()
 			document.removeEventListener('visibilitychange', onVisibilityChange)
+			window.removeEventListener('pageshow', onPageShow)
 			preview.element.remove()
 		},
 	}
