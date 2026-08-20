@@ -15,6 +15,7 @@ export interface AsrPreview {
 	readonly setPartial: (text: string) => void
 	readonly showMessage: (message: string) => void
 	readonly clear: () => void
+	readonly onOpenChange: (handler: (open: boolean) => void) => { dispose(): void }
 	readonly onConfirm: (handler: () => void) => { dispose(): void }
 	readonly onCancel: (handler: () => void) => { dispose(): void }
 }
@@ -42,21 +43,18 @@ export function createAsrPreview(): AsrPreview {
 	const element = el('div', {
 		id: 'wt-asr-composer',
 		role: 'dialog',
-		'aria-modal': 'true',
+		'aria-modal': 'false',
 		'aria-label': 'Voice composer',
 	})
 	element.style.display = 'none'
 
 	const panel = el('div', { id: 'wt-asr-composer-panel' })
-	const header = el('div', { class: 'wt-asr-composer-header' })
-	const title = el('h3', {}, 'Voice composer')
 	const closeButton = el('button', {
 		type: 'button',
 		class: 'wt-asr-composer-close',
 		'aria-label': 'Close voice composer',
 	})
 	closeButton.textContent = '×'
-	header.append(title, closeButton)
 
 	const input = el('input', {
 		type: 'text',
@@ -79,19 +77,23 @@ export function createAsrPreview(): AsrPreview {
 		class: 'wt-composer-send',
 	})
 	sendButton.textContent = 'Send'
-	actions.append(micButton, sendButton)
+	actions.append(closeButton, micButton, sendButton)
 
-	panel.append(header, input, message, actions)
+	panel.append(input, message, actions)
 	element.appendChild(panel)
 
 	let open = false
 	let pendingPartial: string | undefined
 	let partialFrame: number | undefined
+	const openChangeHandlers = new Set<(open: boolean) => void>()
 
 	function setOpen(next: boolean): void {
+		if (open === next) return
 		open = next
 		element.style.display = next ? 'flex' : 'none'
 		element.setAttribute('aria-hidden', next ? 'false' : 'true')
+		document.body.classList.toggle('wt-composer-open', next)
+		for (const handler of openChangeHandlers) handler(next)
 	}
 
 	function openComposer(): void {
@@ -151,18 +153,14 @@ export function createAsrPreview(): AsrPreview {
 
 	function registerCancel(handler: () => void): { dispose(): void } {
 		const callback = (event: Event): void => {
-			if (event.currentTarget === element && event.target !== element) return
 			event.stopPropagation()
 			handler()
 		}
 		onTap(closeButton, callback)
-		onTap(element, callback)
 		return {
 			dispose() {
 				closeButton.removeEventListener('click', callback)
 				closeButton.removeEventListener('touchend', callback)
-				element.removeEventListener('click', callback)
-				element.removeEventListener('touchend', callback)
 			},
 		}
 	}
@@ -180,6 +178,10 @@ export function createAsrPreview(): AsrPreview {
 		setPartial,
 		showMessage,
 		clear,
+		onOpenChange(handler) {
+			openChangeHandlers.add(handler)
+			return { dispose: () => openChangeHandlers.delete(handler) }
+		},
 		onConfirm: (handler) => register(sendButton, handler),
 		onCancel: registerCancel,
 	}
