@@ -737,6 +737,26 @@ describe('client connection state machine', () => {
 		expect(getStatus().lastFailureReason).toBe('heartbeat-timeout')
 	})
 
+	test('a buffered reachability probe cannot affect the resumed epoch', async () => {
+		const oldSocket = await freshSynced()
+		oldSocket.bufferedAmount = 1
+		window.term?.input('old-epoch-buffer', true)
+		document.dispatchEvent(new Event('freeze'))
+		document.dispatchEvent(new Event('resume'))
+		await vi.advanceTimersByTimeAsync(0)
+		const newSocket = currentSocket()
+		newSocket.open()
+		receive(newSocket, {
+			type: 'snapshot',
+			data: 'resumed',
+			sessionId: 'resumed-session',
+			outputWatermark: 0,
+		})
+		await vi.advanceTimersByTimeAsync(100)
+		expect(newSocket.readyState).toBe(FakeSocket.OPEN)
+		expect(getStatus().state).toBe('synced')
+	})
+
 	test('dispose removes freeze and resume listeners', async () => {
 		const socket = await freshSynced()
 		const socketCount = harness.sockets.length
