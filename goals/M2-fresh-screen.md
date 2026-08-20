@@ -23,11 +23,19 @@
      自动刷新会把用户没提交的草稿刷没，而 Access 过期与网络故障在浏览器侧无法可靠区分。
   4. 断线期间的普通按键**丢弃且不排队**。当前的队列重放不是体验问题：
      重放的按键会真的执行进 Herdr。
-- **已知阻塞**：T3 必须等 T2 合并进 `main` 后才能派（硬依赖协议字段）。
-- **进度**：T2 已完成并验收 accepted（PR #13，`card/wnet-t2`，首轮即过，记分卡
-  task_id `remobi-20260820-11`）。第 2 轮独立审查在跑（换证据源：降层三问 /
-  调用方 serve.ts / node-pty 写失败真实语义实测 / 多客户端并发），
-  按 infra 例外需连续 2 轮无新增 P1 才收敛。T3 尚未开工。
+- **已知阻塞**：只剩真机入口层证据（依赖用户本人跑 T0 场景）+ T3 尚未完成。
+- **进度**：
+  - **T2 已收敛并合并**（PR #13 → `513d3fb`）。四轮审查：①主脑 diff+抽跑+红验 0 P1；
+    ②Codex 换四证据源抓到 P1-1（node-pty 写失败不同步抛异常，`pty-write-failed` 是死分支
+    而 accepted 照发，且去重账本把错误固化）；③修复后主脑增量四问审 0 P1；
+    ④Codex 协议 fuzzing + 资源账本长跑 verdict `pass`、P1=0。连续 2 轮无新增 P1，收敛。
+  - **已接受不修的 P2（backlog）**：`terminalFailed` 之后 PTY 的 `onData` 未解绑，
+    失败 session 仍在空转计数（实测 20 MiB 输出后 `outputSeq` 904→561756、CPU user 2.08s），
+    但强制 GC 后 heap 反降、fd 与子进程干净，无泄漏无崩溃。用户此时已收到
+    `Terminal failed; restart remobi.`，开销只存在于"看到错误却不重启"的窗口。
+  - **已记录的设计限制**：`accepted` 只证明 data 已交给 PTY 写入队列，不保证操作系统层面
+    写入成功（详见设计文档 `## Known Limitations`）。
+  - **T3 已派发**（`card/wnet-t3`，base `513d3fb`）。
 - **推进前必须拿到的证据**：
   - [ ] 全量单测 + Playwright 绿；环境：本地；命令：`pnpm test`、`pnpm run test:pw`
   - [ ] **时序测试连跑 5 次全绿**（T2 的 session 测试、T3 的连接状态机测试各自 5 次）；
