@@ -1,10 +1,14 @@
 # remobi
 
-Monitor and control your coding agents from your phone. Touch controls for tmux (or [zellij](https://github.com/zellij-org/zellij), [herdr](https://github.com/ogulcancelik/herdr)) over the web. Published on npm as `remobi`.
+Monitor and control your coding agents from your phone. Touch controls for tmux (or [zellij](https://github.com/zellij-org/zellij), [herdr](https://github.com/ogulcancelik/herdr)) over the web.
+
+risk-tier: personal
+
+Fork status: independent fork as of 2026-08-20 — not tracking upstream, not published to npm. Focus: optimizing the herdr mobile WebUI experience. See `docs/decisions/2026-08-20-fork-herdr-focus.md`.
 
 ## Architecture
 
-Pure TypeScript + DOM API — no framework. Transpiles to JS via tsdown for npm distribution. Bundles a browser client via esbuild and serves it from Node.
+Pure TypeScript + DOM API — no framework. Transpiles to JS via tsdown. Bundles a browser client via esbuild and serves it from Node.
 
 ## Stack
 
@@ -123,14 +127,15 @@ CLI + build:
 
 ## Publishing
 
+- Post-fork (2026-08-20): **no npm publishing** — the `remobi` name belongs to upstream. The semantic-release `release` job still maintains version/changelog/GitHub Releases, but npm publish is expected to no-op/fail harmlessly until a new package name is chosen (if ever). Distribution for now = run from source.
 - Transpiles to JS via tsdown: `bin` → `dist/cli.mjs`, `exports` → `dist/*.mjs` + `dist/*.d.mts`
-- `files` array controls what's published: `dist/`, `styles/`, `src/pwa/icons/`, `README.md`, `CHANGELOG.md`, `LICENSE`
+- `files` array controls what would be published: `dist/`, `styles/`, `src/pwa/icons/`, `README.md`, `CHANGELOG.md`, `LICENSE`
 - CI: `.github/workflows/ci.yml` — pnpm test + biome check
 - Release: `release` job in `.github/workflows/ci.yml` — semantic-release on push to `main` and `dev`, gated on `check` job
-  - Versioning, changelog, npm publish, and GitHub Release are all automated
+  - Versioning, changelog, and GitHub Release are automated; npm publish is disabled in practice (fork)
   - `npx semantic-release --dry-run` for local verification
-  - Stable channel: `main` → npm `latest`
-  - Prerelease channel: `dev` → npm `dev` + GitHub prereleases
+  - Stable channel: `main` → GitHub Release
+  - Prerelease channel: `dev` → GitHub prereleases
   - Promote experimental releases by merging `dev` into `main`
   - Release triggers: `feat:` → minor, `fix:` → patch, `BREAKING CHANGE` → major
   - No release: `chore:`, `docs:`, `refactor:`, `test:`, `ci:`
