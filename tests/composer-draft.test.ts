@@ -71,6 +71,22 @@ describe('composer draft persistence', () => {
 		expect(readStoredComposer()).toEqual({ version: 1, draft: '', pending })
 	})
 
+	test('partial text does not change the serialised draft', () => {
+		localStorage.setItem(
+			COMPOSER_STORAGE_KEY,
+			JSON.stringify({ version: 1, draft: 'saved draft', pending: null }),
+		)
+		const composer = createAsrPreview()
+		const before = localStorage.getItem(COMPOSER_STORAGE_KEY)
+
+		vi.useFakeTimers()
+		composer.setPartial('intermediate result')
+		vi.advanceTimersByTime(20)
+		vi.useRealTimers()
+
+		expect(localStorage.getItem(COMPOSER_STORAGE_KEY)).toBe(before)
+	})
+
 	test.each([
 		['bad JSON', '{ bad JSON'],
 		['wrong version', JSON.stringify({ version: 2, draft: 'x', pending: null })],

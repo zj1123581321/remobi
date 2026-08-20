@@ -678,6 +678,23 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		expect(harness.controller.preview.getText()).toBe('aaa bbb')
 		harness.controller.dispose()
 	})
+
+	test('ASR final persists the complete appended draft', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'typed base'
+		harness.controller.preview.input.dispatchEvent(new Event('input', { bubbles: true }))
+		await startRecording(harness)
+		dispatchTap(harness.button)
+		harness.engine.emitFinal('spoken final', 1)
+
+		expect(JSON.parse(localStorage.getItem('remobi:composer:v1:/') ?? '')).toEqual({
+			version: 1,
+			draft: 'typed base spoken final',
+			pending: null,
+		})
+		harness.controller.dispose()
+	})
 })
 
 describe('preview injection', () => {
@@ -826,6 +843,56 @@ describe('preview injection', () => {
 		sendButton?.dispatchEvent(new Event('click'))
 		await Promise.resolve()
 		expect(harness.term.sent).toEqual([])
+		harness.controller.dispose()
+	})
+
+	test.each([
+		{
+			name: 'empty without autoEnter',
+			draft: '',
+			autoEnter: false,
+			sent: [],
+			message: 'Type or speak something to send.',
+		},
+		{
+			name: 'empty with autoEnter',
+			draft: '',
+			autoEnter: true,
+			sent: [],
+			message: 'Type or speak something to send.',
+		},
+		{
+			name: 'non-printing with autoEnter',
+			draft: '\u0000\u007f',
+			autoEnter: true,
+			sent: [],
+			message: 'Speech contained no printable text.',
+		},
+		{
+			name: 'hello without autoEnter',
+			draft: 'hello',
+			autoEnter: false,
+			sent: ['hello'],
+			message: undefined,
+		},
+		{
+			name: 'hello with autoEnter',
+			draft: 'hello',
+			autoEnter: true,
+			sent: ['hello', '\r'],
+			message: undefined,
+		},
+	])('$name keeps the submit guards', async ({ draft, autoEnter, sent, message }) => {
+		const harness = createHarness(autoEnter)
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = draft
+		dispatchPreviewTap(harness, 'send')
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+
+		expect(harness.term.sent).toEqual(sent)
+		if (message !== undefined) {
+			expect(harness.controller.preview.message.textContent).toBe(message)
+		}
 		harness.controller.dispose()
 	})
 
