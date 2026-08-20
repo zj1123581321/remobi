@@ -1,6 +1,7 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { createAsrPreview } from '../src/controls/asr-preview'
+import type { ComposerPending } from '../src/controls/asr-preview'
 import { _resetTouchGuard } from '../src/util/tap'
 
 beforeEach(() => GlobalRegistrator.register())
@@ -90,5 +91,54 @@ describe('voice composer shell', () => {
 		composer.close()
 
 		expect(states).toEqual([true, false])
+	})
+
+	test('persists pending using the existing v1 composer schema', () => {
+		const composer = createAsrPreview()
+		composer.input.value = 'source'
+		const pending: ComposerPending = {
+			id: 'action-1',
+			sessionId: 'session-1',
+			sourceText: 'source',
+			data: 'source\r',
+			status: 'pending',
+		}
+
+		expect(composer.setPending(pending)).toBe(true)
+		expect(JSON.parse(localStorage.getItem('remobi:composer:v1:/') ?? '')).toEqual({
+			version: 1,
+			draft: 'source',
+			pending,
+		})
+		expect(composer.getPending()).toEqual(pending)
+		expect(composer.setPending(null)).toBe(true)
+		expect(JSON.parse(localStorage.getItem('remobi:composer:v1:/') ?? '').pending).toBeNull()
+	})
+
+	test('submission controls expose status with live text and the correct actions', () => {
+		const composer = createAsrPreview()
+		const message = composer.message
+		const retry = composer.element.querySelector<HTMLButtonElement>('.wt-composer-retry')
+		const abandon = composer.element.querySelector<HTMLButtonElement>('.wt-composer-abandon')
+		const send = composer.element.querySelector<HTMLButtonElement>('.wt-composer-send')
+		if (!retry || !abandon || !send) throw new Error('missing composer action controls')
+
+		composer.setSubmissionControls('unknown')
+		composer.setSubmissionStatus(
+			'unknown',
+			'Result unknown — the terminal may or may not have received it.',
+		)
+		expect(message.getAttribute('aria-live')).toBe('polite')
+		expect(message.dataset.submissionStatus).toBe('unknown')
+		expect(retry.hidden).toBe(false)
+		expect(retry.disabled).toBe(false)
+		expect(abandon.hidden).toBe(false)
+		expect(send.disabled).toBe(true)
+
+		composer.setSubmissionControls('rejected')
+		composer.setSubmissionStatus('rejected', 'Not received: duplicate submission id.')
+		expect(retry.hidden).toBe(true)
+		expect(retry.disabled).toBe(true)
+		expect(abandon.hidden).toBe(false)
 	})
 })
