@@ -233,11 +233,9 @@ body.wt-composer-open #wt-toolbar {
 #wt-asr-composer .wt-asr-composer-message[data-submission-status="pending"] {
 	color: #f9e2af;
 }
-
 #wt-asr-composer .wt-asr-composer-message[data-submission-status="unknown"] {
 	color: #fab387;
 }
-
 #wt-asr-composer .wt-asr-composer-message[data-submission-status="rejected"] {
 	color: #f38ba8;
 }
