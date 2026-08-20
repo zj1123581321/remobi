@@ -36,6 +36,7 @@ class FakeSocket extends EventTarget {
 	static readonly OPEN = 1
 	static readonly CLOSED = 3
 	readonly sent: string[] = []
+	bufferedAmount = 0
 	readyState = FakeSocket.CONNECTING
 
 	constructor() {
@@ -594,5 +595,151 @@ describe('client connection state machine', () => {
 			id: expect.any(String),
 		})
 		expect(JSON.parse(socket.sent[1] as string)).toEqual({ type: 'resize', cols: 140, rows: 50 })
+	})
+
+	test('freeze suspends a synced socket through the pagehide path', async () => {
+		const oldSocket = await freshSynced()
+		const socketCount = harness.sockets.length
+		document.dispatchEvent(new Event('freeze'))
+		expect(oldSocket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().state).toBe('disconnected')
+		await vi.advanceTimersByTimeAsync(20_000)
+		expect(harness.sockets).toHaveLength(socketCount)
+	})
+
+	test('resume starts a new epoch and requires a new snapshot', async () => {
+		const terminal = harness.terminal as FakeTerminal
+		const oldSocket = await freshSynced()
+		const writesBefore = terminal.writes.length
+		document.dispatchEvent(new Event('freeze'))
+		receive(oldSocket, { type: 'output', data: 'frozen-old-output', seq: 1 })
+		document.dispatchEvent(new Event('resume'))
+		await vi.advanceTimersByTimeAsync(0)
+
+		const newSocket = currentSocket()
+		expect(newSocket).not.toBe(oldSocket)
+		expect(getStatus().state).toBe('reconnecting')
+		expect(terminal.writes).toHaveLength(writesBefore)
+		newSocket.open()
+		receive(newSocket, {
+			type: 'snapshot',
+			data: 'fresh-after-resume',
+			sessionId: 'resume-session',
+			outputWatermark: 1,
+		})
+		expect(getStatus().state).toBe('synced')
+		expect(terminal.writes.slice(writesBefore)).toContain('fresh-after-resume')
+	})
+
+	test('resume merged with visible and pageshow creates one socket', async () => {
+		await freshSynced()
+		document.dispatchEvent(new Event('freeze'))
+		const socketCount = harness.sockets.length
+		document.dispatchEvent(new Event('resume'))
+		setVisibility('visible')
+		document.dispatchEvent(new Event('visibilitychange'))
+		window.dispatchEvent(new Event('pageshow'))
+		await vi.advanceTimersByTimeAsync(0)
+		expect(harness.sockets).toHaveLength(socketCount + 1)
+	})
+
+	test('offline immediately invalidates synced and closes its socket', async () => {
+		const oldSocket = await freshSynced()
+		window.dispatchEvent(new Event('offline'))
+		expect(oldSocket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().state).toBe('disconnected')
+		const socketCount = harness.sockets.length
+		window.dispatchEvent(new Event('online'))
+		await vi.advanceTimersByTimeAsync(0)
+		expect(harness.sockets).toHaveLength(socketCount + 1)
+	})
+
+	test('offline input emits no frame and reports the existing discard notice', async () => {
+		const socket = await freshSynced()
+		const sentBefore = socket.sent.length
+		let notice = ''
+		const onNotice = (event: Event): void => {
+			if (event instanceof CustomEvent && typeof event.detail === 'string') notice = event.detail
+		}
+		window.addEventListener('remobi-connection-notice', onNotice)
+		window.dispatchEvent(new Event('offline'))
+		window.term?.input('offline-must-drop', true)
+		window.removeEventListener('remobi-connection-notice', onNotice)
+		expect(socket.sent).toHaveLength(sentBefore)
+		expect(notice).toBe('Not sent — still syncing.')
+	})
+
+	test('offline resize coalesces and sends once after the next snapshot', async () => {
+		const socket = await freshSynced()
+		const sentBefore = socket.sent.length
+		const terminal = harness.terminal as FakeTerminal
+		window.dispatchEvent(new Event('offline'))
+		terminal.cols = 101
+		terminal.rows = 31
+		window.__remobiResize?.()
+		terminal.cols = 120
+		terminal.rows = 40
+		window.__remobiResize?.()
+		expect(socket.sent).toHaveLength(sentBefore)
+
+		window.dispatchEvent(new Event('online'))
+		await vi.advanceTimersByTimeAsync(0)
+		const nextSocket = currentSocket()
+		nextSocket.open()
+		receive(nextSocket, {
+			type: 'snapshot',
+			data: 'online-snapshot',
+			sessionId: 'online-session',
+			outputWatermark: 0,
+		})
+		const frames = nextSocket.sent.map((payload) => JSON.parse(payload) as Record<string, unknown>)
+		expect(frames).toHaveLength(2)
+		expect(frames[0]).toMatchObject({ type: 'ping' })
+		expect(frames[1]).toEqual({ type: 'resize', cols: 120, rows: 40 })
+	})
+
+	test('buffered input detects a stuck OPEN socket before sending', async () => {
+		const socket = await freshSynced()
+		socket.bufferedAmount = 1
+		const sentBefore = socket.sent.length
+		window.term?.input('buffered-must-drop', true)
+		expect(socket.sent).toHaveLength(sentBefore)
+		expect(socket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().state).toBe('reconnecting')
+		expect(getStatus().lastFailureReason).toBe('socket-error')
+	})
+
+	test('normal input with an empty buffer remains sendable', async () => {
+		const socket = await freshSynced()
+		socket.bufferedAmount = 0
+		window.term?.input('one', true)
+		window.term?.input('two', true)
+		const frames = socket.sent
+			.map((payload) => JSON.parse(payload) as Record<string, unknown>)
+			.filter((frame) => frame.type === 'input')
+		expect(frames).toEqual([
+			{ type: 'input', data: 'one' },
+			{ type: 'input', data: 'two' },
+		])
+	})
+
+	test('a network black hole still falls back to the existing heartbeat deadline', async () => {
+		const socket = await freshSynced()
+		await vi.advanceTimersByTimeAsync(14_999)
+		expect(socket.readyState).toBe(FakeSocket.OPEN)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(socket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().lastFailureReason).toBe('heartbeat-timeout')
+	})
+
+	test('dispose removes freeze and resume listeners', async () => {
+		const socket = await freshSynced()
+		const socketCount = harness.sockets.length
+		window.dispatchEvent(new Event('beforeunload'))
+		expect(socket.readyState).toBe(FakeSocket.CLOSED)
+		document.dispatchEvent(new Event('freeze'))
+		document.dispatchEvent(new Event('resume'))
+		await vi.advanceTimersByTimeAsync(20_000)
+		expect(harness.sockets).toHaveLength(socketCount)
 	})
 })
