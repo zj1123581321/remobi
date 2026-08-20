@@ -219,6 +219,57 @@ describe('SharedTerminalSession', () => {
 		}
 	})
 
+	test('mirror failure is sticky, fail-loud, and makes later action clients unavailable', async () => {
+		const session = new SharedTerminalSession(['bash', '--norc', '--noprofile', '-lc', 'cat'])
+		const watcher = createClientRecorder()
+		const mirror = (
+			session as unknown as {
+				mirror: { write(data: string, callback: () => void): void }
+			}
+		).mirror
+		await session.addClient(watcher.client)
+		mirror.write = () => {
+			throw new Error('mirror contains terminal data')
+		}
+
+		try {
+			session.handleClientMessage(watcher.client, { type: 'input', data: 'secret-marker' })
+			await vi.waitFor(() => {
+				expect(watcher.getMessages()).toContainEqual({
+					type: 'error',
+					message: 'Terminal mirror failed; restart remobi.',
+				})
+			})
+			expect(watcher.getMessages()).not.toContainEqual(
+				expect.objectContaining({ message: expect.stringContaining('secret-marker') }),
+			)
+			expect(watcher.getCloseCount()).toBe(1)
+
+			const lateClient = createClientRecorder()
+			await session.addClient(lateClient.client)
+			expect(lateClient.getMessages()).toEqual([
+				{ type: 'error', message: 'Terminal mirror failed; restart remobi.' },
+			])
+			expect(lateClient.getCloseCount()).toBe(1)
+
+			session.handleClientMessage(watcher.client, {
+				type: 'input-action',
+				id: 'unavailable-action',
+				data: 'secret-marker',
+			})
+			expect(watcher.getMessages().at(-1)).toEqual({
+				type: 'input-rejected',
+				id: 'unavailable-action',
+				reason: 'session-unavailable',
+			})
+			const messageCount = watcher.getMessages().length
+			session.handleClientMessage(watcher.client, { type: 'input', data: 'ignored' })
+			expect(watcher.getMessages()).toHaveLength(messageCount)
+		} finally {
+			await session.dispose()
+		}
+	})
+
 	test('snapshot replays SGR mouse encoding for late clients', async () => {
 		expect(await lateJoinSnapshot('\\e[?1002h\\e[?1006h')).toContain('\x1b[?1006h')
 	})
