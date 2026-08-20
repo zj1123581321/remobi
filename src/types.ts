@@ -144,6 +144,22 @@ export interface ReconnectConfig {
 	readonly enabled: boolean
 }
 
+export type ConnectionState = 'disconnected' | 'reconnecting' | 'syncing' | 'synced'
+
+export type ConnectionFailureReason =
+	| 'socket-closed'
+	| 'socket-error'
+	| 'snapshot-timeout'
+	| 'heartbeat-timeout'
+	| 'output-overflow'
+	| 'protocol-error'
+
+export interface ConnectionStatus {
+	readonly state: ConnectionState
+	readonly consecutivePreSyncFailures: number
+	readonly lastFailureReason: ConnectionFailureReason | null
+}
+
 /** Browser-direct ASR configuration. */
 export interface DoubaoAsrConfig {
 	readonly apiKey: string
@@ -246,10 +262,16 @@ export interface XTerminal {
 	/** Track terminal textarea focus/blur events */
 	onFocusChange?(handler: (focused: boolean) => void): { dispose(): void }
 	onData(handler: (data: string) => void): { dispose(): void }
-	/** Whether the terminal input WebSocket is currently OPEN. */
+	/** Whether the terminal has applied the current epoch's complete snapshot. */
 	isConnected(): boolean
-	/** Observe terminal WebSocket open/close transitions. */
+	/** Observe transitions into and out of the synced state. */
 	onConnectionChange(handler: (connected: boolean) => void): { dispose(): void }
+	/** Current connection state. */
+	getConnectionStatus(): ConnectionStatus
+	/** Observe all connection state transitions. */
+	onConnectionStatusChange(handler: (status: ConnectionStatus) => void): { dispose(): void }
+	/** Ask the runtime bridge to attempt a fresh connection immediately. */
+	requestReconnect(): void
 }
 
 /** ttyd sets window.term — typed globally to avoid unsafe casts */

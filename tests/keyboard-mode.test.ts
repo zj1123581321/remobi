@@ -16,7 +16,7 @@ import {
 import { createDrawer } from '../src/drawer/drawer'
 import { createHookRegistry } from '../src/hooks/registry'
 import { createToolbar } from '../src/toolbar/toolbar'
-import type { XTerminal } from '../src/types'
+import type { ConnectionStatus, XTerminal } from '../src/types'
 import { mockTerminal } from './fixtures'
 
 // vitest runs from the project root; happy-dom rewrites import.meta.url
@@ -74,6 +74,14 @@ function mockSuppressionTerm(): {
 			onConnectionChange(_handler: (connected: boolean) => void) {
 				return { dispose() {} }
 			},
+			getConnectionStatus() {
+				return { state: 'synced', consecutivePreSyncFailures: 0, lastFailureReason: null }
+			},
+			onConnectionStatusChange(handler: (status: ConnectionStatus) => void) {
+				handler({ state: 'synced', consecutivePreSyncFailures: 0, lastFailureReason: null })
+				return { dispose() {} }
+			},
+			requestReconnect() {},
 		},
 	}
 }
@@ -547,6 +555,14 @@ describe('init lifecycle (P2-1)', () => {
 			onConnectionChange(_handler: (connected: boolean) => void) {
 				return { dispose() {} }
 			},
+			getConnectionStatus() {
+				return { state: 'synced', consecutivePreSyncFailures: 0, lastFailureReason: null }
+			},
+			onConnectionStatusChange(handler: (status: ConnectionStatus) => void) {
+				handler({ state: 'synced', consecutivePreSyncFailures: 0, lastFailureReason: null })
+				return { dispose() {} }
+			},
+			requestReconnect() {},
 		}
 		window.term = term
 

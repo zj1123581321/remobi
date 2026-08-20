@@ -4,7 +4,7 @@ import { FONT_SIZE_STORAGE_KEY } from '../src/actions/registry'
 import { defaultConfig, defineConfig } from '../src/config'
 import { createGestureLock } from '../src/gestures/lock'
 import { attachPinchGestures } from '../src/gestures/pinch'
-import type { RemobiConfig, XTerminal } from '../src/types'
+import type { ConnectionStatus, RemobiConfig, XTerminal } from '../src/types'
 import { mockTerminal } from './fixtures'
 
 beforeEach(() => {
@@ -52,6 +52,14 @@ async function bootOverlay(config: RemobiConfig = defineConfig()): Promise<XTerm
 		onConnectionChange(_handler: (connected: boolean) => void) {
 			return { dispose() {} }
 		},
+		getConnectionStatus() {
+			return { state: 'synced', consecutivePreSyncFailures: 0, lastFailureReason: null }
+		},
+		onConnectionStatusChange(handler: (status: ConnectionStatus) => void) {
+			handler({ state: 'synced', consecutivePreSyncFailures: 0, lastFailureReason: null })
+			return { dispose() {} }
+		},
+		requestReconnect() {},
 	}
 	window.term = term
 

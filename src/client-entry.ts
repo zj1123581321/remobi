@@ -8,7 +8,13 @@ import { joinBasePath } from './base-path'
 import { createHookRegistry, init } from './index'
 import { parseServerMessage, serialiseClientMessage } from './session-protocol'
 import type { ClientMessage } from './session-protocol'
-import type { RemobiConfig, XTerminal } from './types'
+import type {
+	ConnectionFailureReason,
+	ConnectionState,
+	ConnectionStatus,
+	RemobiConfig,
+	XTerminal,
+} from './types'
 import { el } from './util/dom'
 import { onTap } from './util/tap'
 
@@ -34,19 +40,25 @@ function attachOptionalAddons(term: Terminal): FitAddon {
 	return fitAddon
 }
 
-function flushQueuedMessages(socket: WebSocket, queued: ClientMessage[]): void {
-	while (queued.length > 0) {
-		const message = queued.shift()
-		if (!message) continue
-		socket.send(serialiseClientMessage(message))
-	}
-}
+const SNAPSHOT_DEADLINE_MS = 10_000
+const HEARTBEAT_INTERVAL_MS = 10_000
+const HEARTBEAT_DEADLINE_MS = 15_000
+const RECONNECT_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000] as const
+const PRE_SYNC_FAILURES_BEFORE_AUTH_HINT = 3
+const MAX_PRE_SNAPSHOT_OUTPUT_BYTES = 1024 * 1024
+const BUFFERED_AMOUNT_SETTLE_MS = 100
+// Heartbeats refresh this proof every 10s; 25s leaves margin while remaining ahead of the 15s deadline.
+const FRESHNESS_WINDOW_MS = 25_000
+const utf8Encoder = new TextEncoder()
 
 function createTermBridge(
 	term: Terminal,
 	send: (message: ClientMessage) => void,
 	isConnected: () => boolean,
 	onConnectionChange: (handler: (connected: boolean) => void) => { dispose(): void },
+	getConnectionStatus: () => ConnectionStatus,
+	onConnectionStatusChange: (handler: (status: ConnectionStatus) => void) => { dispose(): void },
+	requestReconnect: () => void,
 ): XTerminal {
 	const options: XTerminal['options'] = {
 		get fontSize() {
@@ -131,6 +143,9 @@ function createTermBridge(
 		},
 		isConnected,
 		onConnectionChange,
+		getConnectionStatus,
+		onConnectionStatusChange,
+		requestReconnect,
 	}
 }
 
@@ -138,6 +153,10 @@ interface SessionStatusOverlay {
 	readonly element: HTMLDivElement
 	readonly message: HTMLDivElement
 	readonly button: HTMLButtonElement
+}
+
+function clearTimer(timer: number | undefined): void {
+	if (timer !== undefined) window.clearTimeout(timer)
 }
 
 function createSessionStatusOverlay(onReload: () => void): SessionStatusOverlay {
@@ -204,36 +223,68 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	document.body.style.background = config.theme.background
 	fitAddon.fit()
 
-	const queuedMessages: ClientMessage[] = []
 	let socket: WebSocket | null = null
+	let currentEpoch = 0
+	let reconnectTimer: number | undefined
+	let snapshotDeadlineTimer: number | undefined
+	let heartbeatDeadlineTimer: number | undefined
+	let heartbeatNextTimer: number | undefined
+	let bufferedAmountCheckTimer: number | undefined
+	let heartbeatPingId: string | null = null
+	let immediateAttemptQueued = false
+	let pageHidden = document.visibilityState === 'hidden'
 	const connectionListeners = new Set<(connected: boolean) => void>()
-	let lastConnectionState: boolean | undefined
+	const connectionStatusListeners = new Set<(status: ConnectionStatus) => void>()
+	let lastConnectedState: boolean | undefined
+	let connectionStatus: ConnectionStatus = {
+		state: 'disconnected',
+		consecutivePreSyncFailures: 0,
+		lastFailureReason: null,
+	}
 	let snapshotLoaded = false
-	const pendingOutput: string[] = []
+	let snapshotApplying = false
+	let lastProvenFreshAt = 0
+	const pendingOutput = new Map<number, string>()
+	let pendingOutputBytes = 0
+	let pendingResize: { cols: number; rows: number } | null = null
+	let notSentNoticeShown = false
 	let exitReceived = false
 	let statusOverlay: SessionStatusOverlay | null = null
 
 	function send(message: ClientMessage): void {
-		if (socket && socket.readyState === WebSocket.OPEN) {
-			socket.send(serialiseClientMessage(message))
+		if (connectionStatus.state === 'synced' && socket?.readyState === WebSocket.OPEN) {
+			if (message.type === 'input' && Date.now() - lastProvenFreshAt > FRESHNESS_WINDOW_MS) {
+				failConnection(currentEpoch, 'heartbeat-timeout')
+			} else {
+				const activeSocket = socket
+				const wasBuffered = message.type === 'input' && activeSocket.bufferedAmount > 0
+				activeSocket.send(serialiseClientMessage(message))
+				if (message.type === 'input' && (wasBuffered || activeSocket.bufferedAmount > 0)) {
+					scheduleBufferedAmountCheck(currentEpoch, activeSocket)
+				} else if (message.type === 'input') {
+					clearTimer(bufferedAmountCheckTimer)
+					bufferedAmountCheckTimer = undefined
+				}
+				return
+			}
+		}
+		if (message.type === 'resize') {
+			pendingResize = { cols: message.cols, rows: message.rows }
 			return
 		}
-		queuedMessages.push(message)
+		if (!notSentNoticeShown) {
+			notSentNoticeShown = true
+			window.dispatchEvent(
+				new CustomEvent('remobi-connection-notice', {
+					detail: 'Not sent — still syncing.',
+				}),
+			)
+		}
 	}
 
 	function syncSize(): void {
 		fitAddon.fit()
 		send({ type: 'resize', cols: term.cols, rows: term.rows })
-	}
-
-	function writeBufferedOutput(): void {
-		if (!snapshotLoaded) return
-		while (pendingOutput.length > 0) {
-			const data = pendingOutput.shift()
-			if (data) {
-				term.write(data)
-			}
-		}
 	}
 
 	function showSessionStatus(message: string): void {
@@ -253,13 +304,13 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	}
 
 	function isConnected(): boolean {
-		return socket?.readyState === WebSocket.OPEN
+		return connectionStatus.state === 'synced'
 	}
 
 	function onConnectionChange(handler: (connected: boolean) => void): { dispose(): void } {
 		connectionListeners.add(handler)
 		const connected = isConnected()
-		lastConnectionState = connected
+		lastConnectedState = connected
 		handler(connected)
 		return {
 			dispose() {
@@ -268,14 +319,351 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		}
 	}
 
+	function getConnectionStatus(): ConnectionStatus {
+		return connectionStatus
+	}
+
+	function onConnectionStatusChange(handler: (status: ConnectionStatus) => void): {
+		dispose(): void
+	} {
+		connectionStatusListeners.add(handler)
+		handler(connectionStatus)
+		return {
+			dispose() {
+				connectionStatusListeners.delete(handler)
+			},
+		}
+	}
+
 	function notifyConnectionChange(): void {
 		const connected = isConnected()
-		if (connected === lastConnectionState) return
-		lastConnectionState = connected
+		if (connected === lastConnectedState) return
+		lastConnectedState = connected
 		for (const listener of connectionListeners) listener(connected)
 	}
 
-	const termBridge = createTermBridge(term, send, isConnected, onConnectionChange)
+	function setConnectionStatus(
+		state: ConnectionState,
+		failureReason = connectionStatus.lastFailureReason,
+	): void {
+		const next: ConnectionStatus = {
+			state,
+			consecutivePreSyncFailures: connectionStatus.consecutivePreSyncFailures,
+			lastFailureReason: failureReason,
+		}
+		if (
+			next.state === connectionStatus.state &&
+			next.consecutivePreSyncFailures === connectionStatus.consecutivePreSyncFailures &&
+			next.lastFailureReason === connectionStatus.lastFailureReason
+		) {
+			return
+		}
+		connectionStatus = next
+		for (const listener of connectionStatusListeners) listener(connectionStatus)
+		notifyConnectionChange()
+	}
+
+	function stopHeartbeat(): void {
+		clearTimer(heartbeatDeadlineTimer)
+		clearTimer(heartbeatNextTimer)
+		heartbeatDeadlineTimer = undefined
+		heartbeatNextTimer = undefined
+		heartbeatPingId = null
+	}
+
+	function clearConnectionTimers(): void {
+		clearTimer(reconnectTimer)
+		clearTimer(snapshotDeadlineTimer)
+		clearTimer(bufferedAmountCheckTimer)
+		reconnectTimer = undefined
+		snapshotDeadlineTimer = undefined
+		bufferedAmountCheckTimer = undefined
+	}
+
+	function checkBufferedAmount(myEpoch: number, activeSocket: WebSocket): void {
+		bufferedAmountCheckTimer = undefined
+		if (
+			myEpoch !== currentEpoch ||
+			connectionStatus.state !== 'synced' ||
+			socket !== activeSocket ||
+			activeSocket.readyState !== WebSocket.OPEN
+		) {
+			return
+		}
+		if (activeSocket.bufferedAmount > 0) failConnection(myEpoch, 'socket-error')
+	}
+
+	function scheduleBufferedAmountCheck(myEpoch: number, activeSocket: WebSocket): void {
+		clearTimer(bufferedAmountCheckTimer)
+		bufferedAmountCheckTimer = window.setTimeout(() => {
+			checkBufferedAmount(myEpoch, activeSocket)
+		}, BUFFERED_AMOUNT_SETTLE_MS)
+	}
+
+	function clearPendingOutput(): void {
+		pendingOutput.clear()
+		pendingOutputBytes = 0
+	}
+
+	function recordPreSyncFailure(reason: ConnectionFailureReason): void {
+		connectionStatus = {
+			state: 'disconnected',
+			consecutivePreSyncFailures: connectionStatus.consecutivePreSyncFailures + 1,
+			lastFailureReason: reason,
+		}
+		if (connectionStatus.consecutivePreSyncFailures >= PRE_SYNC_FAILURES_BEFORE_AUTH_HINT) {
+			window.dispatchEvent(
+				new CustomEvent('remobi-connection-notice', {
+					detail:
+						reason === 'protocol-error'
+							? 'Connection failed — refresh, and check the server version.'
+							: 'Connection failed — you may need to re-authenticate.',
+				}),
+			)
+		}
+		for (const listener of connectionStatusListeners) listener(connectionStatus)
+		notifyConnectionChange()
+	}
+
+	function scheduleReconnect(): void {
+		if (pageHidden || reconnectTimer !== undefined) return
+		const backoffIndex = Math.min(
+			Math.max(connectionStatus.consecutivePreSyncFailures - 1, 0),
+			RECONNECT_BACKOFF_MS.length - 1,
+		)
+		setConnectionStatus('reconnecting')
+		reconnectTimer = window.setTimeout(() => {
+			reconnectTimer = undefined
+			connect()
+		}, RECONNECT_BACKOFF_MS[backoffIndex] ?? RECONNECT_BACKOFF_MS[0])
+	}
+
+	function invalidateConnection(): void {
+		currentEpoch += 1
+		clearConnectionTimers()
+		stopHeartbeat()
+		snapshotLoaded = false
+		snapshotApplying = false
+		clearPendingOutput()
+	}
+
+	function failConnection(myEpoch: number, reason: ConnectionFailureReason, notice?: string): void {
+		if (myEpoch !== currentEpoch) return
+		const sessionEnded = exitReceived
+		const failedSocket = socket
+		invalidateConnection()
+		socket = null
+		if (notice) {
+			window.dispatchEvent(new CustomEvent('remobi-connection-notice', { detail: notice }))
+		}
+		if (connectionStatus.state !== 'synced' || reason === 'protocol-error') {
+			recordPreSyncFailure(reason)
+		} else {
+			setConnectionStatus('disconnected', reason)
+		}
+		if (sessionEnded) {
+			const sessionEndedNotice = 'Session ended — restart remobi to start a new one.'
+			window.dispatchEvent(
+				new CustomEvent('remobi-connection-notice', { detail: sessionEndedNotice }),
+			)
+			showSessionStatus(sessionEndedNotice)
+		}
+		failedSocket?.close()
+		if (!sessionEnded) scheduleReconnect()
+	}
+
+	function sendHeartbeat(myEpoch: number): void {
+		if (
+			myEpoch !== currentEpoch ||
+			connectionStatus.state !== 'synced' ||
+			!socket ||
+			socket.readyState !== WebSocket.OPEN
+		) {
+			return
+		}
+		const id = crypto.randomUUID()
+		heartbeatPingId = id
+		socket.send(serialiseClientMessage({ type: 'ping', id }))
+		heartbeatDeadlineTimer = window.setTimeout(() => {
+			if (heartbeatPingId === id) failConnection(myEpoch, 'heartbeat-timeout')
+		}, HEARTBEAT_DEADLINE_MS)
+	}
+
+	function startHeartbeat(myEpoch: number): void {
+		stopHeartbeat()
+		sendHeartbeat(myEpoch)
+	}
+
+	function applySnapshot(myEpoch: number, data: string, outputWatermark: number): void {
+		if (myEpoch !== currentEpoch || snapshotLoaded || snapshotApplying) return
+		snapshotApplying = true
+		term.reset()
+		term.write(data, () => {
+			if (myEpoch !== currentEpoch || !snapshotApplying) return
+			clearTimer(snapshotDeadlineTimer)
+			snapshotDeadlineTimer = undefined
+			snapshotApplying = false
+			snapshotLoaded = true
+			connectionStatus = {
+				state: 'synced',
+				consecutivePreSyncFailures: 0,
+				lastFailureReason: null,
+			}
+			notSentNoticeShown = false
+			lastProvenFreshAt = Date.now()
+			for (const listener of connectionStatusListeners) listener(connectionStatus)
+			notifyConnectionChange()
+
+			const buffered = [...pendingOutput.entries()]
+			clearPendingOutput()
+			for (const [, output] of buffered
+				.filter(([seq]) => seq > outputWatermark)
+				// oxlint-disable-next-line unicorn/no-array-sort -- buffered is a fresh local array
+				.sort(([left], [right]) => left - right)) {
+				term.write(output)
+			}
+			startHeartbeat(myEpoch)
+			if (pendingResize && socket?.readyState === WebSocket.OPEN) {
+				const resize = pendingResize
+				pendingResize = null
+				socket.send(serialiseClientMessage({ type: 'resize', ...resize }))
+			}
+		})
+	}
+
+	function handleOutput(myEpoch: number, seq: number, data: string): void {
+		if (snapshotLoaded) {
+			term.write(data)
+			return
+		}
+		const previous = pendingOutput.get(seq)
+		if (previous !== undefined) {
+			pendingOutputBytes -= utf8Encoder.encode(previous).byteLength
+		}
+		pendingOutput.set(seq, data)
+		pendingOutputBytes += utf8Encoder.encode(data).byteLength
+		if (pendingOutputBytes > MAX_PRE_SNAPSHOT_OUTPUT_BYTES) {
+			failConnection(myEpoch, 'output-overflow', 'Output too fast — resyncing.')
+		}
+	}
+
+	function handlePong(myEpoch: number, id: string): void {
+		if (heartbeatPingId !== id) return
+		clearTimer(heartbeatDeadlineTimer)
+		heartbeatDeadlineTimer = undefined
+		heartbeatPingId = null
+		lastProvenFreshAt = Date.now()
+		heartbeatNextTimer = window.setTimeout(() => {
+			heartbeatNextTimer = undefined
+			sendHeartbeat(myEpoch)
+		}, HEARTBEAT_INTERVAL_MS)
+	}
+
+	function handleServerMessage(myEpoch: number, event: MessageEvent): void {
+		if (myEpoch !== currentEpoch) return
+		if (typeof event.data !== 'string') {
+			failConnection(myEpoch, 'protocol-error')
+			return
+		}
+		const message = parseServerMessage(event.data)
+		if (!message) {
+			failConnection(myEpoch, 'protocol-error')
+			return
+		}
+
+		switch (message.type) {
+			case 'snapshot':
+				applySnapshot(myEpoch, message.data, message.outputWatermark)
+				return
+			case 'output':
+				handleOutput(myEpoch, message.seq, message.data)
+				return
+			case 'exit':
+				exitReceived = true
+				return
+			case 'error':
+				console.error(`remobi: ${message.message}`)
+				return
+			case 'pong':
+				handlePong(myEpoch, message.id)
+				return
+		}
+	}
+
+	function queueImmediateConnect(force = false): void {
+		if (pageHidden || immediateAttemptQueued) return
+		if (!force && (connectionStatus.state === 'synced' || connectionStatus.state === 'syncing'))
+			return
+		immediateAttemptQueued = true
+		queueMicrotask(() => {
+			immediateAttemptQueued = false
+			if (pageHidden) return
+			clearTimer(reconnectTimer)
+			reconnectTimer = undefined
+			connect()
+		})
+	}
+
+	function requestReconnect(): void {
+		queueImmediateConnect(true)
+	}
+
+	function suspendConnection(): void {
+		setConnectionStatus('disconnected')
+		invalidateConnection()
+		const hiddenSocket = socket
+		socket = null
+		hiddenSocket?.close()
+	}
+
+	function connect(): void {
+		if (pageHidden) return
+		currentEpoch += 1
+		const myEpoch = currentEpoch
+		clearConnectionTimers()
+		stopHeartbeat()
+		const previousSocket = socket
+		socket = null
+		previousSocket?.close()
+		snapshotLoaded = false
+		snapshotApplying = false
+		clearPendingOutput()
+		exitReceived = false
+		setConnectionStatus('reconnecting')
+
+		const nextSocket = new WebSocket(createSocketUrl())
+		socket = nextSocket
+		window.__remobiSockets = [nextSocket]
+
+		nextSocket.addEventListener('open', () => {
+			if (myEpoch !== currentEpoch) return
+			setConnectionStatus('syncing')
+			clearTimer(snapshotDeadlineTimer)
+			snapshotDeadlineTimer = window.setTimeout(() => {
+				failConnection(myEpoch, 'snapshot-timeout')
+			}, SNAPSHOT_DEADLINE_MS)
+			syncSize()
+		})
+		nextSocket.addEventListener('close', () => {
+			if (myEpoch !== currentEpoch) return
+			failConnection(myEpoch, 'socket-closed')
+		})
+		nextSocket.addEventListener('error', () => {
+			if (myEpoch !== currentEpoch) return
+			failConnection(myEpoch, 'socket-error')
+		})
+		nextSocket.addEventListener('message', (event) => handleServerMessage(myEpoch, event))
+	}
+
+	const termBridge = createTermBridge(
+		term,
+		send,
+		isConnected,
+		onConnectionChange,
+		getConnectionStatus,
+		onConnectionStatusChange,
+		requestReconnect,
+	)
 	// xterm handles real keyboard/touch input locally; forward it to the shared PTY.
 	term.onData((data) => {
 		send({ type: 'input', data })
@@ -283,63 +671,59 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	window.term = termBridge
 	window.__remobiResize = syncSize
 
-	socket = new WebSocket(createSocketUrl())
-	window.__remobiSockets = [socket]
-
-	socket.addEventListener('open', () => {
-		notifyConnectionChange()
-		syncSize()
-		flushQueuedMessages(socket, queuedMessages)
-	})
-	socket.addEventListener('close', () => {
-		notifyConnectionChange()
-		showSessionStatus(exitReceived ? 'Session ended' : 'Connection lost')
-	})
-	socket.addEventListener('error', () => {
-		notifyConnectionChange()
-		showSessionStatus('Connection lost')
-	})
-
-	socket.addEventListener('message', (event) => {
-		if (typeof event.data !== 'string') {
+	function onVisibilityChange(): void {
+		if (document.visibilityState === 'hidden') {
+			pageHidden = true
+			suspendConnection()
 			return
 		}
+		pageHidden = false
+		queueImmediateConnect(true)
+	}
 
-		const message = parseServerMessage(event.data)
-		if (!message) {
-			return
-		}
+	function onPageHide(): void {
+		pageHidden = true
+		suspendConnection()
+	}
 
-		switch (message.type) {
-			case 'snapshot':
-				term.reset()
-				term.write(message.data, () => {
-					snapshotLoaded = true
-					writeBufferedOutput()
-				})
-				return
+	function onPageShow(): void {
+		pageHidden = false
+		queueImmediateConnect(true)
+	}
 
-			case 'output':
-				if (!snapshotLoaded) {
-					pendingOutput.push(message.data)
-					return
-				}
-				term.write(message.data)
-				return
+	function onOnline(): void {
+		queueImmediateConnect()
+	}
 
-			case 'exit':
-				exitReceived = true
-				showSessionStatus('Session ended')
-				return
+	function onOffline(): void {
+		suspendConnection()
+	}
 
-			case 'error':
-				console.error(`remobi: ${message.message}`)
-				return
+	function dispose(): void {
+		suspendConnection()
+		document.removeEventListener('visibilitychange', onVisibilityChange)
+		document.removeEventListener('freeze', onPageHide)
+		document.removeEventListener('resume', onPageShow)
+		window.removeEventListener('pagehide', onPageHide)
+		window.removeEventListener('pageshow', onPageShow)
+		window.removeEventListener('online', onOnline)
+		window.removeEventListener('offline', onOffline)
+		window.removeEventListener('resize', syncSize)
+		window.removeEventListener('beforeunload', dispose)
+		window.visualViewport?.removeEventListener('resize', syncSize)
+	}
+	// Keep explicit teardown available without coupling it to a cancelable navigation event.
+	void dispose
 
-			case 'pong':
-				return
-		}
-	})
+	document.addEventListener('visibilitychange', onVisibilityChange)
+	document.addEventListener('freeze', onPageHide)
+	document.addEventListener('resume', onPageShow)
+	window.addEventListener('pagehide', onPageHide)
+	window.addEventListener('pageshow', onPageShow)
+	window.addEventListener('online', onOnline)
+	window.addEventListener('offline', onOffline)
+
+	connect()
 
 	window.addEventListener('resize', syncSize)
 	window.visualViewport?.addEventListener('resize', syncSize)

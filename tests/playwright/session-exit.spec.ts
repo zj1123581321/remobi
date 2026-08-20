@@ -101,7 +101,9 @@ test('ended command closes the session and shows reconnect overlay', async ({ pa
 		await page.goto(`http://127.0.0.1:${port}`)
 		await expect(page.locator('body')).toContainText('session-exit-e2e')
 		await expect(page.locator('#remobi-reconnect-overlay')).toBeVisible({ timeout: 10_000 })
-		await expect(page.locator('#remobi-reconnect-overlay')).toContainText('Connection lost')
+		await expect(page.locator('#remobi-reconnect-overlay')).toContainText(
+			'Session ended — restart remobi to start a new one.',
+		)
 		await expect
 			.poll(async () => {
 				return Promise.race([
