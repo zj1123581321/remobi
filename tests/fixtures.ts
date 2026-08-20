@@ -78,7 +78,8 @@ export function mockTerminalWithSent(): MockTermWithSent {
 		getSessionId() {
 			return 'test-session'
 		},
-		sendInputAction() {
+		sendInputAction(_id: string, data: string) {
+			sent.push(data)
 			return true
 		},
 		onInputActionResult() {

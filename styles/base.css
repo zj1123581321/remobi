@@ -225,6 +225,48 @@ body.wt-composer-open #wt-toolbar {
 	display: block;
 }
 
+#wt-asr-composer .wt-asr-composer-message[data-submission-status] {
+	display: block;
+	padding-left: 2px;
+}
+
+#wt-asr-composer .wt-asr-composer-message[data-submission-status="pending"] {
+	color: #f9e2af;
+}
+
+#wt-asr-composer .wt-asr-composer-message[data-submission-status="unknown"] {
+	color: #fab387;
+}
+
+#wt-asr-composer .wt-asr-composer-message[data-submission-status="rejected"] {
+	color: #f38ba8;
+}
+
+#wt-asr-composer .wt-asr-composer-message[data-submission-status="accepted"] {
+	color: #a6e3a1;
+}
+
+#wt-asr-composer .wt-asr-composer-message[data-submission-status]::before {
+	display: inline-block;
+	margin-right: 4px;
+}
+
+#wt-asr-composer .wt-asr-composer-message[data-submission-status="pending"]::before {
+	content: "⏳";
+}
+
+#wt-asr-composer .wt-asr-composer-message[data-submission-status="unknown"]::before {
+	content: "❔";
+}
+
+#wt-asr-composer .wt-asr-composer-message[data-submission-status="rejected"]::before {
+	content: "⚠";
+}
+
+#wt-asr-composer .wt-asr-composer-message[data-submission-status="accepted"]::before {
+	content: "✓";
+}
+
 #wt-asr-composer .wt-asr-composer-actions {
 	display: flex;
 	align-items: center;
@@ -263,6 +305,22 @@ body.wt-composer-open #wt-toolbar {
 	flex: 1;
 	background: #89b4fa;
 	color: #1e1e2e;
+}
+
+#wt-asr-composer button.wt-composer-retry,
+#wt-asr-composer button.wt-composer-abandon {
+	padding: 0 12px;
+	background: #45475a;
+	color: #cdd6f4;
+}
+
+#wt-asr-composer button.wt-composer-abandon {
+	background: #585b70;
+}
+
+#wt-asr-composer button:disabled {
+	cursor: not-allowed;
+	opacity: 0.55;
 }
 
 #wt-asr-composer button.wt-composer-mic.wt-mic-recording {

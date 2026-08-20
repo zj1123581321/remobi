@@ -1,12 +1,11 @@
 import { DoubaoEngine } from '../asr/doubao/engine'
 import type { AsrEngine, AsrErrorCode } from '../asr/types'
 import type { HookRegistry } from '../hooks/registry'
-import type { RemobiConfig, XTerminal } from '../types'
+import type { ConnectionStatus, InputActionResult, RemobiConfig, XTerminal } from '../types'
 import { haptic } from '../util/haptic'
 import { conditionalFocus, isKeyboardOpen } from '../util/keyboard'
 import { onTap } from '../util/tap'
-import { sendData } from '../util/terminal'
-import { type AsrPreview, createAsrPreview } from './asr-preview'
+import { type AsrPreview, type ComposerPending, createAsrPreview } from './asr-preview'
 import { suppressSynthesisedMouse } from './keyboard-controller'
 
 export type MicState =
@@ -38,6 +37,7 @@ interface MicControllerOptions {
 
 const CONNECT_TIMEOUT_MS = 5_000
 const WAITING_FINAL_TIMEOUT_MS = 3_000
+const RESULT_DEADLINE_MS = 15_000
 const NON_PRINTING_FORMAT_OR_SEPARATOR = /[\p{Cf}\p{Zl}\p{Zp}]/u
 const TRAILING_WHITESPACE = /\s$/u
 
@@ -110,6 +110,11 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	let engineUnsubscribers: Array<() => void> = []
 	let appliedSeq = Number.NEGATIVE_INFINITY
 	let pendingAction: 'send' | undefined
+	let pendingSubmission: ComposerPending | null = preview.getPending()
+	let resultDeadlineTimer: ReturnType<typeof setTimeout> | undefined
+	let connectionEpoch = 0
+	let syncedEpochActive = false
+	const resentEpochs = new Set<number>()
 	let baseDraft = ''
 	let disposed = false
 
@@ -137,6 +142,11 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		if (finalTimer !== undefined) clearTimeout(finalTimer)
 		connectTimer = undefined
 		finalTimer = undefined
+	}
+
+	function clearResultDeadline(): void {
+		if (resultDeadlineTimer !== undefined) clearTimeout(resultDeadlineTimer)
+		resultDeadlineTimer = undefined
 	}
 
 	function clearEngineHandlers(): void {
@@ -169,14 +179,170 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		}
 	}
 
-	function finishSend(): void {
-		generation++
-		pendingAction = undefined
-		baseDraft = ''
-		cleanupSession()
-		preview.resetDraft()
-		if (currentState === 'preview') transition(['preview'], 'idle', 'send')
+	function pendingStatusMessage(status: ComposerPending['status']): string {
+		switch (status) {
+			case 'pending':
+				return 'Pending — waiting for terminal receipt.'
+			case 'unknown':
+				return 'Result unknown — the terminal may or may not have received it.'
+			case 'rejected':
+				return 'Not received.'
+		}
+	}
+
+	function rejectedMessage(reason: NonNullable<ComposerPending['reason']>): string {
+		return reason === 'id-conflict'
+			? 'Not received: duplicate submission id.'
+			: 'Not received: terminal session unavailable.'
+	}
+
+	function persistPending(next: ComposerPending | null): boolean {
+		pendingSubmission = next
+		const persisted = preview.setPending(next)
+		preview.setSubmissionControls(next?.status ?? null)
+		if (!persisted) {
+			preview.showMessage('Draft is not protected on this device.')
+		}
+		return persisted
+	}
+
+	function setPendingStatus(
+		next: ComposerPending,
+		message = pendingStatusMessage(next.status),
+	): void {
+		if (persistPending(next)) preview.setSubmissionStatus(next.status, message)
+	}
+
+	function startResultDeadline(id: string): void {
+		clearResultDeadline()
+		resultDeadlineTimer = setTimeout(() => {
+			resultDeadlineTimer = undefined
+			const current = pendingSubmission
+			if (!current || current.id !== id || current.status !== 'pending') return
+			const next: ComposerPending = { ...current, status: 'unknown' }
+			setPendingStatus(next)
+		}, RESULT_DEADLINE_MS)
+	}
+
+	function handleInputActionResult(result: InputActionResult): void {
+		const current = pendingSubmission
+		if (disposed || !current || current.id !== result.id) return
+		clearResultDeadline()
+		if (!result.accepted) {
+			if (result.reason === null) return
+			const next: ComposerPending = {
+				...current,
+				status: 'rejected',
+				reason: result.reason,
+			}
+			setPendingStatus(next, rejectedMessage(result.reason))
+			return
+		}
+
+		const submitted = current
+		const draftIsUnchanged = preview.getText() === submitted.sourceText
+		persistPending(null)
+		if (draftIsUnchanged) preview.resetDraft()
+		preview.setSubmissionControls(null)
+		preview.setSubmissionStatus('accepted', 'Received by terminal.')
+		if (currentState === 'preview') {
+			generation++
+			cleanupSession()
+			transition(['preview'], 'idle', 'action-accepted')
+		}
 		setComposerExpanded(true)
+	}
+
+	function sendPendingAction(submission: ComposerPending): boolean {
+		const sent = options.term.sendInputAction(submission.id, submission.data)
+		if (!sent) {
+			preview.setSubmissionStatus('pending', 'Not sent — still syncing.')
+			return false
+		}
+		if (!pendingSubmission || pendingSubmission.id !== submission.id) return true
+		preview.setSubmissionStatus('pending', pendingStatusMessage('pending'))
+		startResultDeadline(submission.id)
+		return true
+	}
+
+	function resendAtEpoch(epoch: number): void {
+		const current = pendingSubmission
+		if (!current || (current.status !== 'pending' && current.status !== 'unknown')) return
+		if (resentEpochs.has(epoch)) return
+		if (!options.term.isConnected()) return
+		const currentSessionId = options.term.getSessionId()
+		if (currentSessionId === null) return
+		if (current.sessionId !== currentSessionId) {
+			const next: ComposerPending = { ...current, status: 'unknown' }
+			setPendingStatus(next, 'Terminal session changed — last result unknown.')
+			clearResultDeadline()
+			return
+		}
+
+		resentEpochs.add(epoch)
+		const submission =
+			current.status === 'unknown' ? { ...current, status: 'pending' as const } : current
+		if (submission !== current) setPendingStatus(submission)
+		sendPendingAction(submission)
+	}
+
+	function retryPending(): void {
+		const current = pendingSubmission
+		if (disposed || !current || current.status !== 'unknown') return
+		if (!options.term.isConnected()) {
+			preview.setSubmissionStatus('unknown', 'Not sent — still syncing.')
+			return
+		}
+		const sessionId = options.term.getSessionId()
+		if (sessionId === null) {
+			preview.setSubmissionStatus('unknown', 'Not sent — still syncing.')
+			return
+		}
+		const submission: ComposerPending = {
+			...current,
+			sessionId,
+			status: 'pending',
+			reason: undefined,
+		}
+		if (!persistPending(submission)) return
+		sendPendingAction(submission)
+	}
+
+	function abandonPending(): boolean {
+		if (!pendingSubmission) return true
+		clearResultDeadline()
+		const abandoned = pendingSubmission
+		if (!persistPending(null)) {
+			pendingSubmission = abandoned
+			preview.setSubmissionControls(abandoned.status)
+			return false
+		}
+		preview.setSubmissionStatus(null, 'Removed from this device.')
+		return true
+	}
+
+	function handleConnectionStatus(status: ConnectionStatus): void {
+		if (status.state !== 'synced') {
+			syncedEpochActive = false
+			if (pendingSubmission?.status === 'pending') {
+				preview.setSubmissionStatus('pending', 'Not sent — still syncing.')
+			}
+			return
+		}
+		if (syncedEpochActive) return
+		syncedEpochActive = true
+		connectionEpoch++
+		resendAtEpoch(connectionEpoch)
+	}
+
+	if (pendingSubmission) {
+		preview.setSubmissionControls(pendingSubmission.status)
+		preview.setSubmissionStatus(
+			pendingSubmission.status,
+			pendingSubmission.status === 'rejected' && pendingSubmission.reason
+				? rejectedMessage(pendingSubmission.reason)
+				: pendingStatusMessage(pendingSubmission.status),
+		)
 	}
 
 	function showError(code: AsrErrorCode, sessionGeneration: number): void {
@@ -325,11 +491,10 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		haptic()
 	}
 
-	function canSendComposerText(sessionGeneration: number, wasOpen: boolean): boolean {
+	function canSendComposerText(sessionGeneration: number): boolean {
 		return (
 			!disposed &&
 			sessionGeneration === generation &&
-			wasOpen &&
 			(currentState === 'preview' || currentState === 'idle')
 		)
 	}
@@ -372,15 +537,21 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			return
 		}
 		if (currentState !== 'preview' && currentState !== 'idle') return
+		if (
+			pendingSubmission?.status === 'pending' ||
+			pendingSubmission?.status === 'unknown' ||
+			pendingSubmission?.status === 'rejected'
+		) {
+			return
+		}
 		const sessionGeneration = generation
-		const wasOpen = preview.isOpen()
-		const rawText = preview.getText()
-		if (!rawText) {
+		const sourceText = preview.getText()
+		if (!sourceText) {
 			preview.showMessage('Type or speak something to send.')
 			return
 		}
 		if (!options.term.isConnected()) {
-			preview.showMessage('Terminal disconnected; text is kept here until it reconnects.')
+			preview.showMessage('Not sent — still syncing.')
 			return
 		}
 		void (async () => {
@@ -390,37 +561,39 @@ export function createMicController(options: MicControllerOptions): MicControlle
 				source: 'toolbar',
 				actionType: 'voice-input',
 				kbWasOpen: false,
-				data: rawText,
+				data: sourceText,
 			})
-			if (!canSendComposerText(sessionGeneration, wasOpen)) return
+			if (!canSendComposerText(sessionGeneration) || !options.term.isConnected()) return
 			if (before.blocked) return
-			const text = sanitizeVoiceText(before.data)
-			if (!text) {
+			const body = sanitizeVoiceText(before.data)
+			if (!body) {
 				preview.showMessage('Speech contained no printable text.')
 				return
 			}
-			if (!options.term.isConnected()) {
-				preview.showMessage('Terminal disconnected; text is kept here until it reconnects.')
+			const data = options.config.asr.autoEnter ? `${body}\r` : body
+			const sessionId = options.term.getSessionId()
+			if (sessionId === null) {
+				preview.showMessage('Not sent — still syncing.')
 				return
 			}
-			sendData(options.term, text)
+			const submission: ComposerPending = {
+				id: crypto.randomUUID(),
+				sessionId,
+				sourceText,
+				data,
+				status: 'pending',
+			}
+			if (!persistPending(submission)) return
+			const sent = sendPendingAction(submission)
+			if (!sent) return
 			await options.hooks.runAfterSendData({
 				term: options.term,
 				config: options.config,
 				source: 'toolbar',
 				actionType: 'voice-input',
 				kbWasOpen: false,
-				data: text,
+				data,
 			})
-			if (!canSendComposerText(sessionGeneration, wasOpen)) return
-			if (options.config.asr.autoEnter) {
-				if (!options.term.isConnected()) {
-					preview.showMessage('Terminal disconnected; text is kept here until it reconnects.')
-					return
-				}
-				sendData(options.term, '\r')
-			}
-			finishSend()
 		})()
 	}
 
@@ -436,6 +609,16 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			return
 		}
 		if (currentState !== 'preview' && currentState !== 'error' && currentState !== 'idle') return
+		if (pendingSubmission) {
+			const confirmed = window.confirm(
+				'Clear this draft and abandon the pending submission? This only removes it from this device.',
+			)
+			if (!confirmed) {
+				preview.close()
+				return
+			}
+			if (!abandonPending()) return
+		}
 		if (currentState === 'idle') {
 			preview.clear()
 			endAsIdle()
@@ -461,14 +644,20 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	}
 
 	const previewConfirm = preview.onConfirm(confirmPreview)
+	const previewRetry = preview.onRetry(retryPending)
+	const previewAbandon = preview.onAbandon(abandonPending)
 	const previewCancel = preview.onCancel(cancelPreview)
 	document.addEventListener('visibilitychange', onVisibilityChange)
 	window.addEventListener('pageshow', onPageShow)
 	const connection = options.term.onConnectionChange((connected) => {
-		if (!connected && currentState === 'preview' && preview.getText()) {
+		if (!connected && pendingSubmission?.status === 'pending') {
+			preview.setSubmissionStatus('pending', 'Not sent — still syncing.')
+		} else if (!connected && currentState === 'preview' && preview.getText()) {
 			preview.showMessage('Terminal disconnected; text is kept here until it reconnects.')
 		}
 	})
+	const actionResults = options.term.onInputActionResult(handleInputActionResult)
+	const connectionStatus = options.term.onConnectionStatusChange(handleConnectionStatus)
 
 	const controller: MicController = {
 		preview,
@@ -500,6 +689,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			disposed = true
 			generation++
 			clearTimers()
+			clearResultDeadline()
 			stopEngine()
 			for (const disposeButton of buttonDisposers.values()) disposeButton()
 			buttonDisposers.clear()
@@ -507,8 +697,12 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			composerButtons.clear()
 			clearEngineHandlers()
 			previewConfirm.dispose()
+			previewRetry.dispose()
+			previewAbandon.dispose()
 			previewCancel.dispose()
 			connection.dispose()
+			connectionStatus.dispose()
+			actionResults.dispose()
 			document.removeEventListener('visibilitychange', onVisibilityChange)
 			window.removeEventListener('pageshow', onPageShow)
 			preview.element.remove()
