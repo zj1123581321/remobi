@@ -828,6 +828,27 @@ describe('preview injection', () => {
 		expect(harness.term.sent).toEqual([])
 		harness.controller.dispose()
 	})
+
+	test('storage write failure keeps the composer sendable', async () => {
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+		vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+			throw new DOMException('full', 'QuotaExceededError')
+		})
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'send despite storage failure'
+		harness.controller.preview.input.dispatchEvent(new Event('input', { bubbles: true }))
+		expect(harness.controller.preview.message.textContent).toBe(
+			'Draft is not protected on this device.',
+		)
+		dispatchPreviewTap(harness, 'send')
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+
+		expect(harness.term.sent).toEqual(['send despite storage failure'])
+		expect(harness.controller.preview.getText()).toBe('')
+		expect(errorSpy).toHaveBeenCalledTimes(1)
+		harness.controller.dispose()
+	})
 })
 
 describe('capability detection', () => {
