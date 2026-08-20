@@ -424,7 +424,9 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		}
 		if (sessionEnded) {
 			const sessionEndedNotice = 'Session ended — restart remobi to start a new one.'
-			window.dispatchEvent(new CustomEvent('remobi-connection-notice', { detail: sessionEndedNotice }))
+			window.dispatchEvent(
+				new CustomEvent('remobi-connection-notice', { detail: sessionEndedNotice }),
+			)
 			showSessionStatus(sessionEndedNotice)
 		}
 		failedSocket?.close()
@@ -528,7 +530,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 			return
 		}
 
-			switch (message.type) {
+		switch (message.type) {
 			case 'snapshot':
 				applySnapshot(myEpoch, message.data, message.outputWatermark)
 				return

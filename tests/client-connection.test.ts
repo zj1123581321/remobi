@@ -270,7 +270,7 @@ describe('client connection state machine', () => {
 		window.dispatchEvent(new Event('pageshow'))
 		await vi.advanceTimersByTimeAsync(0)
 		expect(harness.sockets).toHaveLength(socketCount + 1)
-})
+	})
 
 	test('online while visible retries a disconnected page immediately', async () => {
 		await freshSynced()
@@ -279,7 +279,7 @@ describe('client connection state machine', () => {
 		window.dispatchEvent(new Event('online'))
 		await vi.advanceTimersByTimeAsync(0)
 		expect(harness.sockets).toHaveLength(socketCount + 1)
-})
+	})
 
 	test('online while hidden does not create a socket', async () => {
 		await freshSynced()
@@ -454,7 +454,11 @@ describe('client connection state machine', () => {
 		const socket = await freshAttempt()
 		socket.open()
 		for (let seq = 1; seq <= 5; seq += 1) {
-			receive(socket, { type: 'output', data: ['one', 'two', 'three', 'four', 'five'][seq - 1], seq })
+			receive(socket, {
+				type: 'output',
+				data: ['one', 'two', 'three', 'four', 'five'][seq - 1],
+				seq,
+			})
 		}
 		receive(socket, {
 			type: 'snapshot',
@@ -585,7 +589,10 @@ describe('client connection state machine', () => {
 			outputWatermark: 0,
 		})
 		expect(socket.sent).toHaveLength(2)
-		expect(JSON.parse(socket.sent[0] as string)).toMatchObject({ type: 'ping', id: expect.any(String) })
+		expect(JSON.parse(socket.sent[0] as string)).toMatchObject({
+			type: 'ping',
+			id: expect.any(String),
+		})
 		expect(JSON.parse(socket.sent[1] as string)).toEqual({ type: 'resize', cols: 140, rows: 50 })
 	})
 })
