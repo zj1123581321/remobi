@@ -243,6 +243,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	let pendingOutputBytes = 0
 	let pendingResize: { cols: number; rows: number } | null = null
 	let notSentNoticeShown = false
+	let exitReceived = false
 	let statusOverlay: SessionStatusOverlay | null = null
 
 	function send(message: ClientMessage): void {
@@ -529,6 +530,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 				handleOutput(myEpoch, message.seq, message.data)
 				return
 			case 'exit':
+				exitReceived = true
 				showSessionStatus('Session ended')
 				return
 			case 'error':
@@ -578,6 +580,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		snapshotLoaded = false
 		snapshotApplying = false
 		clearPendingOutput()
+		exitReceived = false
 		setConnectionStatus('reconnecting')
 
 		const nextSocket = new WebSocket(createSocketUrl())
@@ -595,7 +598,13 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		})
 		nextSocket.addEventListener('close', () => {
 			if (myEpoch !== currentEpoch) return
+			const sessionEnded = exitReceived
 			failConnection(myEpoch, 'socket-closed')
+			if (sessionEnded) {
+				window.dispatchEvent(
+					new CustomEvent('remobi-connection-notice', { detail: 'Connection lost' }),
+				)
+			}
 		})
 		nextSocket.addEventListener('error', () => {
 			if (myEpoch !== currentEpoch) return
