@@ -27,6 +27,65 @@ J/K probe:
 Test Files 1 passed; Tests 8 passed
 ```
 
+## 可疑格复核与判定
+
+### 合成的 open 前 server message
+
+`handleServerMessage()` 在 `src/client-entry.ts:562-590` 先做 epoch guard，但 `applySnapshot()` 的入口 `:497-499` 没有重复检查 `connectionStatus.state` 或 `socket.readyState`。因此测试可以手工向 CONNECTING socket 注入 snapshot，观察到它直接变 synced。这不是真实 WebSocket producer 可发出的顺序：WebSocket 先派发 open，再派发 message；而真实状态在 open handler中先进入 syncing。它不是用户可触发的未定义生产路径，也没有把断线期间普通 input补发到终端，因此不计 P1/P2 finding。若未来更换 transport，才需要把 transport ordering 写入契约或增加 state guard；本轮不改代码。
+
+### `exit` 消息短窗口
+
+`exit` 在 `:581-583` 只设置 `exitReceived`，close listener `:647-650` 再调用 failConnection；探针实际得到 `exit-only=synced; close=disconnected/no-auto-reconnect`。H0 服务端在同一 session contract 中先发送 exit 后关闭 client，前一轮真实浏览器已实测会话结束遮罩、Retry now、3 秒无新 socket。本轮不重复把已知的 session-ended 动作报成 finding；退出方向仍满足“收到 exit 后不自动重连”，close 后也不会把旧 epoch复活。
+
+### freshness 到期但没有事件
+
+代码明确选择把 freshness 作为发送门槛，而不是另建一个随时钟跳转的连接状态：`send()` 在 `:254-270` 先验证 proof，过期则复用 `failConnection()`。fake clock 与 H0 的 26 秒、30 分钟用例均观察到 input wire frame 数不增加、socket关闭、状态reconnecting。因为没有输入/事件时不会发生用户动作或宣称新鲜的外部副作用，这不是静默执行路径。
+
+## 事件层 + 时间层的独立复核
+
+结论：这是有依据的纵深防护，不是无依据的双路径。
+
+- 事件层（`visibilitychange`/`pagehide`/`freeze`/`offline`）是低延迟路径：`suspendConnection()` 同时清 timer、停 heartbeat、递增 epoch、关 socket，直接满足 I1。
+- 时间层（`lastProvenFreshAt` + `FRESHNESS_WINDOW_MS=25_000`）覆盖事件漏发、OPEN socket黑洞和主线程/页面生命周期信号缺失；它只在普通 input发送前生效，失败复用同一 `failConnection()`，不创建第二份状态或输入队列。
+- 25 秒窗口有明确边界：heartbeat单次 deadline为15秒，匹配 pong后约10秒再发下一次；匹配 pong和 snapshot才更新 proof，output/error/online/OPEN均不续命。窗口因此不是“收到任意消息就续命”的隐式 fallback。
+- 收口同时删除了 `beforeunload` 对 `dispose` 的绑定，减少了一个会在页面仍存活时拆掉恢复监听的错误路径；新增的是一个时间戳和常量，不是新的连接事实源。净效果是事件快速失效 + 时间兜底，二者同向收口。
+
+## Findings
+
+无。没有需要主脑拆卡的修复清单，也没有把协议不可能的合成事件或已知 session-ended 观察升级为 finding。
+
+## 本轮没有发现问题的方向
+
+- 四态全部输入格：没有真实 producer 可达的未定义格导致 I1/I2/I3 失效；合成 open 前 message 已单独标注并排除。
+- hidden/pagehide/freeze/offline：synced 均立即失效并关 socket；CONNECTING 时也不会在 hidden 状态继续退避重连。
+- visible/pageshow/resume：均创建新 epoch；snapshot前普通输入丢弃，旧 socket 的 open/close/error/message/pong不影响新状态。
+- snapshot/output：snapshot callback才进入 synced，watermark过滤和 seq排序路径保持；没有发现 snapshot 之前 output 被补发或 watermark 内帧重放的真实 producer路径。
+- heartbeat/freshness：单 ping、ID匹配、15 秒 deadline、10 秒 next、25 秒 send gate均保持；错误/旧 pong不续命。
+- 普通 input / resize：非 synced普通输入无帧且不排队；resize只保留最后值并在新 snapshot后发一次；freshness失败不发送普通 input。
+- malformed protocol / server error / exit：malformed按 protocol-error fail-loud；server error不冒充 freshness证据；exit后的 close不自动重连，已知会话结束提示不重复报。
+- 重入：同类 lifecycle、snapshot callback内 offline、CONNECTING lifecycle、同 tick stale pong均未复活旧 epoch或产生双重当前 socket。
+- 熵增：没有新增 `ConnectionManager`、配置项、第二份连接状态或普通输入队列；`lastProvenFreshAt`有两个真实写入点且由发送门槛消费。
+
+## 最终 verdict
+
+`pass`。P1 计数：`0`。
+
+## 交付记录
+
+最终化前的交付核验输出如下；第三笔提交随后仅因把本段写入报告而 amend，文件统计保持只新增本 verdict：
+
+```text
+$ git log --oneline -1
+ff4d397 docs(review): finalize T3 verdict
+
+$ git show --stat HEAD
+ff4d397 docs(review): finalize T3 verdict
+ .../reviews/wnet-t3-review2-verdict.md | 43 ++++++++++++++++++++++
+ 1 file changed, 43 insertions(+)
+```
+
+最终工作树核验：`git status --short --branch` 仅显示 `## card/wnet-t3-review2`，无未提交文件；H0 临时 detached worktree、探针与 OCR 进程均已清理。
+
 探针源文件仅在 `/tmp/remobi-wnet-t3-review2-h0/tests/wnet-t3-review2-race.test.ts`，没有写入被审仓库。
 
 OCR 前置扫描已执行，但包装器三条腿均为 `status=skipped` 等价结果，原因是 `input_config_error`：主腿和两条备腿均报 `read background file "/proc/self/fd/11": stat ... no such file or directory`。这不是“扫过且干净”，不作为本轮清洁证据；也没有从 skipped 结果推导 finding。
