@@ -155,8 +155,9 @@ PR：  https://github.com/zj1123581321/remobi/pull/13
   未提交的工作按未完成处理。本卡按 ①四个证据源的实测记录 ②findings 与 verdict 两次提交。
 - **反熵条款**（固定条款，原样保留）：本卡不新增任何代码抽象。
 - **执行器自声明 outcome**（固定条款，原样保留）：报告首个二级标题之前恰好一行。
-  注意 outcome 与 verdict **正交**：审出 P1 是 review 卡的正常产出，
-  outcome 仍写 `succeeded`；只有审查工作本身没做完才写 `failed`：
+  该值描述的是执行器本次任务是否完成，与 review 的 pass/fail verdict 正交。
+  审出 P1 是 review 卡的正常产出，outcome 仍写 `succeeded`；
+  只有审查工作本身没做完（被打穿、无法取证、卡在环境问题）才写 `failed`：
 
 ```
 <!-- delegate-outcome: succeeded -->
