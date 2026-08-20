@@ -44,7 +44,6 @@
       ├─ sourceText = preview.getText()
       ├─ sourceText 为空 → 'Type or speak something to send.'，return
       ├─ 不是 synced → 'Not sent — still syncing.'，return（草稿保留）
-      ├─ protocolMismatch → 'Server version mismatch — please refresh.'，return
       ├─ await runBeforeSendData({ data: sourceText, … })     ← 只在用户首次点击时跑
       ├─ await 返回后【重新】检查 composer generation 与 synced；任一变了 → return
       ├─ before.blocked → return（不生成 action、不落 pending）
@@ -97,8 +96,10 @@
      - pending / unknown / rejected 时显示「重试」与「放弃」两个动作（按决策 4 决定重试是否可用）；
      - 状态区用 `aria-live="polite"`，**文字 + 图标，不许只靠颜色**区分状态；
      - **关闭 composer 不删除 pending**；重开时状态照旧显示。
-  10. **`protocolMismatch`（T3 提供）为真时禁用原子提交**并提示
-      `Server version mismatch — please refresh.`；草稿与 pending 都保留。
+  10. **服务端版本不匹配不需要本卡单独处理**。T3 已经把"服务端消息解析失败"归成
+      `protocol-error` 类的同步前失败——连接会被关掉重连，客户端根本进不了 `synced`，
+      而本卡的提交与自动重送都以 `synced` 为前提，所以旧服务端场景自动被挡在门外。
+      **不许**为此新增 `protocolMismatch` 状态位或第二条判断路径。
   11. **schema 不变**：直接用 T1 已经定死的 `remobi:composer:v1:${basePath}` 与
       `{version:1, draft, pending}`。本卡只是把 `pending` 字段真正用起来，
       **不许改格式、不许换 key、不许升 version**。
@@ -185,7 +186,7 @@
 | 相同 | `rejected` | 新 epoch 进入 synced | **不重送** |
 | **不同** | `pending` | 新 epoch 进入 synced | status=`unknown`；**禁止**自动重送；文案 `Terminal session changed — …` |
 | 当前 sessionId 为 `null` | `pending` | — | 不重送 |
-| `protocolMismatch=true` | 任意 | synced | 不重送；禁用提交；提示版本不匹配 |
+| 连接处于 `protocol-error` 重连中 | 任意 | 非 synced | 不重送（非 synced 本就不重送）；提交被 `synced` 前置守卫挡下 |
 
 ### 轴 3：hook 单次语义
 
@@ -254,7 +255,7 @@
   export interface XTerminal {
     // …T3 的成员全部保留…
     getSessionId(): string | null                  // 当前 epoch snapshot 里的 sessionId
-    sendInputAction(id: string, data: string): boolean  // 非 synced / protocolMismatch → false 且不发帧
+    sendInputAction(id: string, data: string): boolean  // 非 synced → false 且不发帧
     onInputActionResult(handler: (result: InputActionResult) => void): { dispose(): void }
   }
   ```
