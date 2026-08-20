@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 async function waitForState(page: import('@playwright/test').Page, state: string): Promise<void> {
 	await expect
-		.poll(() => page.evaluate(() => window.term?.getConnectionStatus?.()?.state), {
+		.poll(() => page.evaluate(() => window.term?.getConnectionStatus().state), {
 			timeout: 15_000,
 		})
 		.toBe(state)
