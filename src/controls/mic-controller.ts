@@ -159,6 +159,15 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		}
 	}
 
+	function finishSend(): void {
+		generation++
+		pendingAction = undefined
+		cleanupSession()
+		preview.resetDraft()
+		if (currentState === 'preview') transition(['preview'], 'idle', 'send')
+		setComposerExpanded(true)
+	}
+
 	function showError(code: AsrErrorCode, sessionGeneration: number): void {
 		if (disposed || sessionGeneration !== generation || currentState === 'idle') return
 		clearTimers()
@@ -289,7 +298,6 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		const sessionGeneration = generation
 		pendingAction = undefined
 		appliedSeq = Number.NEGATIVE_INFINITY
-		preview.clear()
 		transition(['idle'], 'permission-requesting', 'tap-start')
 		preview.showMessage('Requesting microphone…')
 		haptic()
@@ -330,6 +338,10 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		} else if (currentState === 'error') {
 			toggled = true
 			cancelSession(sessionGeneration)
+			startSession()
+		} else if (currentState === 'preview') {
+			toggled = true
+			transition(['preview'], 'idle', 'preview-rerecord')
 			startSession()
 		}
 		if (toggled) conditionalFocus(options.term, kbWasOpen)
@@ -395,8 +407,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 				}
 				sendData(options.term, '\r')
 			}
-			preview.clear()
-			endAsIdle()
+			finishSend()
 		})()
 	}
 
