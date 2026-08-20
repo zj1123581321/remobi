@@ -415,7 +415,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		if (notice) {
 			window.dispatchEvent(new CustomEvent('remobi-connection-notice', { detail: notice }))
 		}
-		if (connectionStatus.state !== 'synced') {
+		if (connectionStatus.state !== 'synced' || reason === 'protocol-error') {
 			recordPreSyncFailure(reason)
 		} else {
 			setConnectionStatus('disconnected', reason)
