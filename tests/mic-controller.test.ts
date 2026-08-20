@@ -245,6 +245,41 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		harness.controller.dispose()
 	})
 
+	test('appends a new recording partial to the typed draft without accumulating frames', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'keep this draft'
+		dispatchTap(harness.button)
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.getText()).toBe('keep this draft')
+		harness.engine.resolveStart()
+		await Promise.resolve()
+		await Promise.resolve()
+		expect(harness.controller.state).toBe('recording')
+		expect(harness.controller.preview.getText()).toBe('keep this draft')
+		harness.engine.emitPartial('')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('keep this draft')
+		harness.engine.emitPartial('new spoken draft')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('keep this draft new spoken draft')
+		harness.engine.emitPartial('new spoken')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('keep this draft new spoken')
+		harness.controller.dispose()
+	})
+
+	test('does not add a separator after a draft that ends in whitespace', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'keep this '
+		await startRecording(harness)
+		harness.engine.emitPartial('new spoken')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('keep this new spoken')
+		harness.controller.dispose()
+	})
+
 	test('recording Mic tap enters editable preview after final', async () => {
 		const harness = createHarness()
 		dispatchTap(harness.composerButton)
@@ -268,11 +303,46 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		for (let index = 0; index < 8; index++) await Promise.resolve()
 		expect(harness.term.sent).toEqual(['typed command'])
 		expect(harness.controller.state).toBe('idle')
-		expect(harness.controller.preview.isOpen()).toBe(false)
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.getText()).toBe('')
+		expect(document.body.classList.contains('wt-composer-open')).toBe(true)
+		harness.controller.preview.input.value = 'second command'
+		dispatchPreviewTap(harness, 'send')
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+		expect(harness.term.sent).toEqual(['typed command', 'second command'])
+		expect(harness.controller.preview.isOpen()).toBe(true)
 		harness.controller.dispose()
 	})
 
-	test('idle close and backdrop discard without starting the engine', () => {
+	test('sending clears the base before the next recording session', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'already sent'
+		dispatchPreviewTap(harness, 'send')
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+		expect(harness.controller.preview.getText()).toBe('')
+
+		await startRecording(harness)
+		harness.engine.emitPartial('new utterance')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('new utterance')
+		harness.controller.dispose()
+	})
+
+	test('Enter in the textarea does not send the draft', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'line one\nline two'
+		harness.controller.preview.input.dispatchEvent(
+			new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }),
+		)
+		await Promise.resolve()
+		expect(harness.term.sent).toEqual([])
+		expect(harness.controller.preview.getText()).toBe('line one\nline two')
+		harness.controller.dispose()
+	})
+
+	test('idle close button discards while composer clicks do not', () => {
 		const harness = createHarness()
 		dispatchTap(harness.composerButton)
 		harness.controller.preview.input.value = 'discard me'
@@ -282,8 +352,8 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		expect(harness.controller.state).toBe('idle')
 		expect(harness.engine.starts).toBe(0)
 		expect(harness.engine.stops).toBe(0)
-		expect(harness.controller.preview.isOpen()).toBe(false)
-		dispatchTap(harness.composerButton)
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.getText()).toBe('discard me')
 		dispatchPreviewTap(harness, 'close')
 		expect(harness.engine.stops).toBe(0)
 		expect(harness.controller.preview.isOpen()).toBe(false)
@@ -363,7 +433,8 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		for (let index = 0; index < 8; index++) await Promise.resolve()
 		expect(harness.term.sent).toEqual(['send this'])
 		expect(harness.controller.state).toBe('idle')
-		expect(harness.controller.preview.isOpen()).toBe(false)
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.getText()).toBe('')
 		harness.controller.dispose()
 	})
 
@@ -558,6 +629,51 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		dispatchTap(harness.composerButton)
 		expect(harness.engine.starts).toBe(1)
 		expect(harness.controller.state).toBe('preview')
+		harness.controller.dispose()
+	})
+
+	test('preview Mic tap starts a replacement recording without closing composer', async () => {
+		const harness = createHarness()
+		await startRecording(harness)
+		dispatchTap(harness.button)
+		harness.engine.emitFinal('preview text', 1)
+		expect(harness.controller.state).toBe('preview')
+		dispatchTap(harness.button)
+		expect(harness.engine.starts).toBe(2)
+		expect(harness.controller.state).toBe('connecting')
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.getText()).toBe('preview text')
+		harness.engine.resolveStart()
+		await Promise.resolve()
+		await Promise.resolve()
+		harness.engine.emitPartial('continued text')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('preview text continued text')
+		harness.controller.dispose()
+	})
+
+	test('appends final text across consecutive recording sessions', async () => {
+		const harness = createHarness()
+		await startRecording(harness)
+		harness.engine.emitPartial('aaa')
+		vi.advanceTimersByTime(20)
+		dispatchTap(harness.button)
+		harness.engine.emitFinal('aaa', 1)
+		expect(harness.controller.state).toBe('preview')
+		expect(harness.controller.preview.getText()).toBe('aaa')
+
+		dispatchTap(harness.button)
+		expect(harness.controller.state).toBe('connecting')
+		harness.engine.resolveStart()
+		await Promise.resolve()
+		await Promise.resolve()
+		harness.engine.emitPartial('bbb')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('aaa bbb')
+		dispatchTap(harness.button)
+		harness.engine.emitFinal('bbb', 2)
+		expect(harness.controller.state).toBe('preview')
+		expect(harness.controller.preview.getText()).toBe('aaa bbb')
 		harness.controller.dispose()
 	})
 })

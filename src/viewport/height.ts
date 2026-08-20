@@ -1,3 +1,4 @@
+import type { AsrPreview } from '../controls/asr-preview'
 import { isKeyboardOpen } from '../util/keyboard'
 import { resizeTerm } from '../util/terminal'
 import { checkLandscapeKeyboard } from './landscape'
@@ -24,11 +25,24 @@ export function lockDocumentHeight(height: string): void {
 	document.body.style.setProperty('overscroll-behavior', 'none', 'important')
 }
 
+export function bottomChromeHeight(
+	keyboardOpen: boolean,
+	composerOpen: boolean,
+	toolbarHeight: number,
+	composerHeight: number,
+): number {
+	if (keyboardOpen) return 0
+	return composerOpen ? composerHeight : toolbarHeight
+}
+
 /**
  * Manage terminal height to account for the toolbar and virtual keyboard.
  * Uses visualViewport API when available for accurate keyboard detection.
  */
-export function initHeightManager(toolbar: HTMLDivElement): void {
+export function initHeightManager(
+	toolbar: HTMLDivElement,
+	composer?: Pick<AsrPreview, 'element' | 'isOpen'>,
+): () => void {
 	let pendingResize = 0
 
 	function updateHeight(): void {
@@ -38,8 +52,13 @@ export function initHeightManager(toolbar: HTMLDivElement): void {
 		const vp = window.visualViewport
 		const kbOpen = isKeyboardOpen()
 		const vh = viewportHeight(vp, window.innerHeight, kbOpen)
-		const tbH = kbOpen ? 0 : toolbar.offsetHeight || 90
-		const h = `${vh - tbH}px`
+		const chromeH = bottomChromeHeight(
+			kbOpen,
+			composer?.isOpen() ?? false,
+			toolbar.offsetHeight || 90,
+			composer?.element.offsetHeight ?? 0,
+		)
+		const h = `${vh - chromeH}px`
 
 		lockDocumentHeight(h)
 		resizeTerm()
@@ -61,4 +80,5 @@ export function initHeightManager(toolbar: HTMLDivElement): void {
 	})
 
 	scheduleResize()
+	return scheduleResize
 }

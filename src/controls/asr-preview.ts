@@ -3,7 +3,7 @@ import { onTap } from '../util/tap'
 
 export interface AsrPreview {
 	readonly element: HTMLDivElement
-	readonly input: HTMLInputElement
+	readonly input: HTMLTextAreaElement
 	readonly message: HTMLDivElement
 	readonly isOpen: () => boolean
 	/** @deprecated Use isOpen; retained for existing preview consumers. */
@@ -14,7 +14,10 @@ export interface AsrPreview {
 	readonly show: (text: string) => void
 	readonly setPartial: (text: string) => void
 	readonly showMessage: (message: string) => void
+	readonly resetDraft: () => void
 	readonly clear: () => void
+	readonly onOpenChange: (handler: (open: boolean) => void) => { dispose(): void }
+	readonly onHeightChange: (handler: () => void) => { dispose(): void }
 	readonly onConfirm: (handler: () => void) => { dispose(): void }
 	readonly onCancel: (handler: () => void) => { dispose(): void }
 }
@@ -42,24 +45,22 @@ export function createAsrPreview(): AsrPreview {
 	const element = el('div', {
 		id: 'wt-asr-composer',
 		role: 'dialog',
-		'aria-modal': 'true',
+		'aria-modal': 'false',
 		'aria-label': 'Voice composer',
 	})
 	element.style.display = 'none'
 
 	const panel = el('div', { id: 'wt-asr-composer-panel' })
-	const header = el('div', { class: 'wt-asr-composer-header' })
-	const title = el('h3', {}, 'Voice composer')
 	const closeButton = el('button', {
 		type: 'button',
 		class: 'wt-asr-composer-close',
 		'aria-label': 'Close voice composer',
 	})
 	closeButton.textContent = '×'
-	header.append(title, closeButton)
 
-	const input = el('input', {
-		type: 'text',
+	const input = el('textarea', {
+		rows: '1',
+		wrap: 'soft',
 		placeholder: 'Speak or type…',
 		'aria-label': 'Voice composer input',
 		autocomplete: 'off',
@@ -79,26 +80,45 @@ export function createAsrPreview(): AsrPreview {
 		class: 'wt-composer-send',
 	})
 	sendButton.textContent = 'Send'
-	actions.append(micButton, sendButton)
+	actions.append(closeButton, micButton, sendButton)
 
-	panel.append(header, input, message, actions)
+	panel.append(input, message, actions)
 	element.appendChild(panel)
 
 	let open = false
 	let pendingPartial: string | undefined
 	let partialFrame: number | undefined
+	const openChangeHandlers = new Set<(open: boolean) => void>()
+	const heightChangeHandlers = new Set<() => void>()
+	let inputHeight = ''
+
+	function resizeInput(): void {
+		const previousHeight = inputHeight
+		input.style.height = 'auto'
+		const nextHeight = `${Math.min(Math.max(input.scrollHeight, 48), 168)}px`
+		input.style.height = nextHeight
+		inputHeight = nextHeight
+		if (nextHeight !== previousHeight) {
+			for (const handler of heightChangeHandlers) handler()
+		}
+	}
+
+	input.addEventListener('input', resizeInput)
 
 	function setOpen(next: boolean): void {
+		if (open === next) return
 		open = next
 		element.style.display = next ? 'flex' : 'none'
 		element.setAttribute('aria-hidden', next ? 'false' : 'true')
+		document.body.classList.toggle('wt-composer-open', next)
+		for (const handler of openChangeHandlers) handler(next)
 	}
 
 	function openComposer(): void {
-		input.value = ''
-		message.textContent = ''
+		resetDraft()
 		input.readOnly = false
 		setOpen(true)
+		resizeInput()
 	}
 
 	function closeComposer(): void {
@@ -109,6 +129,7 @@ export function createAsrPreview(): AsrPreview {
 		input.value = text
 		message.textContent = ''
 		setOpen(true)
+		resizeInput()
 	}
 
 	function setPartial(text: string): void {
@@ -126,12 +147,17 @@ export function createAsrPreview(): AsrPreview {
 		setOpen(true)
 	}
 
-	function clear(): void {
+	function resetDraft(): void {
 		if (partialFrame !== undefined) cancelAnimationFrame(partialFrame)
 		partialFrame = undefined
 		pendingPartial = undefined
 		input.value = ''
 		message.textContent = ''
+		resizeInput()
+	}
+
+	function clear(): void {
+		resetDraft()
 		setOpen(false)
 	}
 
@@ -151,18 +177,14 @@ export function createAsrPreview(): AsrPreview {
 
 	function registerCancel(handler: () => void): { dispose(): void } {
 		const callback = (event: Event): void => {
-			if (event.currentTarget === element && event.target !== element) return
 			event.stopPropagation()
 			handler()
 		}
 		onTap(closeButton, callback)
-		onTap(element, callback)
 		return {
 			dispose() {
 				closeButton.removeEventListener('click', callback)
 				closeButton.removeEventListener('touchend', callback)
-				element.removeEventListener('click', callback)
-				element.removeEventListener('touchend', callback)
 			},
 		}
 	}
@@ -179,7 +201,16 @@ export function createAsrPreview(): AsrPreview {
 		show,
 		setPartial,
 		showMessage,
+		resetDraft,
 		clear,
+		onOpenChange(handler) {
+			openChangeHandlers.add(handler)
+			return { dispose: () => openChangeHandlers.delete(handler) }
+		},
+		onHeightChange(handler) {
+			heightChangeHandlers.add(handler)
+			return { dispose: () => heightChangeHandlers.delete(handler) }
+		},
 		onConfirm: (handler) => register(sendButton, handler),
 		onCancel: registerCancel,
 	}

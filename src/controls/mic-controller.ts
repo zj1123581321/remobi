@@ -39,6 +39,7 @@ interface MicControllerOptions {
 const CONNECT_TIMEOUT_MS = 5_000
 const WAITING_FINAL_TIMEOUT_MS = 3_000
 const NON_PRINTING_FORMAT_OR_SEPARATOR = /[\p{Cf}\p{Zl}\p{Zp}]/u
+const TRAILING_WHITESPACE = /\s$/u
 
 const ERROR_MESSAGES: Record<AsrErrorCode, string> = {
 	unsupported: 'Voice input is not supported in this browser.',
@@ -77,6 +78,14 @@ function errorMessage(code: AsrErrorCode): string {
 	return ERROR_MESSAGES[code]
 }
 
+function joinDraft(baseDraft: string, utterance: string): string {
+	if (!baseDraft) return utterance
+	if (!utterance) return baseDraft
+	return TRAILING_WHITESPACE.test(baseDraft)
+		? `${baseDraft}${utterance}`
+		: `${baseDraft} ${utterance}`
+}
+
 /** Tap-to-toggle controller: the only writer of the UI state is transition(). */
 export function createMicController(options: MicControllerOptions): MicController | undefined {
 	if (!options.config.asr.enabled) return undefined
@@ -101,6 +110,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	let engineUnsubscribers: Array<() => void> = []
 	let appliedSeq = Number.NEGATIVE_INFINITY
 	let pendingAction: 'send' | undefined
+	let baseDraft = ''
 	let disposed = false
 
 	function transition(from: readonly MicState[], to: MicState, event: string): void {
@@ -159,6 +169,16 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		}
 	}
 
+	function finishSend(): void {
+		generation++
+		pendingAction = undefined
+		baseDraft = ''
+		cleanupSession()
+		preview.resetDraft()
+		if (currentState === 'preview') transition(['preview'], 'idle', 'send')
+		setComposerExpanded(true)
+	}
+
 	function showError(code: AsrErrorCode, sessionGeneration: number): void {
 		if (disposed || sessionGeneration !== generation || currentState === 'idle') return
 		clearTimers()
@@ -193,6 +213,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			'cancel',
 		)
 		preview.clear()
+		baseDraft = ''
 		stopEngine()
 		generation++
 		cleanupSession()
@@ -217,7 +238,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			if (sequence <= appliedSeq) return
 			appliedSeq = sequence
 		}
-		preview.show(text)
+		preview.show(joinDraft(baseDraft, text))
 		if (currentState === 'waiting-final') finishPreview(sessionGeneration)
 	}
 
@@ -239,7 +260,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		engineUnsubscribers = [
 			engine.onPartial((text) => {
 				if (disposed || sessionGeneration !== generation || currentState !== 'recording') return
-				preview.setPartial(text)
+				preview.setPartial(joinDraft(baseDraft, text))
 			}),
 			engine.onFinal((text, sequence) => onFinal(text, sequence, sessionGeneration)),
 			engine.onError((code) => {
@@ -289,7 +310,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		const sessionGeneration = generation
 		pendingAction = undefined
 		appliedSeq = Number.NEGATIVE_INFINITY
-		preview.clear()
+		baseDraft = preview.getText()
 		transition(['idle'], 'permission-requesting', 'tap-start')
 		preview.showMessage('Requesting microphone…')
 		haptic()
@@ -330,6 +351,10 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		} else if (currentState === 'error') {
 			toggled = true
 			cancelSession(sessionGeneration)
+			startSession()
+		} else if (currentState === 'preview') {
+			toggled = true
+			transition(['preview'], 'idle', 'preview-rerecord')
 			startSession()
 		}
 		if (toggled) conditionalFocus(options.term, kbWasOpen)
@@ -395,8 +420,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 				}
 				sendData(options.term, '\r')
 			}
-			preview.clear()
-			endAsIdle()
+			finishSend()
 		})()
 	}
 

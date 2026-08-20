@@ -87,8 +87,20 @@ test.describe('Voice composer tap-to-toggle input', () => {
 			await entry.click()
 			const composer = page.locator('#wt-asr-composer')
 			await expect(composer).toBeVisible()
-			await expect(composer.locator('input')).toHaveAttribute('placeholder', 'Speak or type…')
-			await expect(composer.locator('input')).not.toBeFocused()
+			await expect(composer.locator('textarea')).toHaveAttribute('placeholder', 'Speak or type…')
+			await expect(composer.locator('textarea')).not.toBeFocused()
+			await expect(page.locator('#terminal .xterm-rows')).toBeVisible()
+			await expect(page.locator('#wt-toolbar')).toBeHidden()
+			await expect(page.locator('body')).toHaveClass(/wt-composer-open/)
+			const composerBox = await composer.boundingBox()
+			if (!composerBox) throw new Error('voice composer must have a visible bounding box')
+			expect(composerBox.y).toBeGreaterThan((await page.evaluate(() => window.innerHeight)) / 2)
+			const composerStyle = await composer.evaluate((element) => {
+				const style = getComputedStyle(element)
+				return { top: style.top, backgroundColor: style.backgroundColor }
+			})
+			expect(Number.parseFloat(composerStyle.top)).toBeGreaterThan(0)
+			expect(composerStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0.58)')
 			await expect(composer.locator('[data-remobi-control="composer-mic"]')).toHaveAttribute(
 				'data-mic-state',
 				'idle',
@@ -99,27 +111,60 @@ test.describe('Voice composer tap-to-toggle input', () => {
 			await mic.click()
 			await page.waitForTimeout(450)
 			await expect(mic).toHaveAttribute('data-mic-state', 'recording')
-			await expect(composer.locator('input')).toHaveAttribute('readonly', '')
+			await expect(composer.locator('textarea')).toHaveAttribute('readonly', '')
 			if (attempt === 0) await page.screenshot({ path: 'test-results/voice-recording.png' })
 
 			await mic.click()
 			await expect(composer).toBeVisible({ timeout: 5_000 })
-			await expect(composer.locator('input')).toHaveValue(currentText, {
+			await expect(composer.locator('textarea')).toHaveValue(currentText, {
 				timeout: 5_000,
 			})
-			await expect(composer.locator('input')).not.toHaveAttribute('readonly', '')
+			await expect(composer.locator('textarea')).not.toHaveAttribute('readonly', '')
 			if (attempt === 0) await page.screenshot({ path: 'test-results/voice-preview.png' })
 
 			await composer.locator('.wt-composer-send').click()
 			await expect(page.locator('#terminal .xterm-rows')).toContainText(outputMarker, {
 				timeout: 5_000,
 			})
-			await expect(composer).toBeHidden()
+			await expect(composer).toBeVisible()
+			await expect(composer.locator('textarea')).toHaveValue('')
+			await expect(page.locator('body')).toHaveClass(/wt-composer-open/)
+			await expect(page.locator('#wt-toolbar')).toBeHidden()
 		}
 		expect(asrFrames.some((frame) => ((frame[1] ?? 0) & 0x0f) === 3)).toBe(true)
 		expect(frameCounts.fullRequest).toBeGreaterThanOrEqual(5)
 		expect(frameCounts.audio).toBeGreaterThan(0)
 		expect(frameCounts.end).toBeGreaterThanOrEqual(5)
+	})
+
+	test('long drafts wrap, Enter stays in textarea, and Send keeps composer open', async ({
+		page,
+	}) => {
+		if (!server) throw new Error('Voice test server was not started')
+		await page.goto(server.url)
+		const entry = page.locator('[data-remobi-action="voice-input"]')
+		await entry.click()
+		const composer = page.locator('#wt-asr-composer')
+		const textarea = composer.locator('textarea')
+		const longText = 'x'.repeat(220)
+		await textarea.fill(longText)
+		const metrics = await textarea.evaluate((element) => ({
+			clientHeight: element.clientHeight,
+			clientWidth: element.clientWidth,
+			scrollHeight: element.scrollHeight,
+			scrollWidth: element.scrollWidth,
+		}))
+		expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth)
+		expect(metrics.clientHeight).toBeGreaterThan(48)
+		expect(metrics.scrollHeight).toBeGreaterThan(48)
+		await page.screenshot({ path: 'test-results/voice-composer-long-text.png' })
+
+		await textarea.press('Enter')
+		await expect(textarea).toHaveValue(`${longText}\n`)
+		await expect(composer).toBeVisible()
+		await composer.locator('.wt-composer-send').click()
+		await expect(textarea).toHaveValue('')
+		await expect(composer).toBeVisible()
 	})
 
 	test('connection observer replays a disconnected state to late subscribers', async ({ page }) => {
