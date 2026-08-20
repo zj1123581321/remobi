@@ -150,7 +150,7 @@
 |---|---|---|---|
 | `""` | — | false | 不发送，显示 `Type or speak something to send.` |
 | `""` | — | true | 同上，且**没有任何** `\r` 被发出 |
-| `" "`（全不可打印） | `""` | true | 不发送，显示 `Speech contained no printable text.`，**没有孤立 `\r`** |
+| `"\u0000\u007f"`（全不可打印） | `""` | true | 不发送，显示 `Speech contained no printable text.`，**没有孤立 `\r`** |
 | `"hello"` | `"hello"` | false | 正常发送一次正文 |
 | `"hello"` | `"hello"` | true | 现状保持（正文 + `\r` 两次写）——本卡不改，只确保不回归；T4 会把它并成一个 action |
 
