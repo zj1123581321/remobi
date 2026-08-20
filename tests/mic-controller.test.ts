@@ -15,6 +15,7 @@ import {
 } from '../src/controls/mic-controller'
 import { createHookRegistry } from '../src/hooks/registry'
 import type { XTerminal } from '../src/types'
+import { _resetTouchGuard } from '../src/util/tap'
 import { mockTerminalWithSent } from './fixtures'
 
 class FakeEngine implements AsrEngine {
@@ -138,19 +139,18 @@ function createHarness(autoEnter = false, hooks = createHookRegistry()): TestHar
 	}
 }
 
-function dispatchPointer(button: HTMLButtonElement, type: string): void {
-	const event = new Event(type, { bubbles: true, cancelable: true })
-	Object.defineProperty(event, 'pointerId', { value: 1 })
-	button.dispatchEvent(event)
+function dispatchTap(button: HTMLButtonElement): void {
+	button.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }))
 }
 
 async function startRecording(harness: TestHarness): Promise<void> {
-	dispatchPointer(harness.button, 'pointerdown')
-	vi.advanceTimersByTime(300)
+	dispatchTap(harness.button)
 	harness.engine.resolveStart()
 	await Promise.resolve()
 	await Promise.resolve()
 	expect(harness.controller.state).toBe('recording')
+	expect(harness.button.getAttribute('aria-pressed')).toBe('true')
+	expect(harness.button.classList.contains('wt-mic-recording')).toBe(true)
 }
 
 beforeEach(() => {
@@ -163,6 +163,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+	_resetTouchGuard()
 	GlobalRegistrator.unregister()
 	vi.useRealTimers()
 	vi.restoreAllMocks()
@@ -188,33 +189,44 @@ describe('sanitizeVoiceText', () => {
 	})
 })
 
-describe('mic-controller PTT state machine', () => {
-	test('pointerdown enters permission-requesting and a short tap cancels without connecting', () => {
+describe('mic-controller tap-to-toggle state machine', () => {
+	test('tap starts connecting immediately and a second tap cancels', () => {
 		const harness = createHarness()
-		dispatchPointer(harness.button, 'pointerdown')
-		expect(harness.controller.state).toBe('permission-requesting')
-		vi.advanceTimersByTime(299)
-		dispatchPointer(harness.button, 'pointerup')
+		expect(harness.button.getAttribute('aria-label')).toBe('Tap to speak')
+		expect(harness.button.getAttribute('aria-pressed')).toBe('false')
+		dispatchTap(harness.button)
+		expect(harness.controller.state).toBe('connecting')
+		expect(harness.engine.starts).toBe(1)
+		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('idle')
-		expect(harness.engine.starts).toBe(0)
+		expect(harness.engine.stops).toBe(1)
+		expect(harness.controller.preview.message.textContent).toContain('cancelled')
 		harness.controller.dispose()
 	})
 
-	test('hold transitions connecting → recording and pointerup waits for final', async () => {
+	test('touch tap does not toggle again on the synthesised click', () => {
+		const harness = createHarness()
+		harness.button.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }))
+		dispatchTap(harness.button)
+		expect(harness.controller.state).toBe('connecting')
+		expect(harness.engine.starts).toBe(1)
+		harness.controller.dispose()
+	})
+
+	test('recording tap transitions to waiting-final', async () => {
 		const harness = createHarness()
 		await startRecording(harness)
-		dispatchPointer(harness.button, 'pointerup')
+		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('waiting-final')
 		expect(harness.engine.stops).toBe(1)
 		harness.controller.dispose()
 	})
 
-	test('pointerup during connecting cancels the started engine', () => {
+	test('connecting tap cancels the started engine', () => {
 		const harness = createHarness()
-		dispatchPointer(harness.button, 'pointerdown')
-		vi.advanceTimersByTime(300)
+		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('connecting')
-		dispatchPointer(harness.button, 'pointerup')
+		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('idle')
 		expect(harness.engine.stops).toBe(1)
 		harness.controller.dispose()
@@ -234,7 +246,7 @@ describe('mic-controller PTT state machine', () => {
 	test('final text overwrites partial and discards stale or late sequences', async () => {
 		const harness = createHarness()
 		await startRecording(harness)
-		dispatchPointer(harness.button, 'pointerup')
+		dispatchTap(harness.button)
 		harness.engine.emitPartial('partial')
 		vi.advanceTimersByTime(20)
 		harness.engine.emitFinal('final-2', 2)
@@ -252,7 +264,7 @@ describe('mic-controller PTT state machine', () => {
 		await startRecording(harness)
 		harness.engine.emitPartial('keep me')
 		vi.advanceTimersByTime(20)
-		dispatchPointer(harness.button, 'pointerup')
+		dispatchTap(harness.button)
 		vi.advanceTimersByTime(3_000)
 		expect(harness.controller.state).toBe('preview')
 		expect(harness.controller.preview.input.value).toBe('keep me')
@@ -264,30 +276,31 @@ describe('mic-controller PTT state machine', () => {
 
 	test('permission denial enters error and visibility cancellation returns to idle', async () => {
 		const harness = createHarness()
-		dispatchPointer(harness.button, 'pointerdown')
-		vi.advanceTimersByTime(300)
+		dispatchTap(harness.button)
 		harness.engine.rejectStart(new DOMException('permission denied', 'NotAllowedError'))
 		await Promise.resolve()
 		await Promise.resolve()
 		expect(harness.controller.state).toBe('error')
 		expect(harness.controller.preview.message.textContent).toContain('permission')
+		dispatchTap(harness.button)
+		expect(harness.controller.state).toBe('error')
+		expect(harness.engine.starts).toBe(1)
 		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
 		expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow()
 		expect(harness.controller.state).toBe('idle')
 		harness.controller.dispose()
 	})
 
-	test('connection timeout enters error and pointercancel cancels an active recording', async () => {
+	test('connection timeout enters error and audio interruption cancels recording', async () => {
 		const timeout = createHarness()
-		dispatchPointer(timeout.button, 'pointerdown')
-		vi.advanceTimersByTime(300)
+		dispatchTap(timeout.button)
 		vi.advanceTimersByTime(5_000)
 		expect(timeout.controller.state).toBe('error')
 		timeout.controller.dispose()
 
 		const cancelled = createHarness()
 		await startRecording(cancelled)
-		dispatchPointer(cancelled.button, 'pointercancel')
+		cancelled.engine.emitError('audio-interrupted')
 		expect(cancelled.controller.state).toBe('idle')
 		expect(cancelled.controller.preview.message.textContent).toContain('cancelled')
 		cancelled.controller.dispose()
@@ -297,8 +310,8 @@ describe('mic-controller PTT state machine', () => {
 		const harness = createHarness()
 		harness.engine.rejectStops = true
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-		dispatchPointer(harness.button, 'pointerdown')
-		dispatchPointer(harness.button, 'pointercancel')
+		dispatchTap(harness.button)
+		dispatchTap(harness.button)
 		await Promise.resolve()
 		expect(harness.controller.state).toBe('idle')
 		expect(error).toHaveBeenCalledWith('remobi: ASR stop failed', expect.any(Error))
@@ -324,11 +337,14 @@ describe('mic-controller PTT state machine', () => {
 		second.controller.dispose()
 	})
 
-	test('second pointerdown while active is ignored', async () => {
+	test('tap in preview does not start a new session', async () => {
 		const harness = createHarness()
 		await startRecording(harness)
-		dispatchPointer(harness.button, 'pointerdown')
+		dispatchTap(harness.button)
+		harness.engine.emitFinal('preview text', 1)
+		dispatchTap(harness.button)
 		expect(harness.engine.starts).toBe(1)
+		expect(harness.controller.state).toBe('preview')
 		harness.controller.dispose()
 	})
 })
@@ -337,7 +353,7 @@ describe('preview injection', () => {
 	test('runs hook, sanitizes last, sends text then independent autoEnter', async () => {
 		const harness = createHarness(true)
 		await startRecording(harness)
-		dispatchPointer(harness.button, 'pointerup')
+		dispatchTap(harness.button)
 		harness.engine.emitFinal('ignored', 1)
 		const hookCalls: string[] = []
 		const hooks = createHookRegistry()
@@ -361,12 +377,11 @@ describe('preview injection', () => {
 		const button = document.createElement('button')
 		controller.attach(button)
 		document.body.append(button)
-		dispatchPointer(button, 'pointerdown')
-		vi.advanceTimersByTime(300)
+		dispatchTap(button)
 		engine.resolveStart()
 		await Promise.resolve()
 		await Promise.resolve()
-		dispatchPointer(button, 'pointerup')
+		dispatchTap(button)
 		engine.emitFinal('printf "voice\x00-input\\n"', 1)
 		const sendButton = controller.preview.element.querySelector('button:last-child')
 		sendButton?.dispatchEvent(new Event('click'))
@@ -381,7 +396,7 @@ describe('preview injection', () => {
 	test('disconnected terminal keeps preview and does not use send queue', async () => {
 		const harness = createHarness()
 		await startRecording(harness)
-		dispatchPointer(harness.button, 'pointerup')
+		dispatchTap(harness.button)
 		harness.engine.emitFinal('kept text', 1)
 		harness.setConnected(false)
 		const sendButton = harness.controller.preview.element.querySelector('button:last-child')
@@ -401,7 +416,7 @@ describe('preview injection', () => {
 			await Promise.resolve()
 		})
 		await startRecording(harness)
-		dispatchPointer(harness.button, 'pointerup')
+		dispatchTap(harness.button)
 		harness.engine.emitFinal('typed command', 1)
 		harness.controller.preview.input.value = 'typed command'
 		harness.controller.preview.element
@@ -419,7 +434,7 @@ describe('preview injection', () => {
 		await startRecording(harness)
 		harness.engine.emitPartial('recognized')
 		vi.advanceTimersByTime(20)
-		dispatchPointer(harness.button, 'pointerup')
+		dispatchTap(harness.button)
 		vi.advanceTimersByTime(3_000)
 		expect(harness.controller.state).toBe('preview')
 		harness.controller.preview.input.value = 'user edit'
@@ -431,7 +446,7 @@ describe('preview injection', () => {
 	test('empty preview does not inject or auto-enter', async () => {
 		const harness = createHarness(true)
 		await startRecording(harness)
-		dispatchPointer(harness.button, 'pointerup')
+		dispatchTap(harness.button)
 		harness.engine.emitFinal('', 1)
 		const sendButton = harness.controller.preview.element.querySelector('button:last-child')
 		sendButton?.dispatchEvent(new Event('click'))

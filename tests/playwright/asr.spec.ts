@@ -5,7 +5,7 @@ import { startIsolatedServe } from './isolated-serve'
 
 declare global {
 	interface Window {
-		__pttConnectionStates?: boolean[]
+		__voiceConnectionStates?: boolean[]
 	}
 }
 
@@ -30,8 +30,8 @@ function frameType(message: string | Buffer): { readonly type: number; readonly 
 	return { type: (bytes[1] ?? 0) >> 4, flags: (bytes[1] ?? 0) & 0x0f }
 }
 
-test.describe('PTT voice input', () => {
-	test.skip(({ browserName }) => browserName !== 'chromium', 'full PTT flow is chromium-only')
+test.describe('Mic tap-to-toggle voice input', () => {
+	test.skip(({ browserName }) => browserName !== 'chromium', 'full voice flow is chromium-only')
 	let server: Awaited<ReturnType<typeof startIsolatedServe>> | undefined
 
 	test.beforeAll(async () => {
@@ -44,7 +44,7 @@ test.describe('PTT voice input', () => {
 	test('fake microphone → mock partial/final → PTY receives sanitized command bytes', async ({
 		page,
 	}) => {
-		if (!server) throw new Error('PTT test server was not started')
+		if (!server) throw new Error('Voice test server was not started')
 		const partial = serverFrame(0, 'partial')
 		const asrFrames: Buffer[] = []
 		const frameCounts = { fullRequest: 0, audio: 0, end: 0 }
@@ -81,23 +81,23 @@ test.describe('PTT voice input', () => {
 			await expect(mic).toBeVisible()
 			await expect(mic).toContainText(voiceButton.label)
 
-			await mic.dispatchEvent('pointerdown', { pointerId: 1, bubbles: true })
+			await mic.click()
 			await page.waitForTimeout(450)
 			await expect(mic).toHaveAttribute('data-mic-state', 'recording')
-			await page.screenshot({ path: `test-results/ptt-recording${suffix}.png` })
+			await page.screenshot({ path: `test-results/voice-recording${suffix}.png` })
 
-			await mic.dispatchEvent('pointerup', { pointerId: 1, bubbles: true })
+			await mic.click()
 			await expect(page.locator('#wt-asr-preview')).toBeVisible({ timeout: 5_000 })
 			await expect(page.locator('#wt-asr-preview input')).toHaveValue(currentText, {
 				timeout: 5_000,
 			})
-			await page.screenshot({ path: `test-results/ptt-preview${suffix}.png` })
+			await page.screenshot({ path: `test-results/voice-preview${suffix}.png` })
 
 			await page.locator('#wt-asr-preview button', { hasText: 'Send' }).click()
 			await expect(page.locator('#terminal .xterm-rows')).toContainText(outputMarker, {
 				timeout: 5_000,
 			})
-			await page.screenshot({ path: `test-results/ptt-injected${suffix}.png` })
+			await page.screenshot({ path: `test-results/voice-injected${suffix}.png` })
 		}
 		expect(asrFrames.some((frame) => ((frame[1] ?? 0) & 0x0f) === 3)).toBe(true)
 		expect(frameCounts.fullRequest).toBeGreaterThanOrEqual(5)
@@ -106,7 +106,7 @@ test.describe('PTT voice input', () => {
 	})
 
 	test('connection observer replays a disconnected state to late subscribers', async ({ page }) => {
-		if (!server) throw new Error('PTT test server was not started')
+		if (!server) throw new Error('Voice test server was not started')
 		await page.goto(server.url)
 		await page.waitForSelector('#terminal .xterm')
 		await expect.poll(() => page.evaluate(() => window.__remobiSockets?.[0]?.readyState)).toBe(1)
@@ -115,23 +115,23 @@ test.describe('PTT voice input', () => {
 			.poll(() => page.evaluate(() => window.__remobiSockets?.[0]?.readyState), { timeout: 5_000 })
 			.toBe(3)
 		await page.evaluate(() => {
-			window.__pttConnectionStates = []
+			window.__voiceConnectionStates = []
 			window.term?.onConnectionChange((connected) => {
-				window.__pttConnectionStates?.push(connected)
+				window.__voiceConnectionStates?.push(connected)
 			})
 		})
-		await expect.poll(() => page.evaluate(() => window.__pttConnectionStates)).toEqual([false])
+		await expect.poll(() => page.evaluate(() => window.__voiceConnectionStates)).toEqual([false])
 	})
 
 	test('socket error followed by close emits one disconnected transition', async ({ page }) => {
-		if (!server) throw new Error('PTT test server was not started')
+		if (!server) throw new Error('Voice test server was not started')
 		await page.goto(server.url)
 		await page.waitForSelector('#terminal .xterm')
 		await expect.poll(() => page.evaluate(() => window.__remobiSockets?.[0]?.readyState)).toBe(1)
 		await page.evaluate(() => {
-			window.__pttConnectionStates = []
+			window.__voiceConnectionStates = []
 			window.term?.onConnectionChange((connected) => {
-				window.__pttConnectionStates?.push(connected)
+				window.__voiceConnectionStates?.push(connected)
 			})
 			const socket = window.__remobiSockets?.[0]
 			socket?.close()
@@ -139,14 +139,14 @@ test.describe('PTT voice input', () => {
 		})
 		await expect
 			.poll(
-				() => page.evaluate(() => window.__pttConnectionStates?.filter((state) => !state).length),
+				() => page.evaluate(() => window.__voiceConnectionStates?.filter((state) => !state).length),
 				{ timeout: 5_000 },
 			)
 			.toBe(1)
 	})
 })
 
-test.describe('PTT capability degradation', () => {
+test.describe('Mic tap-to-toggle capability degradation', () => {
 	test('webkit hides voice input when getUserMedia is unavailable', async ({
 		page,
 		browserName,

@@ -3,8 +3,10 @@ import type { AsrEngine, AsrErrorCode } from '../asr/types'
 import type { HookRegistry } from '../hooks/registry'
 import type { RemobiConfig, XTerminal } from '../types'
 import { haptic } from '../util/haptic'
+import { onTap } from '../util/tap'
 import { sendData } from '../util/terminal'
 import { type AsrPreview, createAsrPreview } from './asr-preview'
+import { suppressSynthesisedMouse } from './keyboard-controller'
 
 export type MicState =
 	| 'idle'
@@ -31,7 +33,6 @@ interface MicControllerOptions {
 	readonly engine?: AsrEngine
 }
 
-const HOLD_THRESHOLD_MS = 300
 const CONNECT_TIMEOUT_MS = 5_000
 const WAITING_FINAL_TIMEOUT_MS = 3_000
 const NON_PRINTING_FORMAT_OR_SEPARATOR = /[\p{Cf}\p{Zl}\p{Zp}]/u
@@ -69,15 +70,11 @@ export function sanitizeVoiceText(text: string): string {
 	return result
 }
 
-function pointerId(event: PointerEvent): number {
-	return typeof event.pointerId === 'number' ? event.pointerId : 0
-}
-
 function errorMessage(code: AsrErrorCode): string {
 	return ERROR_MESSAGES[code]
 }
 
-/** PTT controller: the only writer of the UI state is transition(). */
+/** Tap-to-toggle controller: the only writer of the UI state is transition(). */
 export function createMicController(options: MicControllerOptions): MicController | undefined {
 	if (!options.config.asr.enabled) return undefined
 	if (!options.engine && !isVoiceInputSupported()) return undefined
@@ -96,8 +93,6 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	const buttonDisposers = new Map<HTMLButtonElement, () => void>()
 	let currentState: MicState = 'idle'
 	let generation = 0
-	let activePointer: { readonly button: HTMLButtonElement; readonly id: number } | undefined
-	let holdTimer: ReturnType<typeof setTimeout> | undefined
 	let connectTimer: ReturnType<typeof setTimeout> | undefined
 	let finalTimer: ReturnType<typeof setTimeout> | undefined
 	let engineUnsubscribers: Array<() => void> = []
@@ -117,21 +112,10 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	}
 
 	function clearTimers(): void {
-		if (holdTimer !== undefined) clearTimeout(holdTimer)
 		if (connectTimer !== undefined) clearTimeout(connectTimer)
 		if (finalTimer !== undefined) clearTimeout(finalTimer)
-		holdTimer = undefined
 		connectTimer = undefined
 		finalTimer = undefined
-	}
-
-	function releasePointer(): void {
-		const pointer = activePointer
-		activePointer = undefined
-		if (pointer && typeof pointer.button.releasePointerCapture === 'function') {
-			if (pointer.button.hasPointerCapture(pointer.id))
-				pointer.button.releasePointerCapture(pointer.id)
-		}
 	}
 
 	function clearEngineHandlers(): void {
@@ -142,7 +126,6 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	function cleanupSession(): void {
 		clearTimers()
 		clearEngineHandlers()
-		releasePointer()
 	}
 
 	function stopEngine(): void {
@@ -225,7 +208,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		if (sessionGeneration !== generation || currentState !== 'recording') return
 		if (connectTimer !== undefined) clearTimeout(connectTimer)
 		connectTimer = undefined
-		transition(['recording'], 'stopping', 'pointerup')
+		transition(['recording'], 'stopping', 'tap')
 		transition(['stopping'], 'waiting-final', 'stop-requested')
 		finalTimer = setTimeout(() => finishPreview(sessionGeneration), WAITING_FINAL_TIMEOUT_MS)
 		void engine.stop().catch((error: unknown) => {
@@ -271,7 +254,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	function beginConnecting(sessionGeneration: number): void {
 		if (disposed || sessionGeneration !== generation || currentState !== 'permission-requesting')
 			return
-		transition(['permission-requesting'], 'connecting', 'hold-threshold')
+		transition(['permission-requesting'], 'connecting', 'tap-start')
 		connectTimer = setTimeout(
 			() => showError('connection-failed', sessionGeneration),
 			CONNECT_TIMEOUT_MS,
@@ -280,39 +263,31 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		void startEngine(sessionGeneration)
 	}
 
-	function pointerDown(button: HTMLButtonElement, event: PointerEvent): void {
+	function startSession(): void {
 		if (disposed || currentState !== 'idle') return
-		event.preventDefault()
-		const id = pointerId(event)
-		activePointer = { button, id }
-		if (typeof button.setPointerCapture === 'function') button.setPointerCapture(id)
 		generation++
 		const sessionGeneration = generation
 		appliedSeq = Number.NEGATIVE_INFINITY
 		preview.clear()
-		transition(['idle'], 'permission-requesting', 'pointerdown')
+		transition(['idle'], 'permission-requesting', 'tap-start')
 		haptic()
-		holdTimer = setTimeout(() => beginConnecting(sessionGeneration), HOLD_THRESHOLD_MS)
+		beginConnecting(sessionGeneration)
 	}
 
-	function pointerUp(event: PointerEvent): void {
-		if (!activePointer || pointerId(event) !== activePointer.id) return
-		event.preventDefault()
+	function tapToggle(): void {
+		if (disposed) return
 		const sessionGeneration = generation
-		releasePointer()
+		if (currentState === 'idle') {
+			startSession()
+			return
+		}
 		if (currentState === 'recording') {
 			stopRecording(sessionGeneration)
 			return
 		}
 		if (currentState === 'permission-requesting' || currentState === 'connecting') {
-			cancelSession('Hold the microphone button for at least 300 ms.', sessionGeneration)
+			cancelSession('Recording cancelled.', sessionGeneration)
 		}
-	}
-
-	function pointerCancel(event: PointerEvent): void {
-		if (!activePointer || pointerId(event) !== activePointer.id) return
-		event.preventDefault()
-		cancelSession('Recording cancelled.', generation)
 	}
 
 	function confirmPreview(): void {
@@ -398,20 +373,12 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		},
 		attach(button) {
 			if (buttonDisposers.has(button)) return
-			const down = (event: PointerEvent): void => pointerDown(button, event)
-			const up = (event: PointerEvent): void => pointerUp(event)
-			const cancel = (event: PointerEvent): void => pointerCancel(event)
-			button.addEventListener('pointerdown', down)
-			button.addEventListener('pointerup', up)
-			button.addEventListener('pointercancel', cancel)
-			button.setAttribute('aria-label', 'Hold to speak')
+			suppressSynthesisedMouse(button)
+			onTap(button, tapToggle)
+			button.setAttribute('aria-label', 'Tap to speak')
 			button.setAttribute('aria-pressed', 'false')
 			buttons.add(button)
-			buttonDisposers.set(button, () => {
-				button.removeEventListener('pointerdown', down)
-				button.removeEventListener('pointerup', up)
-				button.removeEventListener('pointercancel', cancel)
-			})
+			buttonDisposers.set(button, () => {})
 		},
 		dispose() {
 			if (disposed) return

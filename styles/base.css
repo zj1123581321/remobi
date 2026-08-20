@@ -102,6 +102,24 @@ body {
 	color: #1e1e2e;
 }
 
+#wt-toolbar button.wt-mic-recording {
+	background: #f38ba8;
+	color: #1e1e2e;
+	animation: wt-mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes wt-mic-pulse {
+	50% {
+		box-shadow: 0 0 0 4px rgba(243, 139, 168, 0.35);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#wt-toolbar button.wt-mic-recording {
+		animation: none;
+	}
+}
+
 /* Tmux drawer */
 #wt-backdrop {
 	display: none;
