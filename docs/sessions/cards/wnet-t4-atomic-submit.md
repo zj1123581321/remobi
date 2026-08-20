@@ -107,11 +107,25 @@
   11. **schema 不变**：直接用 T1 已经定死的 `remobi:composer:v1:${basePath}` 与
       `{version:1, draft, pending}`。本卡只是把 `pending` 字段真正用起来，
       **不许改格式、不许换 key、不许升 version**。
+  12. **`sendInputAction()` 必须过与普通 input 完全相同的可达性门槛**（T3 已建好，直接复用，
+      不要另写一套）：
+      - `state === 'synced'` 且 `socket.readyState === OPEN`；
+      - **新鲜度证明未过期**（`Date.now() - lastProvenFreshAt <= FRESHNESS_WINDOW_MS`）——
+        T3 加这条是因为页面被冻结时定时器一起冻结、而真实时间在走；
+      - 发送后的 `bufferedAmount` settle 检查同样适用。
+      任一条不满足：**不发帧**、返回 `false`。
+      **与普通 input 的关键差别**：普通 input 失败就直接丢弃，
+      composer action 失败**必须保留 pending**（它已经落盘了），
+      状态维持 `pending`，等下一个 synced epoch 按决策 6 自动重送，并提示未发送。
+      理由：整条语音指令是用户花了几分钟说出来的，不能像单个按键那样丢掉。
+  13. **不要重新发明 T3 已有的东西**：连接状态、epoch、重连、心跳、新鲜度、
+      `remobi-connection-notice` 事件都已就绪。本卡只加"带 ID 的第二条发送通道 + 回执分发"。
 
 - **任务类型**：frontend-ui
 - **复杂度**：L
-- **Base commit**：**T3 卡合并进 `origin/main` 之后的那个 sha**（派发时由主脑回填；
-  执行器以 `git rev-parse origin/main` 实际值为准并在报告写明）
+- **Base commit**：`1a00a2638778dc4e4478c97a2533ce807ab463a8`（T3 合并后的 `origin/main`，
+  已含 T1 草稿持久化 + T2 服务端契约 + T3 客户端重连；若 `origin/main` 已前进，
+  用新的 `git rev-parse origin/main` 实际值作 base 并在报告写明）
 - **Branch**：由 delegate 分配（`card/<worktree 名>`），执行器不得另建分支
 - **Worktree**：由 delegate 分配
 - **当前唯一写入者**：本卡执行器（主脑会话只读）
@@ -293,7 +307,34 @@
 
 ## 当前状态
 
-- **现场事实（主脑预取，2026-08-20，来自只读代码勘查）**：
+- **现场事实（主脑预取）**：
+  - **T1/T2/T3 全部已合并进 `main`**，本卡是整条链的最后一张。
+  - **T3 已提供、直接消费即可**（`src/types.ts` 的 `XTerminal`，全部**必填**）：
+    ```ts
+    isConnected(): boolean                    // 语义 = 当前 epoch 已应用完整 snapshot
+    onConnectionChange(h): { dispose(): void }
+    getConnectionStatus(): ConnectionStatus   // { state, consecutivePreSyncFailures, lastFailureReason }
+    onConnectionStatusChange(h): { dispose(): void }
+    requestReconnect(): void
+    ```
+    `ConnectionState = 'disconnected' | 'reconnecting' | 'syncing' | 'synced'`。
+  - **T3 的可达性机制**（决策 12 要复用的）：`src/client-entry.ts` 的
+    `lastProvenFreshAt`（只由当前 epoch 的 snapshot 应用成功与 ID 匹配的 pong 更新）、
+    `FRESHNESS_WINDOW_MS = 25_000`、`BUFFERED_AMOUNT_SETTLE_MS = 100`。
+    `send()` 在 `:253` 一带，普通 input 的三道门槛都在那里。
+  - **T3 的设计不变式**已写进 `docs/designs/weak-network-experience.md` 的 `## Invariants`
+    （I1 失效、I2 恢复必经新 epoch+snapshot、I3 不用缺席证据），本卡不得违反它们。
+  - **T2 的服务端协议**：`input-action` / `input-accepted` / `input-rejected`，
+    `InputRejectedReason` 只有 `'id-conflict' | 'session-unavailable'` 两个值
+    （`pty-write-failed` 已删，因为 node-pty 的写失败不同步抛异常、那个 reason 永远发不出去；
+    见设计文档 `## Known Limitations`）。
+  - **T1 的存储层**：`asr-preview.ts` 顶部的 `readComposerStore()` / `persistDraft()` /
+    `restoreDraft()`，key 与 schema 已定死，`pending` 目前恒为原样透传。
+  - 已知环境限制：Playwright WebKit 在本机缺系统库跑不起来——**跨浏览器时序差异只能靠 CI 发现**
+    （T3 就有一条 racy 断言是 CI 的 WebKit 抓到的）。写 e2e 时不要断言瞬时中间态，
+    要断言可观察的结果（帧数、终端文本、socket 构造数）。
+  - `tests/serve-abuse.test.ts` 的超大帧用例在本机高负载下偶发 10 秒超时，非代码缺陷，重跑即过。
+- **原始现场勘查（2026-08-20，行号已按 T1 合并后刷新）**：
   - **提交路径全文在 `mic-controller.ts:363-425`（`confirmPreview()`）**，关键行：
     - `:378-381` 空文本守卫 `Type or speak something to send.`
     - `:382-385` 第一次 `isConnected()` 守卫
