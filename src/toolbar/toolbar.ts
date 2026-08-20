@@ -4,7 +4,7 @@ import { decorateKeyboardToggleButton } from '../controls/keyboard-controller'
 import type { MicController } from '../controls/mic-controller'
 import type { HookRegistry } from '../hooks/registry'
 import type { ControlButton, RemobiConfig, XTerminal } from '../types'
-import { el } from '../util/dom'
+import { el, svg } from '../util/dom'
 import { haptic } from '../util/haptic'
 import { conditionalFocus, isKeyboardOpen } from '../util/keyboard'
 import { onTap } from '../util/tap'
@@ -20,6 +20,25 @@ interface CtrlState {
 /** Create the ctrl modifier state manager */
 function createCtrlState(): CtrlState {
 	return { active: false, disposer: null, buttonEl: null }
+}
+
+/** Create the inline microphone icon used by the circular voice-input button. */
+function createMicIcon(): SVGSVGElement {
+	return svg(
+		'svg',
+		{
+			viewBox: '0 0 24 24',
+			'aria-hidden': 'true',
+			focusable: 'false',
+		},
+		svg('path', {
+			d: 'M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z',
+		}),
+		svg('path', {
+			d: 'M19 11a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V21H8a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2h-3v-3.08A7 7 0 0 0 19 11Z',
+		}),
+		svg('path', { d: 'M11 21h2v-4h-2v4Z' }),
+	)
 }
 
 /** Activate ctrl sticky modifier */
@@ -184,7 +203,12 @@ function buildRow(
 		const button = el('button')
 		button.dataset.remobiAction = def.action.type
 		button.dataset.remobiButtonId = def.id
-		button.textContent = def.label
+		if (def.action.type === 'voice-input') {
+			button.classList.add('wt-mic')
+			button.appendChild(createMicIcon())
+		} else {
+			button.textContent = def.label
+		}
 		if (def.action.type === 'ctrl-modifier') {
 			ctrlState.buttonEl = button
 		}

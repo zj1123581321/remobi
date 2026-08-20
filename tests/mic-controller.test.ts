@@ -95,19 +95,29 @@ class FakeEngine implements AsrEngine {
 
 interface TestHarness {
 	readonly button: HTMLButtonElement
+	readonly textarea: HTMLTextAreaElement | undefined
 	readonly engine: FakeEngine
 	readonly term: XTerminal & { readonly sent: string[] }
 	readonly controller: NonNullable<ReturnType<typeof createMicController>>
 	setConnected(connected: boolean): void
 }
 
-function createHarness(autoEnter = false, hooks = createHookRegistry()): TestHarness {
+function createHarness(
+	autoEnter = false,
+	hooks = createHookRegistry(),
+	withTextarea = false,
+): TestHarness {
 	const engine = new FakeEngine()
 	const baseTerm = mockTerminalWithSent()
+	const textarea = withTextarea ? document.createElement('textarea') : undefined
+	if (textarea) document.body.append(textarea)
 	let connected = true
 	const listeners = new Set<(value: boolean) => void>()
 	const term = {
 		...baseTerm,
+		focus() {
+			textarea?.focus()
+		},
 		isConnected: () => connected,
 		onConnectionChange(handler: (value: boolean) => void) {
 			listeners.add(handler)
@@ -129,6 +139,7 @@ function createHarness(autoEnter = false, hooks = createHookRegistry()): TestHar
 	document.body.append(button)
 	return {
 		button,
+		textarea,
 		engine,
 		term,
 		controller,
@@ -141,6 +152,10 @@ function createHarness(autoEnter = false, hooks = createHookRegistry()): TestHar
 
 function dispatchTap(button: HTMLButtonElement): void {
 	button.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }))
+}
+
+function dispatchTouchTap(button: HTMLButtonElement): void {
+	button.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }))
 }
 
 async function startRecording(harness: TestHarness): Promise<void> {
@@ -211,6 +226,30 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		expect(harness.controller.state).toBe('connecting')
 		expect(harness.engine.starts).toBe(1)
 		harness.controller.dispose()
+	})
+
+	test('tap preserves terminal textarea focus with keyboard closed or open', () => {
+		const closed = createHarness(false, createHookRegistry(), true)
+		if (!closed.textarea) throw new Error('expected focus target')
+		closed.textarea.focus()
+		dispatchTouchTap(closed.button)
+		expect(document.activeElement).toBe(closed.textarea)
+		closed.controller.dispose()
+
+		Object.defineProperty(window, 'innerHeight', {
+			configurable: true,
+			value: 800,
+		})
+		Object.defineProperty(window, 'visualViewport', {
+			configurable: true,
+			value: { height: 400 },
+		})
+		const open = createHarness(false, createHookRegistry(), true)
+		if (!open.textarea) throw new Error('expected focus target')
+		open.textarea.focus()
+		dispatchTouchTap(open.button)
+		expect(document.activeElement).toBe(open.textarea)
+		open.controller.dispose()
 	})
 
 	test('recording tap transitions to waiting-final', async () => {

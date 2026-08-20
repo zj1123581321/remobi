@@ -79,7 +79,7 @@ test.describe('Mic tap-to-toggle voice input', () => {
 			await page.waitForSelector('#wt-toolbar [data-remobi-action="voice-input"]')
 			const mic = page.locator('[data-remobi-action="voice-input"]')
 			await expect(mic).toBeVisible()
-			await expect(mic).toContainText(voiceButton.label)
+			await expect(mic).toHaveAttribute('aria-label', 'Tap to speak')
 
 			await mic.click()
 			await page.waitForTimeout(450)

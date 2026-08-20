@@ -1,9 +1,11 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createDefaultActionRegistry } from '../src/actions/registry'
-import { defaultConfig } from '../src/config'
+import { defaultConfig, defineConfig } from '../src/config'
+import { createAsrPreview } from '../src/controls/asr-preview'
 import { createFloatingButtons } from '../src/controls/floating-buttons'
 import { createHelpOverlay } from '../src/controls/help'
+import type { MicController } from '../src/controls/mic-controller'
 import { createDrawer } from '../src/drawer/drawer'
 import { createHookRegistry } from '../src/hooks/registry'
 import { createToolbar } from '../src/toolbar/toolbar'
@@ -54,6 +56,43 @@ describe('toolbar integration', () => {
 		const row1 = toolbar.querySelector('.wt-row')
 		const buttons = row1?.querySelectorAll('button')
 		expect(buttons?.length).toBe(defaultConfig.toolbar.row1.length)
+	})
+
+	test('renders voice input as an icon button with the mic class', () => {
+		const config = defineConfig({
+			asr: { enabled: true, doubao: { apiKey: 'test-key' } },
+			toolbar: {
+				row1: [
+					{
+						id: 'mic',
+						label: 'Mic',
+						description: 'Tap to speak',
+						action: { type: 'voice-input' },
+					},
+				],
+			},
+		})
+		const micController: MicController = {
+			preview: createAsrPreview(),
+			state: 'idle',
+			attach() {},
+			dispose() {},
+		}
+		const { element: toolbar } = createToolbar(
+			mockTerminal(),
+			config,
+			() => {},
+			createHookRegistry(),
+			undefined,
+			undefined,
+			micController,
+		)
+
+		const button = toolbar.querySelector('button')
+		expect(button?.classList.contains('wt-mic')).toBe(true)
+		expect(button?.querySelector('svg')).not.toBeNull()
+		expect(button?.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
+		expect(button?.textContent).toBe('')
 	})
 
 	test('a non-empty row2 renders as a second row (empty rows are skipped)', () => {

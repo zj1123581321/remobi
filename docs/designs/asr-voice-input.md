@@ -246,7 +246,7 @@ textarea（client-entry.ts:94-105 `setKeyboardSuppressed`），普通 preview `<
   校验报错只报路径不回显值
 - action：`{ type:'voice-input' }` 进 ButtonAction 封闭 union + valibot schema，
   未注册 fail-loud（registry-silent-false 学习）；**渲染层对该类型特判**（v5 Codex #2）：
-  toolbar 绑定 mic-controller 的 onTap，并复用 touchend focus guard；drawer/floating 不承载 tap-to-toggle（voice-input 按钮仅允许摆 toolbar，
+  toolbar row1 最右绑定 mic-controller 的 onTap，并复用 touchend focus guard；drawer/floating 不承载 tap-to-toggle（voice-input 按钮仅允许摆 toolbar，
   schema 文档注明）
 
 ### 测试矩阵（锁定）

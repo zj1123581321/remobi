@@ -3,6 +3,7 @@ import type { AsrEngine, AsrErrorCode } from '../asr/types'
 import type { HookRegistry } from '../hooks/registry'
 import type { RemobiConfig, XTerminal } from '../types'
 import { haptic } from '../util/haptic'
+import { conditionalFocus, isKeyboardOpen } from '../util/keyboard'
 import { onTap } from '../util/tap'
 import { sendData } from '../util/terminal'
 import { type AsrPreview, createAsrPreview } from './asr-preview'
@@ -276,18 +277,20 @@ export function createMicController(options: MicControllerOptions): MicControlle
 
 	function tapToggle(): void {
 		if (disposed) return
+		const kbWasOpen = isKeyboardOpen()
 		const sessionGeneration = generation
+		let toggled = false
 		if (currentState === 'idle') {
+			toggled = true
 			startSession()
-			return
-		}
-		if (currentState === 'recording') {
+		} else if (currentState === 'recording') {
+			toggled = true
 			stopRecording(sessionGeneration)
-			return
-		}
-		if (currentState === 'permission-requesting' || currentState === 'connecting') {
+		} else if (currentState === 'permission-requesting' || currentState === 'connecting') {
+			toggled = true
 			cancelSession('Recording cancelled.', sessionGeneration)
 		}
+		if (toggled) conditionalFocus(options.term, kbWasOpen)
 	}
 
 	function confirmPreview(): void {
