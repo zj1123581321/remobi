@@ -135,9 +135,10 @@ describe('input-action session contract', () => {
 				id: 'oldest',
 				data: 'fifo-marker',
 			})
-			await vi.waitFor(() =>
-				expect(outputText(client.messages).match(/fifo-marker/g)).toHaveLength(2),
-			)
+			await vi.waitFor(() => {
+				expect(outputText(client.messages)).toContain('fifo-128')
+				expect(outputText(client.messages).match(/fifo-marker/g)).toHaveLength(2)
+			})
 			expect(acceptedIds(client.messages).filter((id) => id === 'oldest')).toHaveLength(2)
 		} finally {
 			await session.dispose()
