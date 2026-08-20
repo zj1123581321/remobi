@@ -72,9 +72,13 @@
   4. **rejected 处理**：保存 `reason`，`status = 'rejected'`，**停止自动重送**，文案固定：
      | reason | 文案 | 允许的动作 |
      |---|---|---|
-     | `pty-write-failed` | `Not received: terminal write failed.` | 用**原 ID** 手动重试 / 放弃 |
      | `id-conflict` | `Not received: duplicate submission id.` | **只能**放弃后重新输入 |
      | `session-unavailable` | `Not received: terminal session unavailable.` | **只能**放弃后重新输入 |
+
+     **`InputRejectedReason` 只有这两个值**（T2 fix1 已删掉 `pty-write-failed`——
+     第 2 轮审查实测证明 node-pty 的写失败不会同步抛异常，那个 reason 永远发不出去）。
+     因此**两个 reason 都不允许用原 ID 重试**，「重试」按钮在 rejected 状态下一律不可用，
+     用户只能放弃后重新输入。不要为一个不存在的 reason 保留代码路径。
   5. **15 秒无响应 → `status = 'unknown'`**，文案
      `Result unknown — the terminal may or may not have received it.`
      同一条连接上**不自动盲重试**。
@@ -93,7 +97,7 @@
   9. **UI**（贴着发送按钮，不新增页面）：
      - pending / unknown 存在时 **Send 按钮禁用**（防双击、防第二个并发 action），
        但 textarea **仍可编辑且继续持久化**；
-     - pending / unknown / rejected 时显示「重试」与「放弃」两个动作（按决策 4 决定重试是否可用）；
+     - `unknown` 时显示「重试」与「放弃」；`rejected` 时**只显示「放弃」**（决策 4）；
      - 状态区用 `aria-live="polite"`，**文字 + 图标，不许只靠颜色**区分状态；
      - **关闭 composer 不删除 pending**；重开时状态照旧显示。
   10. **服务端版本不匹配不需要本卡单独处理**。T3 已经把"服务端消息解析失败"归成
@@ -164,7 +168,6 @@
 | 无 pending | 点 Send（synced，正文非空） | **先**写 localStorage pending(status=`pending`)，**后**发帧；顺序可断言 |
 | `pending` | 匹配 id 的 accepted | 清 pending；draft 未改 → 一并清空；按钮恢复；文案 `Received by terminal.` |
 | `pending` | 匹配 id 的 accepted，但 draft 已被用户改过 | 清 pending；**draft 保留新文本**；按钮恢复 |
-| `pending` | `rejected(pty-write-failed)` | status=`rejected`；重试可用；停止自动重送 |
 | `pending` | `rejected(id-conflict)` | status=`rejected`；重试**不可用**，只能放弃 |
 | `pending` | `rejected(session-unavailable)` | 同上 |
 | `pending` | 15 秒无响应 | status=`unknown`，文案 `Result unknown — …` |
@@ -173,7 +176,7 @@
 | `pending` / `unknown` | 再点 Send | 按钮禁用；即使强行调用也**不产生第二个 action** |
 | `pending` | 关闭 composer | pending **保留**；重开后状态照旧显示 |
 | `pending` | 用户点「放弃」 | 只清本地 pending；文案不声称服务端未收到 |
-| `rejected(pty-write-failed)` | 用户点「重试」 | 用**同一个 id、同一个 data** 重发；**不跑** hook |
+| `rejected`（任一 reason） | 「重试」按钮 | **不可用**——两个 reason 都必须放弃后重新输入 |
 | 有 pending | 用户清空全部草稿 | **二次确认**后才连 pending 一起放弃 |
 
 ### 轴 2：自动重送 × session × epoch
@@ -194,7 +197,7 @@
 |---|---|---|
 | 用户首次点 Send | 跑 1 次 | 跑 1 次 |
 | 新 epoch 自动重送 | **0 次** | **0 次** |
-| 用户手动「重试」（同 id） | **0 次** | **0 次** |
+| 自动重送之外没有手动同 id 重试路径 | — | — |
 | 服务端重复发来的 accepted | — | **0 次** |
 | before await 期间 draft 变了（generation 变） | 跑了 1 次 | **0 次**（整条不发送、不落 pending） |
 | before await 期间断线（离开 synced） | 跑了 1 次 | **0 次**（不发送，草稿保留） |
