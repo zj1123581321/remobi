@@ -56,7 +56,7 @@ remobi: shutting down...
 {"case":"ping-action-interleave-160","received":231,"pongs":80,"accepted":80,"rejected":0}
 ```
 
-判读：结构畸形、字段错配、空/过长 ID、服务端消息类型均 fail-closed 为 `1008`；超过 WebSocket `maxPayload` 的两帧在应用层前由 `ws` 关闭为 `1009`，无错误正文和无 ack。128 字节 ASCII ID 与 32 个 emoji（每个 4 字节，合计 128 字节）都得到正常 `pong`；129 字节 ASCII 与 33 个 emoji（132 字节）均违规关闭。组合字符样例的 UTF-8 字节数大于字符数，均未越过字节上限。所有错误文案仅为固定的 `invalid client message`，没有终端正文或探针设置的 `secret-*` 输入回显。5 次同 ID 同 data 重放收到 5 个 accepted 但只收到一次 PTY output；160 帧交错收到 80 个 pong、80 个 accepted、0 个 rejected，连接未因合法乱序关闭。
+判读：结构畸形、字段错配、空/过长 ID、服务端消息类型均 fail-closed 为 `1008`；超过 WebSocket `maxPayload` 的两帧在应用层前由 `ws` 关闭为 `1009`，无错误正文和无 ack。128 字节 ASCII ID 与 32 个 emoji（每个 4 字节，合计 128 字节）都得到正常 `pong`；129 字节 ASCII 与 33 个 emoji（132 字节）均违规关闭。组合字符样例中 `e`+组合重音每个为 3 个 UTF-8 字节，64/65 个样例实际为 192/195 字节，均因超过 128 字节上限而违规关闭（探针 case 名中的 `128/130bytes` 是标签误写，不改变实际 payload/close 输出）。所有错误文案仅为固定的 `invalid client message`，没有终端正文或探针设置的 `secret-*` 输入回显。5 次同 ID 同 data 重放收到 5 个 accepted 但只收到一次 PTY output；160 帧交错收到 80 个 pong、80 个 accepted、0 个 rejected，连接未因合法乱序关闭。
 
 本证据未发现违反不变式 5（拿不到可靠 ID 不伪造 rejected、畸形帧协议违规关闭）或不变式 2（同 ID 同 data 不产生第二次 PTY write）的新问题。
 
@@ -119,3 +119,49 @@ git show 24a12d3714818bc721763c9b981c196ef0758698:src/session-protocol.ts | rg -
 - 同步 `pty.write` 注入将请求方收到 `input-rejected/session-unavailable` 后固定错误 `Terminal failed; restart remobi.`，其他 client 也收到同一固定错误并关闭；`inputActionsSize:0`，没有 `pty-write-failed`。mirror 注入得到相同固定错误和同一 sticky `terminalFailed`。`parsePtyWriteFailedReason:null` 且真实 WebSocket 发送该 reason 关闭 `1008`，协议层已不接受该 reason。
 
 本证据确认不变式 1（accepted 前写入并记账）、2（有界 FIFO 去重）、4（PTY/mirror fail-loud，错误不含终端正文）、7（每 session 一个 sessionId）在上述运行时路径成立；后续只需对失败后仍运行的 onData 开销做最终级别分诊。
+
+## P1-1 修复复核与熵增核验
+
+结论：P1-1 已被修掉。
+
+- H0 协议类型 `InputRejectedReason` 只有 `id-conflict | session-unavailable`；`pty-write-failed` 不存在，`parseClientMessage({ type: "input-rejected", id: "x", reason: "pty-write-failed" })` 实测为 `null`，真实 WebSocket 同类帧收到 `1008`。
+- 同步 `pty.write` 异常实测先发 `input-rejected(session-unavailable)`，再进入唯一的 `failTerminal()`；`inputActionsSize:0`，所以异常 action 没有进入去重账本。mirror 异常也进入同一 `failTerminal()`，两条路径都广播同一固定 `Terminal failed; restart remobi.` 并关闭当前 client。
+- `failTerminal` 只有一个定义；H0 两个失败触发点（mirror Promise catch 的 `src/session.ts:128` 与同步 write catch 的 `src/session.ts:275`）都调用它，没有第二套 reason 或第二套 fail-loud 状态机。
+- 固定错误文案和实际收到的 error message 均不含终端正文；同步失败探针设置的 `secret-sync-input` 也没有出现在 error 中。
+- 修复增量保持净减法：删除 `pty-write-failed` 协议 reason，将同步异常并入已有 sticky fail-loud；本轮没有向仓库新增代码抽象、配置、持久化、TTL、fallback、重试或额外状态。
+
+## Findings
+
+### P2（接受、不阻塞本轮 verdict）：terminalFailed 后仍处理 PTY output
+
+- 级别：P2；P1 计数不增加。
+- 溯源：与不变式 4 的失败路径资源收口相关，但不违反其已验证的 fail-loud 语义；不变式 4 的错误文案、client 关闭和 sticky 拒绝均成立。
+- 位置：`src/session.ts:118-131`（`pty.onData`）和 `src/session.ts:296-304`（`failTerminal`）。
+- 触发路径：mirror 写失败后 `terminalFailed=true`、clients 清空，但 PTY 的 `onData` 订阅仍存在；真实 20 MiB/约 6.4 秒输出中，`outputSeq` 在失败后从 904 增至 561756（+560852），Node CPU 为 user `2.082942s` + system `0.914161s`。这是真实 CPU/计数开销，不是理论推断。
+- 分诊理由：强制 GC 后 heap 反而下降 `2111488` 字节，fd 与子进程正常，client 已收到固定错误并关闭；当前证据没有无界堆泄漏、崩溃、静默错误、越权或用户数据损坏，故不达 personal + infra 例外的 P1 红线。
+- 建议修法方向：后续若要收口，沿 node-pty 的订阅释放能力停止失败 session 的 output 回调，或让失败后的 output 路径在入口处不再创建 Promise/seq 工作；保留唯一 `failTerminal` 与现有 fail-loud 文案，并用同等长跑 CPU/heap 探针锁定回归。本轮不改代码。
+
+除此之外本轮没有新增 findings。
+
+## 本轮没有发现问题的方向
+
+- 结构畸形、JSON 数组、`null`、深嵌套、缺失/错误/未知 `type`：均收到固定协议错误并以 `1008` 关闭。
+- `input-action` 的 ID/data 类型错配、`ping` 布尔 ID、空 ID、128/129 字节边界，以及 emoji/组合字符的 UTF-8 字节边界：没有越界接受或伪造 ack。
+- 256 KiB/超限帧：真实 WebSocket 在应用层前以 `1009` 关闭，无错误正文和 ack。
+- 客户端伪造 `snapshot`、`output`、`input-accepted`、`input-rejected` 服务端消息：均按协议违规关闭。
+- 同 ID 同 data 重放、ping/action 高频交错、legacy `input` 高频输入：没有重复 PTY write、伪造 rejected 或 seq 跳号。
+- 128 条 FIFO 去重账本、最旧 ID 淘汰及淘汰后重送：直接运行时读数严格保持 128，重送旧 ID 再写 PTY。
+- accepted 顺序与同步 write 异常：成功路径才 accepted；异常路径不入账，收到 `session-unavailable` 后进入粘性 fail-loud。
+- mirror 失败与同步 PTY 异常的统一 fail-loud：固定错误不泄漏终端正文，后续 attach/action 行为保持拒绝语义。
+- `outputSeq` 的长跑单调性/连续性、snapshot watermark/sessionId 的实际下发，以及 6 次 attach/detach + dispose 后 fd/子进程回收：本轮没有发现新问题。
+- pendingMirrorWrite 长跑：在失败后高频输出下 heap 没有增长证据，观察到的是可回收 Promise 链而非无界保留。
+
+## 最终 Verdict
+
+`pass`
+
+- P1：0
+- P2：1（接受、不阻塞；仅为失败后 output 回调资源开销观察）
+- P3：0
+
+本 verdict 只针对冻结范围 `ba25ddf9cc9d7de6d3288869ffed133e68c7b3bb..24a12d3714818bc721763c9b981c196ef0758698`；审查期间的新提交不纳入本结论。
