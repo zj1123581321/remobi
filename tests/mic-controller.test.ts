@@ -183,6 +183,7 @@ async function startRecording(harness: TestHarness): Promise<void> {
 
 beforeEach(() => {
 	GlobalRegistrator.register()
+	localStorage.clear()
 	Object.defineProperty(document, 'visibilityState', {
 		configurable: true,
 		value: 'visible',
@@ -191,6 +192,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+	localStorage.clear()
 	_resetTouchGuard()
 	GlobalRegistrator.unregister()
 	vi.useRealTimers()
@@ -676,6 +678,23 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		expect(harness.controller.preview.getText()).toBe('aaa bbb')
 		harness.controller.dispose()
 	})
+
+	test('ASR final persists the complete appended draft', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'typed base'
+		harness.controller.preview.input.dispatchEvent(new Event('input', { bubbles: true }))
+		await startRecording(harness)
+		dispatchTap(harness.button)
+		harness.engine.emitFinal('spoken final', 1)
+
+		expect(JSON.parse(localStorage.getItem('remobi:composer:v1:/') ?? '')).toEqual({
+			version: 1,
+			draft: 'typed base spoken final',
+			pending: null,
+		})
+		harness.controller.dispose()
+	})
 })
 
 describe('preview injection', () => {
@@ -696,6 +715,7 @@ describe('preview injection', () => {
 		// The controller's hook registry is fixed at construction; use a new
 		// harness-shaped controller to assert the actual injection seam.
 		harness.controller.dispose()
+		localStorage.clear()
 		const engine = new FakeEngine()
 		const term = harness.term
 		const config = defineConfig({
@@ -758,6 +778,56 @@ describe('preview injection', () => {
 		harness.controller.dispose()
 	})
 
+	test('pageshow restores only an empty composer and opening keeps its draft', () => {
+		localStorage.setItem(
+			'remobi:composer:v1:/',
+			JSON.stringify({ version: 1, draft: 'stored draft', pending: null }),
+		)
+		const harness = createHarness()
+		expect(harness.controller.preview.getText()).toBe('stored draft')
+		expect(harness.controller.preview.isOpen()).toBe(false)
+		harness.controller.preview.input.value = ''
+		window.dispatchEvent(new Event('pageshow'))
+		expect(harness.controller.preview.getText()).toBe('stored draft')
+		expect(harness.controller.preview.isOpen()).toBe(false)
+
+		harness.controller.preview.open()
+		expect(harness.controller.preview.getText()).toBe('stored draft')
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		harness.controller.preview.input.value = 'newer draft'
+		window.dispatchEvent(new Event('pageshow'))
+		expect(harness.controller.preview.getText()).toBe('newer draft')
+		expect(harness.controller.preview.isOpen()).toBe(true)
+
+		harness.controller.preview.input.value = ''
+		window.dispatchEvent(new Event('pageshow'))
+		expect(harness.controller.preview.getText()).toBe('stored draft')
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		harness.controller.dispose()
+	})
+
+	test('background cancellation drops partial text but keeps the persisted base draft', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'typed base'
+		harness.controller.preview.input.dispatchEvent(new Event('input', { bubbles: true }))
+		await startRecording(harness)
+		harness.engine.emitPartial('discarded partial')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('typed base discarded partial')
+
+		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+		document.dispatchEvent(new Event('visibilitychange'))
+
+		expect(harness.controller.preview.getText()).toBe('typed base')
+		expect(JSON.parse(localStorage.getItem('remobi:composer:v1:/') ?? '')).toEqual({
+			version: 1,
+			draft: 'typed base',
+			pending: null,
+		})
+		harness.controller.dispose()
+	})
+
 	test('late final after waiting timeout cannot overwrite edited preview text', async () => {
 		const harness = createHarness()
 		await startRecording(harness)
@@ -781,6 +851,77 @@ describe('preview injection', () => {
 		sendButton?.dispatchEvent(new Event('click'))
 		await Promise.resolve()
 		expect(harness.term.sent).toEqual([])
+		harness.controller.dispose()
+	})
+
+	test.each([
+		{
+			name: 'empty without autoEnter',
+			draft: '',
+			autoEnter: false,
+			sent: [],
+			message: 'Type or speak something to send.',
+		},
+		{
+			name: 'empty with autoEnter',
+			draft: '',
+			autoEnter: true,
+			sent: [],
+			message: 'Type or speak something to send.',
+		},
+		{
+			name: 'non-printing with autoEnter',
+			draft: '\u0000\u007f',
+			autoEnter: true,
+			sent: [],
+			message: 'Speech contained no printable text.',
+		},
+		{
+			name: 'hello without autoEnter',
+			draft: 'hello',
+			autoEnter: false,
+			sent: ['hello'],
+			message: undefined,
+		},
+		{
+			name: 'hello with autoEnter',
+			draft: 'hello',
+			autoEnter: true,
+			sent: ['hello', '\r'],
+			message: undefined,
+		},
+	])('$name keeps the submit guards', async ({ draft, autoEnter, sent, message }) => {
+		const harness = createHarness(autoEnter)
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = draft
+		dispatchPreviewTap(harness, 'send')
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+
+		expect(harness.term.sent).toEqual(sent)
+		if (message !== undefined) {
+			expect(harness.controller.preview.message.textContent).toBe(message)
+		}
+		harness.controller.dispose()
+	})
+
+	test('storage write failure keeps the composer sendable', async () => {
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+		vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+			throw new DOMException('full', 'QuotaExceededError')
+		})
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'send despite storage failure'
+		harness.controller.preview.input.dispatchEvent(new Event('input', { bubbles: true }))
+		expect(harness.controller.preview.message.textContent).toBe(
+			'Draft is not protected on this device.',
+		)
+		dispatchPreviewTap(harness, 'send')
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+
+		expect(harness.term.sent).toEqual(['send despite storage failure'])
+		expect(harness.controller.preview.getText()).toBe('')
+		expect(errorSpy).toHaveBeenCalledTimes(1)
 		harness.controller.dispose()
 	})
 })
