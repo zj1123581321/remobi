@@ -557,6 +557,14 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		queueImmediateConnect(true)
 	}
 
+	function suspendConnection(): void {
+		setConnectionStatus('disconnected')
+		invalidateConnection()
+		const hiddenSocket = socket
+		socket = null
+		hiddenSocket?.close()
+	}
+
 	function connect(): void {
 		if (pageHidden) return
 		currentEpoch += 1
@@ -614,11 +622,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	function onVisibilityChange(): void {
 		if (document.visibilityState === 'hidden') {
 			pageHidden = true
-			setConnectionStatus('disconnected')
-			invalidateConnection()
-			const hiddenSocket = socket
-			socket = null
-			hiddenSocket?.close()
+			suspendConnection()
 			return
 		}
 		pageHidden = false
@@ -627,11 +631,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 
 	function onPageHide(): void {
 		pageHidden = true
-		setConnectionStatus('disconnected')
-		invalidateConnection()
-		const hiddenSocket = socket
-		socket = null
-		hiddenSocket?.close()
+		suspendConnection()
 	}
 
 	function onPageShow(): void {
