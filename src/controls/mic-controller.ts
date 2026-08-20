@@ -412,6 +412,11 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			return
 		}
 		if (currentState !== 'preview' && currentState !== 'error' && currentState !== 'idle') return
+		if (currentState === 'idle') {
+			preview.clear()
+			endAsIdle()
+			return
+		}
 		preview.clear()
 		stopEngine()
 		endAsIdle()
@@ -420,6 +425,8 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	function onVisibilityChange(): void {
 		if (document.visibilityState === 'hidden' && currentState !== 'idle') {
 			cancelSession(generation)
+			preview.showMessage('Recording cancelled because the app went into the background.')
+			setComposerExpanded(true)
 		}
 	}
 

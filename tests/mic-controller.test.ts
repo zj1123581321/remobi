@@ -281,9 +281,11 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		)
 		expect(harness.controller.state).toBe('idle')
 		expect(harness.engine.starts).toBe(0)
+		expect(harness.engine.stops).toBe(0)
 		expect(harness.controller.preview.isOpen()).toBe(false)
 		dispatchTap(harness.composerButton)
 		dispatchPreviewTap(harness, 'close')
+		expect(harness.engine.stops).toBe(0)
 		expect(harness.controller.preview.isOpen()).toBe(false)
 		harness.controller.dispose()
 	})
@@ -460,6 +462,8 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
 		expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow()
 		expect(harness.controller.state).toBe('idle')
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.message.textContent).toContain('background')
 		harness.controller.dispose()
 	})
 
@@ -479,6 +483,8 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
 		expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow()
 		expect(harness.controller.state).toBe('idle')
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.message.textContent).toContain('background')
 		harness.controller.dispose()
 	})
 
@@ -539,6 +545,8 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		})
 		document.dispatchEvent(new Event('visibilitychange'))
 		expect(second.controller.state).toBe('idle')
+		expect(second.controller.preview.isOpen()).toBe(true)
+		expect(second.controller.preview.message.textContent).toContain('background')
 		second.controller.dispose()
 	})
 
