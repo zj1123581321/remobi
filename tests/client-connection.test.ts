@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { ConnectionStatus } from '../src/types'
 
 const harness = vi.hoisted(() => ({
@@ -148,6 +148,10 @@ describe('client connection state machine', () => {
 		socket = harness.sockets[0] as FakeSocket
 	})
 
+	beforeEach(() => {
+		vi.setSystemTime(0)
+	})
+
 	afterAll(async () => {
 		setVisibility('hidden')
 		document.dispatchEvent(new Event('visibilitychange'))
@@ -186,18 +190,137 @@ describe('client connection state machine', () => {
 		expect(terminal.writes).toEqual(['<reset>', 'snapshot', 'four', 'five'])
 	})
 
-	test('only a matching pong schedules the next single ping', async () => {
-		const firstPing = JSON.parse(socket.sent[0] as string) as { type: string; id: string }
-		socket.receive(JSON.stringify({ type: 'pong', id: 'late-or-wrong' }))
-		await vi.advanceTimersByTimeAsync(10_000)
-		expect(socket.sent).toHaveLength(2)
+	test('snapshot freshness permits immediate ordinary input', async () => {
+		const socket = await freshSynced()
+		const sentBefore = socket.sent.length
+		window.term?.input('fresh-input', true)
+		expect(socket.sent).toHaveLength(sentBefore + 1)
+		expect(JSON.parse(socket.sent[sentBefore] as string)).toEqual({
+			type: 'input',
+			data: 'fresh-input',
+		})
+	})
 
-		socket.receive(JSON.stringify({ type: 'pong', id: firstPing.id }))
+	test('matching pong refreshes an otherwise stale freshness proof', async () => {
+		const socket = await freshSynced()
+		const firstPing = JSON.parse(socket.sent[0] as string) as { id: string }
+		vi.setSystemTime(24_000)
+		receive(socket, { type: 'pong', id: firstPing.id })
+		vi.setSystemTime(26_000)
+
+		const sentBefore = socket.sent.length
+		window.term?.input('pong-refreshed', true)
+		expect(socket.sent).toHaveLength(sentBefore + 1)
+		expect(JSON.parse(socket.sent[sentBefore] as string)).toEqual({
+			type: 'input',
+			data: 'pong-refreshed',
+		})
+	})
+
+	test('a recent pong prevents a false freshness failure at 24 seconds', async () => {
+		const socket = await freshSynced()
+		const firstPing = JSON.parse(socket.sent[0] as string) as { id: string }
+		vi.setSystemTime(10_000)
+		receive(socket, { type: 'pong', id: firstPing.id })
+		vi.setSystemTime(24_000)
+
+		const sentBefore = socket.sent.length
+		window.term?.input('within-freshness-window', true)
+		expect(socket.sent).toHaveLength(sentBefore + 1)
+	})
+
+	test.each([
+		[26_000, 'stale-after-26-seconds'],
+		[1_800_000, 'stale-after-30-minutes'],
+	] as const)('stale freshness drops input and starts reconnecting (%i ms)', async (age, data) => {
+		const socket = await freshSynced()
+		const sentBefore = socket.sent.length
+		let notice = ''
+		const onNotice = (event: Event): void => {
+			if (event instanceof CustomEvent && typeof event.detail === 'string') notice = event.detail
+		}
+		window.addEventListener('remobi-connection-notice', onNotice)
+		vi.setSystemTime(age)
+		window.term?.input(data, true)
+		window.removeEventListener('remobi-connection-notice', onNotice)
+
+		expect(socket.sent).toHaveLength(sentBefore)
+		expect(socket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().state).toBe('reconnecting')
+		expect(getStatus().lastFailureReason).toBe('heartbeat-timeout')
+		expect(notice).toBe('Not sent — still syncing.')
+	})
+
+	test('a fresh snapshot restores input after freshness-triggered reconnect', async () => {
+		await freshSynced()
+		vi.setSystemTime(26_000)
+		window.term?.input('stale-input', true)
+		await vi.advanceTimersByTimeAsync(1_000)
+
+		const nextSocket = currentSocket()
+		nextSocket.open()
+		receive(nextSocket, {
+			type: 'snapshot',
+			data: 'fresh-again',
+			sessionId: 'fresh-again-session',
+			outputWatermark: 0,
+		})
+		const sentBefore = nextSocket.sent.length
+		window.term?.input('recovered-input', true)
+		expect(nextSocket.sent).toHaveLength(sentBefore + 1)
+		expect(JSON.parse(nextSocket.sent[sentBefore] as string)).toEqual({
+			type: 'input',
+			data: 'recovered-input',
+		})
+	})
+
+	test('stale freshness does not gate resize', async () => {
+		const socket = await freshSynced()
+		const terminal = harness.terminal as FakeTerminal
+		vi.setSystemTime(26_000)
+		terminal.cols = 111
+		terminal.rows = 37
+		window.__remobiResize?.()
+
+		const frames = socket.sent.map((payload) => JSON.parse(payload) as Record<string, unknown>)
+		expect(frames.at(-1)).toEqual({ type: 'resize', cols: 111, rows: 37 })
+		expect(getStatus().state).toBe('synced')
+	})
+
+	test('matching heartbeats keep five minutes of normal input fresh', async () => {
+		const socket = await freshSynced()
+		for (let index = 0; index < 30; index += 1) {
+			const pings = socket.sent
+				.map((payload) => JSON.parse(payload) as Record<string, unknown>)
+				.filter((frame) => frame.type === 'ping')
+			const ping = pings[pings.length - 1]
+			if (typeof ping?.id !== 'string') throw new Error('test harness did not observe a ping')
+			receive(socket, { type: 'pong', id: ping.id })
+			await vi.advanceTimersByTimeAsync(10_000)
+		}
+
+		const sentBefore = socket.sent.length
+		window.term?.input('five-minute-input', true)
+		expect(socket.sent).toHaveLength(sentBefore + 1)
+		expect(JSON.parse(socket.sent[sentBefore] as string)).toEqual({
+			type: 'input',
+			data: 'five-minute-input',
+		})
+	})
+
+	test('only a matching pong schedules the next single ping', async () => {
+		const activeSocket = await freshSynced()
+		const firstPing = JSON.parse(activeSocket.sent[0] as string) as { type: string; id: string }
+		activeSocket.receive(JSON.stringify({ type: 'pong', id: 'late-or-wrong' }))
+		await vi.advanceTimersByTimeAsync(10_000)
+		expect(activeSocket.sent).toHaveLength(2)
+
+		activeSocket.receive(JSON.stringify({ type: 'pong', id: firstPing.id }))
 		await vi.advanceTimersByTimeAsync(9_999)
-		expect(socket.sent).toHaveLength(2)
+		expect(activeSocket.sent).toHaveLength(2)
 		await vi.advanceTimersByTimeAsync(1)
-		expect(socket.sent).toHaveLength(3)
-		expect(JSON.parse(socket.sent[2] as string).type).toBe('ping')
+		expect(activeSocket.sent).toHaveLength(3)
+		expect(JSON.parse(activeSocket.sent[2] as string).type).toBe('ping')
 	})
 
 	test.each([

@@ -47,6 +47,8 @@ const RECONNECT_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000] as const
 const PRE_SYNC_FAILURES_BEFORE_AUTH_HINT = 3
 const MAX_PRE_SNAPSHOT_OUTPUT_BYTES = 1024 * 1024
 const BUFFERED_AMOUNT_SETTLE_MS = 100
+// Heartbeats refresh this proof every 10s; 25s leaves margin while remaining ahead of the 15s deadline.
+const FRESHNESS_WINDOW_MS = 25_000
 const utf8Encoder = new TextEncoder()
 
 function createTermBridge(
@@ -241,6 +243,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	}
 	let snapshotLoaded = false
 	let snapshotApplying = false
+	let lastProvenFreshAt = 0
 	const pendingOutput = new Map<number, string>()
 	let pendingOutputBytes = 0
 	let pendingResize: { cols: number; rows: number } | null = null
@@ -250,16 +253,20 @@ function main(config: RemobiConfig, version: string | undefined): void {
 
 	function send(message: ClientMessage): void {
 		if (connectionStatus.state === 'synced' && socket?.readyState === WebSocket.OPEN) {
-			const activeSocket = socket
-			const wasBuffered = message.type === 'input' && activeSocket.bufferedAmount > 0
-			activeSocket.send(serialiseClientMessage(message))
-			if (message.type === 'input' && (wasBuffered || activeSocket.bufferedAmount > 0)) {
-				scheduleBufferedAmountCheck(currentEpoch, activeSocket)
-			} else if (message.type === 'input') {
-				clearTimer(bufferedAmountCheckTimer)
-				bufferedAmountCheckTimer = undefined
+			if (message.type === 'input' && Date.now() - lastProvenFreshAt > FRESHNESS_WINDOW_MS) {
+				failConnection(currentEpoch, 'heartbeat-timeout')
+			} else {
+				const activeSocket = socket
+				const wasBuffered = message.type === 'input' && activeSocket.bufferedAmount > 0
+				activeSocket.send(serialiseClientMessage(message))
+				if (message.type === 'input' && (wasBuffered || activeSocket.bufferedAmount > 0)) {
+					scheduleBufferedAmountCheck(currentEpoch, activeSocket)
+				} else if (message.type === 'input') {
+					clearTimer(bufferedAmountCheckTimer)
+					bufferedAmountCheckTimer = undefined
+				}
+				return
 			}
-			return
 		}
 		if (message.type === 'resize') {
 			pendingResize = { cols: message.cols, rows: message.rows }
@@ -503,6 +510,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 				lastFailureReason: null,
 			}
 			notSentNoticeShown = false
+			lastProvenFreshAt = Date.now()
 			for (const listener of connectionStatusListeners) listener(connectionStatus)
 			notifyConnectionChange()
 
@@ -544,6 +552,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		clearTimer(heartbeatDeadlineTimer)
 		heartbeatDeadlineTimer = undefined
 		heartbeatPingId = null
+		lastProvenFreshAt = Date.now()
 		heartbeatNextTimer = window.setTimeout(() => {
 			heartbeatNextTimer = undefined
 			sendHeartbeat(myEpoch)
@@ -703,6 +712,8 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		window.removeEventListener('beforeunload', dispose)
 		window.visualViewport?.removeEventListener('resize', syncSize)
 	}
+	// Keep explicit teardown available without coupling it to a cancelable navigation event.
+	void dispose
 
 	document.addEventListener('visibilitychange', onVisibilityChange)
 	document.addEventListener('freeze', onPageHide)
