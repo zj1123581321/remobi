@@ -44,7 +44,7 @@ function createOverlay(onReconnect: () => void, onReload: () => void): Reconnect
 		].join(';'),
 	})
 	retryButton.type = 'button'
-	retryButton.textContent = '立即重试'
+	retryButton.textContent = 'Retry now'
 	onTap(retryButton, (event: Event) => {
 		event.stopPropagation()
 		onReconnect()
@@ -63,7 +63,7 @@ function createOverlay(onReconnect: () => void, onReload: () => void): Reconnect
 		].join(';'),
 	})
 	authButton.type = 'button'
-	authButton.textContent = '重新认证'
+	authButton.textContent = 'Re-authenticate'
 	onTap(authButton, (event: Event) => {
 		event.stopPropagation()
 		onReload()
@@ -113,7 +113,11 @@ export function setupReconnect(term: XTerminal, config: ReconnectConfig): () => 
 		if (status.state === 'synced') notice = null
 		message.textContent = notice ?? statusMessage(status)
 		overlay.dataset.connectionState = status.state
-		authButton.style.display = status.consecutivePreSyncFailures >= 3 ? 'block' : 'none'
+		authButton.style.display =
+			status.consecutivePreSyncFailures >= 3 &&
+			notice !== 'Session ended — restart remobi to start a new one.'
+				? 'block'
+				: 'none'
 		overlay.style.display = status.state === 'synced' ? 'none' : 'flex'
 	}
 
@@ -124,6 +128,9 @@ export function setupReconnect(term: XTerminal, config: ReconnectConfig): () => 
 		if (typeof detail !== 'string') return
 		notice = detail
 		message.textContent = detail
+		if (detail === 'Session ended — restart remobi to start a new one.') {
+			authButton.style.display = 'none'
+		}
 		overlay.style.display = 'flex'
 	}
 	window.addEventListener('remobi-connection-notice', onNotice)
