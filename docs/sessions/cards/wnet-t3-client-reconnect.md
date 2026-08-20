@@ -141,7 +141,7 @@
   `package.json`、`pnpm-lock.yaml`
 - **Scope-Globs**：src/client-entry.ts src/reconnect.ts src/types.ts tests/reconnect.test.ts tests/client-connection.test.ts tests/playwright/weak-network.spec.ts
 - **高风险区域**：
-  - **`onConnectionChange` 的语义变了**（OPEN → synced），而 `mic-controller.ts:460-464`
+  - **`onConnectionChange` 的语义变了**（OPEN → synced），而 `mic-controller.ts:467-471`
     正在订阅它，`tests/playwright/asr.spec.ts:170, 188` 正在断言它的行为。
     本卡**不许改** `src/controls/**`，但**必须**在报告里写明这次语义收紧对 composer 的影响面，
     并确认现有 asr e2e 仍然全绿（如果它们因为语义收紧而红了，说明现有断言依赖的是
@@ -372,7 +372,7 @@
   - **页面 lifecycle 目前散在三处**，`client-entry.ts` 里一个都没有：
     `src/index.ts:160-166`（`beforeunload` + `pagehide`，`event.persisted` 时跳过 dispose）、
     `src/reconnect.ts:106-110/120`（`visibilitychange` **仅在找不到 socket 的 fallback 分支注册**）、
-    `src/controls/mic-controller.ts:449-459`（hidden 时取消录音）。
+    `src/controls/mic-controller.ts:449-457`（hidden 时取消录音）+ `:459-461`（pageshow 恢复草稿，T1 新增）。
   - `syncSize()`（`:224-227`）= `fitAddon.fit()` + `send(resize)`，触发点四处
     （socket open `:291`、window resize `:344`、visualViewport resize `:345`、
     `window.__remobiResize` `:284`），**无节流、无重复值抑制**。

@@ -318,10 +318,15 @@
     （串行 reduce）；hook 抛异常被 `logHookError` 吞成 console.error，**不影响发送**。
   - `asr.autoEnter` 默认 `false`（`src/config.ts:332`）；
     **e2e 配置 `tests/playwright/asr.config.ts` 把它设成 `true`**。
-  - `AsrPreview` 接口（`asr-preview.ts:4-23`）：`element` / `input` / `message` / `isOpen` /
-    `getText` / `open` / `close` / `show` / `setPartial` / `showMessage` / `resetDraft` / `clear` /
+  - `AsrPreview` 接口（`asr-preview.ts:78-101`，行号已按 T1 合并后更新）：
+    `element` / `input` / `message` / `isOpen` / `getText` / `open` / `close` / `show` /
+    `setPartial` / `showMessage` / **`restoreDraft`（T1 新增，`:91`）** / `resetDraft` / `clear` /
     `onOpenChange` / `onHeightChange` / `onConfirm` / `onCancel`。
-    `onConfirm = (h) => register(sendButton, h)`（`:214`），send 按钮在 `:78-82`。
+    textarea 在 `:136`，send 按钮在 `:153`，`register()` 在 `:294`，`registerCancel()` 在 `:308`，
+    `show()` 在 `:244`，`setPartial()` 在 `:248`。
+  - **T1 已经把草稿持久化落地**（PR #14 已合并）：`persistDraft()` / `restoreDraft()` /
+    `readComposerStore()` 都在 `asr-preview.ts` 顶部；schema 与 key 已定死，
+    `pending` 字段目前恒为透传。本卡只需把 `pending` 真正用起来，**不许改格式**。
   - `tests/mic-controller.test.ts` 现有 799 行 / 37 个用例，其中 `:682` 锁着
     hook+sanitize+autoEnter 的顺序、`:740` 锁着 after-send hook 期间断线阻断 autoEnter。
   - `tests/playwright/asr.spec.ts:44` 断言"假麦克风 → mock final → PTY 收到净化字节"，
