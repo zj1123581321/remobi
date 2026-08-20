@@ -46,7 +46,7 @@ const HEARTBEAT_DEADLINE_MS = 15_000
 const RECONNECT_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000] as const
 const PRE_SYNC_FAILURES_BEFORE_AUTH_HINT = 3
 const MAX_PRE_SNAPSHOT_OUTPUT_BYTES = 1024 * 1024
-const BUFFERED_AMOUNT_FAILURE_STREAK = 2
+const BUFFERED_AMOUNT_SETTLE_MS = 100
 const utf8Encoder = new TextEncoder()
 
 function createTermBridge(
@@ -227,6 +227,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	let snapshotDeadlineTimer: number | undefined
 	let heartbeatDeadlineTimer: number | undefined
 	let heartbeatNextTimer: number | undefined
+	let bufferedAmountCheckTimer: number | undefined
 	let heartbeatPingId: string | null = null
 	let immediateAttemptQueued = false
 	let pageHidden = document.visibilityState === 'hidden'
@@ -244,25 +245,21 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	let pendingOutputBytes = 0
 	let pendingResize: { cols: number; rows: number } | null = null
 	let notSentNoticeShown = false
-	let bufferedAmountFailureStreak = 0
 	let exitReceived = false
 	let statusOverlay: SessionStatusOverlay | null = null
 
 	function send(message: ClientMessage): void {
 		if (connectionStatus.state === 'synced' && socket?.readyState === WebSocket.OPEN) {
-			if (message.type === 'input' && socket.bufferedAmount > 0) {
-				bufferedAmountFailureStreak += 1
-				if (bufferedAmountFailureStreak >= BUFFERED_AMOUNT_FAILURE_STREAK) {
-					failConnection(currentEpoch, 'socket-error')
-				} else {
-					socket.send(serialiseClientMessage(message))
-					return
-				}
-			} else {
-				bufferedAmountFailureStreak = 0
-				socket.send(serialiseClientMessage(message))
-				return
+			const activeSocket = socket
+			const wasBuffered = message.type === 'input' && activeSocket.bufferedAmount > 0
+			activeSocket.send(serialiseClientMessage(message))
+			if (message.type === 'input' && (wasBuffered || activeSocket.bufferedAmount > 0)) {
+				scheduleBufferedAmountCheck(currentEpoch, activeSocket)
+			} else if (message.type === 'input') {
+				clearTimer(bufferedAmountCheckTimer)
+				bufferedAmountCheckTimer = undefined
 			}
+			return
 		}
 		if (message.type === 'resize') {
 			pendingResize = { cols: message.cols, rows: message.rows }
@@ -370,8 +367,30 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	function clearConnectionTimers(): void {
 		clearTimer(reconnectTimer)
 		clearTimer(snapshotDeadlineTimer)
+		clearTimer(bufferedAmountCheckTimer)
 		reconnectTimer = undefined
 		snapshotDeadlineTimer = undefined
+		bufferedAmountCheckTimer = undefined
+	}
+
+	function checkBufferedAmount(myEpoch: number, activeSocket: WebSocket): void {
+		bufferedAmountCheckTimer = undefined
+		if (
+			myEpoch !== currentEpoch ||
+			connectionStatus.state !== 'synced' ||
+			socket !== activeSocket ||
+			activeSocket.readyState !== WebSocket.OPEN
+		) {
+			return
+		}
+		if (activeSocket.bufferedAmount > 0) failConnection(myEpoch, 'socket-error')
+	}
+
+	function scheduleBufferedAmountCheck(myEpoch: number, activeSocket: WebSocket): void {
+		clearTimer(bufferedAmountCheckTimer)
+		bufferedAmountCheckTimer = window.setTimeout(() => {
+			checkBufferedAmount(myEpoch, activeSocket)
+		}, BUFFERED_AMOUNT_SETTLE_MS)
 	}
 
 	function clearPendingOutput(): void {
@@ -484,7 +503,6 @@ function main(config: RemobiConfig, version: string | undefined): void {
 				lastFailureReason: null,
 			}
 			notSentNoticeShown = false
-			bufferedAmountFailureStreak = 0
 			for (const listener of connectionStatusListeners) listener(connectionStatus)
 			notifyConnectionChange()
 

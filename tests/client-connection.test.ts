@@ -698,7 +698,7 @@ describe('client connection state machine', () => {
 		expect(frames[1]).toEqual({ type: 'resize', cols: 120, rows: 40 })
 	})
 
-	test('buffered input detects a persistently stuck OPEN socket before sending', async () => {
+	test('buffered input detects a persistently stuck OPEN socket after settling', async () => {
 		const socket = await freshSynced()
 		socket.bufferedAmount = 1
 		const sentBefore = socket.sent.length
@@ -706,7 +706,8 @@ describe('client connection state machine', () => {
 		expect(socket.sent).toHaveLength(sentBefore + 1)
 		socket.bufferedAmount = 1
 		window.term?.input('buffered-must-drop', true)
-		expect(socket.sent).toHaveLength(sentBefore + 1)
+		expect(socket.sent).toHaveLength(sentBefore + 2)
+		await vi.advanceTimersByTimeAsync(100)
 		expect(socket.readyState).toBe(FakeSocket.CLOSED)
 		expect(getStatus().state).toBe('reconnecting')
 		expect(getStatus().lastFailureReason).toBe('socket-error')
