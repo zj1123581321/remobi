@@ -1,6 +1,84 @@
 import { el, svg } from '../util/dom'
 import { onTap } from '../util/tap'
 
+declare const __remobiBasePath: string | undefined
+
+type ComposerStore = {
+	version: 1
+	draft: string
+	pending: null | {
+		id: string
+		sessionId: string
+		sourceText: string
+		data: string
+		status: 'pending' | 'unknown' | 'rejected'
+		reason?: string
+	}
+}
+
+type StoredComposer = Omit<ComposerStore, 'pending'> & { pending: unknown }
+
+type StorageReadResult =
+	| { readonly kind: 'missing'; readonly storage: Storage }
+	| { readonly kind: 'valid'; readonly storage: Storage; readonly value: StoredComposer }
+	| { readonly kind: 'invalid' }
+	| { readonly kind: 'unavailable'; readonly error: unknown }
+
+const COMPOSER_STORAGE_KEY_PREFIX = 'remobi:composer:v1:'
+const DRAFT_RESTORE_FAILURE = 'Draft could not be restored; stored copy left untouched.'
+const DRAFT_STORAGE_FAILURE = 'Draft is not protected on this device.'
+
+function composerStorageKey(): string {
+	const basePath =
+		typeof __remobiBasePath === 'undefined' ? '/' : (__remobiBasePath ?? '/')
+	return `${COMPOSER_STORAGE_KEY_PREFIX}${basePath}`
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null
+}
+
+function readComposerStore(): StorageReadResult {
+	let storage: Storage
+	try {
+		storage = window.localStorage
+	} catch (error: unknown) {
+		return { kind: 'unavailable', error }
+	}
+
+	let raw: string | null
+	try {
+		raw = storage.getItem(composerStorageKey())
+	} catch (error: unknown) {
+		return { kind: 'unavailable', error }
+	}
+	if (raw === null) return { kind: 'missing', storage }
+
+	let parsed: unknown
+	try {
+		parsed = JSON.parse(raw) as unknown
+	} catch {
+		return { kind: 'invalid' }
+	}
+	if (
+		!isRecord(parsed) ||
+		parsed.version !== 1 ||
+		typeof parsed.draft !== 'string'
+	) {
+		return { kind: 'invalid' }
+	}
+
+	return {
+		kind: 'valid',
+		storage,
+		value: {
+			version: 1,
+			draft: parsed.draft,
+			pending: Object.hasOwn(parsed, 'pending') ? parsed.pending : null,
+		},
+	}
+}
+
 export interface AsrPreview {
 	readonly element: HTMLDivElement
 	readonly input: HTMLTextAreaElement
@@ -14,6 +92,7 @@ export interface AsrPreview {
 	readonly show: (text: string) => void
 	readonly setPartial: (text: string) => void
 	readonly showMessage: (message: string) => void
+	readonly restoreDraft: () => void
 	readonly resetDraft: () => void
 	readonly clear: () => void
 	readonly onOpenChange: (handler: (open: boolean) => void) => { dispose(): void }
@@ -88,6 +167,7 @@ export function createAsrPreview(): AsrPreview {
 	let open = false
 	let pendingPartial: string | undefined
 	let partialFrame: number | undefined
+	let storageFailureShown = false
 	const openChangeHandlers = new Set<(open: boolean) => void>()
 	const heightChangeHandlers = new Set<() => void>()
 	let inputHeight = ''
@@ -103,7 +183,42 @@ export function createAsrPreview(): AsrPreview {
 		}
 	}
 
-	input.addEventListener('input', resizeInput)
+	function showStorageFailure(error: unknown): void {
+		if (storageFailureShown) return
+		storageFailureShown = true
+		console.error('remobi: composer draft storage unavailable', error)
+		showMessage(DRAFT_STORAGE_FAILURE)
+	}
+
+	function showRestoreFailure(): void {
+		showMessage(DRAFT_RESTORE_FAILURE)
+	}
+
+	function persistDraft(draft: string): void {
+		const stored = readComposerStore()
+		if (stored.kind === 'invalid') {
+			showRestoreFailure()
+			return
+		}
+		if (stored.kind === 'unavailable') {
+			showStorageFailure(stored.error)
+			return
+		}
+		const pending = stored.kind === 'missing' ? null : stored.value.pending
+		try {
+			stored.storage.setItem(
+				composerStorageKey(),
+				JSON.stringify({ version: 1 satisfies ComposerStore['version'], draft, pending }),
+			)
+		} catch (error: unknown) {
+			showStorageFailure(error)
+		}
+	}
+
+	input.addEventListener('input', () => {
+		resizeInput()
+		persistDraft(input.value)
+	})
 
 	function setOpen(next: boolean): void {
 		if (open === next) return
@@ -115,7 +230,6 @@ export function createAsrPreview(): AsrPreview {
 	}
 
 	function openComposer(): void {
-		resetDraft()
 		input.readOnly = false
 		setOpen(true)
 		resizeInput()
@@ -125,11 +239,16 @@ export function createAsrPreview(): AsrPreview {
 		setOpen(false)
 	}
 
-	function show(text: string): void {
+	function renderText(text: string, persist: boolean): void {
 		input.value = text
 		message.textContent = ''
 		setOpen(true)
 		resizeInput()
+		if (persist) persistDraft(text)
+	}
+
+	function show(text: string): void {
+		renderText(text, true)
 	}
 
 	function setPartial(text: string): void {
@@ -137,7 +256,7 @@ export function createAsrPreview(): AsrPreview {
 		if (partialFrame !== undefined) return
 		partialFrame = requestAnimationFrame(() => {
 			partialFrame = undefined
-			if (pendingPartial !== undefined) show(pendingPartial)
+			if (pendingPartial !== undefined) renderText(pendingPartial, false)
 			pendingPartial = undefined
 		})
 	}
@@ -154,11 +273,29 @@ export function createAsrPreview(): AsrPreview {
 		input.value = ''
 		message.textContent = ''
 		resizeInput()
+		persistDraft('')
 	}
 
 	function clear(): void {
 		resetDraft()
 		setOpen(false)
+	}
+
+	function restoreDraft(): void {
+		if (input.value) return
+		const stored = readComposerStore()
+		if (stored.kind === 'invalid') {
+			showRestoreFailure()
+			return
+		}
+		if (stored.kind === 'unavailable') {
+			showStorageFailure(stored.error)
+			return
+		}
+		if (stored.kind === 'missing' || !stored.value.draft) return
+		input.value = stored.value.draft
+		setOpen(true)
+		resizeInput()
 	}
 
 	function register(target: HTMLButtonElement, handler: () => void): { dispose(): void } {
@@ -189,6 +326,8 @@ export function createAsrPreview(): AsrPreview {
 		}
 	}
 
+	restoreDraft()
+
 	return {
 		element,
 		input,
@@ -201,6 +340,7 @@ export function createAsrPreview(): AsrPreview {
 		show,
 		setPartial,
 		showMessage,
+		restoreDraft,
 		resetDraft,
 		clear,
 		onOpenChange(handler) {
