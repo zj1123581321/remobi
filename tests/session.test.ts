@@ -140,8 +140,134 @@ describe('SharedTerminalSession', () => {
 		session.handleClientMessage(recorder.client, { type: 'resize', cols: 120, rows: 40 })
 
 		// ping should still work — pure WS, no PTY involvement
-		session.handleClientMessage(recorder.client, { type: 'ping' })
-		expect(recorder.getMessages()).toEqual([{ type: 'pong' }])
+		session.handleClientMessage(recorder.client, { type: 'ping', id: 'ping-1' })
+		expect(recorder.getMessages()).toEqual([{ type: 'pong', id: 'ping-1' }])
+	})
+
+	test('snapshot identifies the session and watermarks sequenced output', async () => {
+		const session = new SharedTerminalSession(['bash', '--norc', '--noprofile', '-lc', 'cat'])
+		const recorder = createClientRecorder()
+
+		try {
+			await session.addClient(recorder.client)
+			const initialSnapshot = recorder.getMessages()[0]
+			expect(initialSnapshot).toMatchObject({
+				type: 'snapshot',
+				sessionId: expect.stringMatching(
+					/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+				),
+				outputWatermark: 0,
+			})
+
+			session.handleClientMessage(recorder.client, {
+				type: 'input',
+				data: 'printf "seq-marker"\n',
+			})
+			await vi.waitFor(() => {
+				expect(receivedText(recorder)).toContain('seq-marker')
+			})
+
+			const outputs = recorder
+				.getMessages()
+				.filter(
+					(message): message is Extract<ServerMessage, { type: 'output' }> =>
+						message.type === 'output',
+				)
+			expect(outputs.map((message) => message.seq)).toEqual(outputs.map((_, index) => index + 1))
+		} finally {
+			await session.dispose()
+		}
+	})
+
+	test('snapshot retries when output arrives during mirror synchronization', async () => {
+		const session = new SharedTerminalSession(['bash', '--norc', '--noprofile', '-lc', 'cat'])
+		const recorder = createClientRecorder()
+		let releasePending!: () => void
+		const pending = new Promise<void>((resolve) => {
+			releasePending = resolve
+		})
+		;(session as unknown as { pendingMirrorWrite: Promise<void> }).pendingMirrorWrite = pending
+
+		try {
+			const addPromise = session.addClient(recorder.client)
+			session.handleClientMessage(recorder.client, {
+				type: 'input',
+				data: 'printf "during-snapshot"\n',
+			})
+			await vi.waitFor(() => {
+				expect(receivedText(recorder)).toContain('during-snapshot')
+			})
+			releasePending()
+			await addPromise
+
+			const snapshot = recorder.getMessages().find((message) => message.type === 'snapshot')
+			const outputSeqs = recorder
+				.getMessages()
+				.filter(
+					(message): message is Extract<ServerMessage, { type: 'output' }> =>
+						message.type === 'output',
+				)
+				.map((message) => message.seq)
+			expect(snapshot).toMatchObject({
+				type: 'snapshot',
+				data: expect.stringContaining('during-snapshot'),
+				outputWatermark: Math.max(...outputSeqs),
+			})
+		} finally {
+			releasePending()
+			await session.dispose()
+		}
+	})
+
+	test('mirror failure is sticky, fail-loud, and makes later action clients unavailable', async () => {
+		const session = new SharedTerminalSession(['bash', '--norc', '--noprofile', '-lc', 'cat'])
+		const watcher = createClientRecorder()
+		const mirror = (
+			session as unknown as {
+				mirror: { write(data: string, callback: () => void): void }
+			}
+		).mirror
+		await session.addClient(watcher.client)
+		mirror.write = () => {
+			throw new Error('mirror contains terminal data')
+		}
+
+		try {
+			session.handleClientMessage(watcher.client, { type: 'input', data: 'secret-marker' })
+			await vi.waitFor(() => {
+				expect(watcher.getMessages()).toContainEqual({
+					type: 'error',
+					message: 'Terminal failed; restart remobi.',
+				})
+			})
+			expect(watcher.getMessages()).not.toContainEqual(
+				expect.objectContaining({ message: expect.stringContaining('secret-marker') }),
+			)
+			expect(watcher.getCloseCount()).toBe(1)
+
+			const lateClient = createClientRecorder()
+			await session.addClient(lateClient.client)
+			expect(lateClient.getMessages()).toEqual([
+				{ type: 'error', message: 'Terminal failed; restart remobi.' },
+			])
+			expect(lateClient.getCloseCount()).toBe(1)
+
+			session.handleClientMessage(watcher.client, {
+				type: 'input-action',
+				id: 'unavailable-action',
+				data: 'secret-marker',
+			})
+			expect(watcher.getMessages().at(-1)).toEqual({
+				type: 'input-rejected',
+				id: 'unavailable-action',
+				reason: 'session-unavailable',
+			})
+			const messageCount = watcher.getMessages().length
+			session.handleClientMessage(watcher.client, { type: 'input', data: 'ignored' })
+			expect(watcher.getMessages()).toHaveLength(messageCount)
+		} finally {
+			await session.dispose()
+		}
 	})
 
 	test('snapshot replays SGR mouse encoding for late clients', async () => {
