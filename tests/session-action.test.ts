@@ -93,7 +93,7 @@ describe('input-action session contract', () => {
 			expect(client.messages.at(-1)).toEqual({
 				type: 'input-rejected',
 				id: 'retry-me',
-				reason: 'pty-write-failed',
+				reason: 'session-unavailable',
 			})
 
 			pty.write = (data) => {

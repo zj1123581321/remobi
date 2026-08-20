@@ -271,7 +271,7 @@ export class SharedTerminalSession {
 		try {
 			this.pty.write(data)
 		} catch {
-			this.sendInputRejected(client, id, 'pty-write-failed')
+			this.sendInputRejected(client, id, 'session-unavailable')
 			return
 		}
 

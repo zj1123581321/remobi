@@ -88,7 +88,9 @@ describe('session protocol', () => {
 		expect(parseServerMessage(JSON.stringify({ type: 'output', data: 'x', seq: 0 }))).toBeNull()
 		expect(parseServerMessage(JSON.stringify({ type: 'pong' }))).toBeNull()
 		expect(
-			parseServerMessage(JSON.stringify({ type: 'input-rejected', id: 'a', reason: 'unknown' })),
+			parseServerMessage(
+				JSON.stringify({ type: 'input-rejected', id: 'a', reason: 'pty-write-failed' }),
+			),
 		).toBeNull()
 	})
 
