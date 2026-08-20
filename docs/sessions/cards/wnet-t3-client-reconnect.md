@@ -87,13 +87,22 @@
         进入 `synced` 后发送**一次**。
   13. **`isConnected()` / `onConnectionChange()` 的布尔语义收紧为 `synced`**（不再是 socket OPEN）。
       `src/types.ts` 里这两个成员的注释要同步改写清楚。
-  14. **snapshot 字段存在性守卫**（应对"新客户端连到还没升级的旧服务端"）：
-      snapshot 缺 `sessionId` 或 `outputWatermark` 时——
-      - 仍然应用 snapshot.data 并进入 `synced`（终端照样能读能用）；
-      - 置 `protocolMismatch = true` 并显示 `Server version mismatch — please refresh.`；
-      - **缓冲里的 output 全部丢弃**（没有 watermark 就无法去重，丢弃比重复安全）；
-      - T4 会据此禁用原子提交。
-      不做协议版本协商，就这一个字段存在性守卫。
+  14. **服务端消息解析失败 = 协议错误**（这条替代了原先设想的"snapshot 字段存在性守卫"，
+      理由见下方「现场事实」里 T2 的实际实现）：
+      `parseServerMessage()` 返回 `null` 时——现在是**静默丢弃**（`client-entry.ts:308-311`）——
+      改为：
+      - 记 `lastFailureReason = 'protocol-error'`；
+      - 主动关闭当前 socket，按**一次"同步前失败"**处理，走正常退避重连；
+      - 连续失败提示文案里带上版本线索：
+        `Connection failed — refresh, and check the server version.`
+
+      这一条同时覆盖两种情况，不需要各写一套：①真正的畸形帧；
+      ②**浏览器缓存了新 bundle 而服务端被回滚到旧版本**——旧服务端发的 snapshot 缺
+      `sessionId` / `outputWatermark`，T2 的 `parseServerMessage` 会直接判 `null`。
+      两种情况的用户出口是同一个：刷新页面。刷新后浏览器从服务端重新取 bundle，
+      版本自然对齐（客户端 bundle 是服务端发的，见现场事实）。
+      **不做协议版本协商，也不新增 `protocolMismatch` 状态位**——它没有真实触发路径，
+      属于反熵条款要撤掉的那种字段。
   15. **两套 overlay 的分工**（现在是重复的两份 DOM）：
       - `reconnect.ts` 的 overlay 负责**连接状态**四种文案 + 两个动作（立即重试 / 重新认证）；
       - `client-entry.ts` 的 `SessionStatusOverlay`（`:137-186, 239-253`）继续只管 **`exit`
@@ -197,8 +206,9 @@
 | snapshot 之后到达 seq=6 | 直接应用 |
 | output 乱序到达（5 先于 4） | 按 seq 升序应用 |
 | 缓存累计 > 1 MiB（UTF-8 字节） | close socket；显示 `Output too fast — resyncing.`；正常退避重连 |
-| snapshot 缺 `sessionId` | 应用 data、进 synced、`protocolMismatch=true`、显示版本不匹配、缓存 output 全丢 |
-| snapshot 缺 `outputWatermark` | 同上 |
+| 收到 snapshot 缺 `sessionId`（旧服务端） | `parseServerMessage` 判 null → `lastFailureReason='protocol-error'`；close socket；计一次同步前失败；退避重连 |
+| 收到 snapshot 缺 `outputWatermark` | 同上 |
+| 收到任意无法解析的服务端帧 | 同上（**不再静默丢弃**） |
 | 10 秒无 snapshot | close socket；计一次同步前失败；退避重连 |
 
 ### 轴 5：连接状态 × 用户输入
@@ -266,12 +276,11 @@
   export type ConnectionState = 'disconnected' | 'reconnecting' | 'syncing' | 'synced'
   export type ConnectionFailureReason =
     | 'socket-closed' | 'socket-error' | 'snapshot-timeout'
-    | 'heartbeat-timeout' | 'output-overflow'
+    | 'heartbeat-timeout' | 'output-overflow' | 'protocol-error'
   export interface ConnectionStatus {
     readonly state: ConnectionState
     readonly consecutivePreSyncFailures: number
     readonly lastFailureReason: ConnectionFailureReason | null
-    readonly protocolMismatch: boolean
   }
   export interface XTerminal {
     // …现有成员保留…
@@ -283,7 +292,7 @@
   }
   ```
   两个消费者：`reconnect.ts`（渲染四态 + 立即重试）与 T4 的 composer
-  （判断能否提交、消费 `protocolMismatch`）。**禁止**新增 `ConnectionManager` /
+  （判断能否提交）。**禁止**新增 `ConnectionManager` /
   `SocketController` / `ReconnectPolicy` 之类的类。
   模块常量（写死，不进配置）：
   ```ts
@@ -322,6 +331,29 @@
 ## 当前状态
 
 - **现场事实（主脑预取，2026-08-20，来自只读代码勘查）**：
+  - **T2 已合并的服务端契约**（本卡直接消费，主脑已逐条核对过 diff 与实跑）：
+    ```ts
+    // src/session-protocol.ts（T2 落地后的实际形状）
+    interface PingMessage       { type: 'ping';  id: string }              // id 必填
+    interface PongMessage       { type: 'pong';  id: string }
+    interface InputActionMessage{ type: 'input-action'; id: string; data: string }
+    interface SnapshotMessage   { type: 'snapshot'; data: string; sessionId: string; outputWatermark: number }
+    interface OutputMessage     { type: 'output'; data: string; seq: number }   // seq 从 1 开始
+    interface InputAcceptedMessage { type: 'input-accepted'; id: string }
+    interface InputRejectedMessage { type: 'input-rejected'; id: string; reason: InputRejectedReason }
+    type InputRejectedReason = 'id-conflict' | 'pty-write-failed' | 'session-unavailable'
+    const MAX_ACTION_ID_BYTES = 128
+    ```
+    真实 WebSocket 首帧实测长这样（T2 报告贴的原始字符串）：
+    `{"type":"snapshot","data":"","outputWatermark":0,"sessionId":"4b5d0e89-…"}`
+  - **`parseServerMessage` 对新字段是严格必填**：snapshot 缺 `sessionId` / `outputWatermark`
+    直接返回 `null`，output 缺 `seq`（或 `seq <= 0`）同样返回 `null`。
+    **这就是决策 14 改成"解析失败 = 协议错误"的原因**——协议层不给"宽松识别旧 snapshot"
+    留口子，客户端也就不该自己 `JSON.parse` 绕过它。
+  - **客户端 bundle 是服务端发的**：生产走 `scripts/serve-prod.sh` → `tsx cli.ts serve`，
+    `build.ts` 在 serve 时用 esbuild 现场 bundle overlay。所以"新客户端 + 旧服务端"
+    只可能来自浏览器缓存了旧 bundle 而服务端已更新（或反向的回滚），
+    **刷新页面就能让两边版本对齐**——这是决策 14 那条提示要引导用户做的唯一动作。
   - **客户端零重连**：`client-entry.ts:286` 只 `new WebSocket()` 一次；
     `close`/`error`（`:294-301`）只调 `notifyConnectionChange()` + `showSessionStatus()`。
     真正的"重连"是 `reconnect.ts:84-88` 的 `triggerReconnect() = location.reload()`。
