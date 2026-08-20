@@ -97,16 +97,13 @@ function statusMessage(status: ConnectionStatus): string {
 /** Render client-owned connection status and forward the two user actions. */
 export function setupReconnect(term: XTerminal, config: ReconnectConfig): () => void {
 	if (!config.enabled) return () => {}
-	if (!term.getConnectionStatus || !term.onConnectionStatusChange || !term.requestReconnect) {
-		return () => {}
-	}
 
 	const {
 		element: overlay,
 		message,
 		authButton,
 	} = createOverlay(
-		() => term.requestReconnect?.(),
+		() => term.requestReconnect(),
 		() => location.reload(),
 	)
 	document.body.appendChild(overlay)

@@ -266,12 +266,12 @@ export interface XTerminal {
 	isConnected(): boolean
 	/** Observe transitions into and out of the synced state. */
 	onConnectionChange(handler: (connected: boolean) => void): { dispose(): void }
-	/** Current connection state; the runtime bridge always provides this. */
-	getConnectionStatus?(): ConnectionStatus
-	/** Observe all connection state transitions; the runtime bridge always provides this. */
-	onConnectionStatusChange?(handler: (status: ConnectionStatus) => void): { dispose(): void }
+	/** Current connection state. */
+	getConnectionStatus(): ConnectionStatus
+	/** Observe all connection state transitions. */
+	onConnectionStatusChange(handler: (status: ConnectionStatus) => void): { dispose(): void }
 	/** Ask the runtime bridge to attempt a fresh connection immediately. */
-	requestReconnect?(): void
+	requestReconnect(): void
 }
 
 /** ttyd sets window.term — typed globally to avoid unsafe casts */
