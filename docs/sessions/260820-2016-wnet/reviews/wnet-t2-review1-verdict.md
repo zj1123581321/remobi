@@ -201,3 +201,31 @@ node --import tsx/esm --input-type=module -e \
 ```
 
 D 证明：两个 client 获得同一 sessionId；不同 id 各一次 PTY 子进程回显；同 id 不同 data 只写先到者且后者显式冲突；mirror 失败向两个现有连接发送不含终端正文的 error 并关闭，后续 attach 也走同一 fail-loud 错误路径。
+
+## Findings
+
+### P1-1：异步 node-pty 写失败仍会发送假 accepted
+
+- 级别：P1
+- 违反：不变式 1（`accepted` 只能在 `pty.write(data)` 成功后发出，且 `{id,data}` 必须先记账）；同时命中 personal/infrastructure 的静默出错红线。
+- 位置：`src/session.ts:271-283`（H0 `ad0109bc`）；调用边界为 `src/pty.ts:5-8`。
+- 具体触发路径：session 尚未收到 `onExit` 时，客户端发送一个新的 `input-action`。底层 PTY write fd 已关闭或进入 `EBADF` 等失败态，`this.pty.write(data)` 只把写入排队并同步返回 `undefined`，不会进入 271–275 的 catch。代码随即在 278 写入 `inputActions`，283 发送 `input-accepted`。本轮 C 的真实 `node-pty@1.1.0` 输出是同步 `threw:false`、随后异步 `Unhandled pty write error ... EBADF`；因此数据丢失但协议给出 accepted。重送同一 id 只会再次 accepted，不会修复原始丢失。
+- 建议修法方向：不要用同步 `try/catch` 代表 node-pty 写成功。需要让底层写入的完成/失败结果可观察，并把 Map 记账与 accepted 放到可证明成功的完成点；失败时发送 `pty-write-failed` 且不记账。若当前 node-pty API 无法提供该证明，应收紧 accepted 的语义或改造最小的写入边界，不要继续声称同步异常分支覆盖了真实失败。
+
+## 未计入 finding 的方向
+
+- 同 id 同 data 重送走 `inputActions.get` 后只再发 accepted，不再写 PTY；同 id 不同 data 的 D 实测是一次 accepted + 一次 `id-conflict`，只写先到者。这符合不变式 2。id 由 client 提供且 Map 是 session 级，确实意味着跨标签页/设备没有服务端生成的命名空间；冲突是显式可见的，不是静默重复，本轮不另升 P1。
+- legacy `{type:'input'}` 仍直接写 PTY，确实绕过 action Map，但这是不变式 6 的兼容路径，不能作为本次问题。
+- `snapshot()` 的稳定循环在 `await pending` 后先比较 Promise 引用，再 return，return 前没有新的 await；D 的两个初始 snapshot 都是 `outputWatermark:0` 且 `data:""`，sessionId 同值，未发现不变式 3 问题。
+- mirror failure 的粘性状态、无终端正文 error、关闭现有连接和拒绝后续 attach 均由 D 实测成立，未发现不变式 4 问题。
+- 缺 id 的新 action/ping 在 B 实测统一返回协议 error 并以 1008 关闭，没有伪造 rejected，符合不变式 5。外层 256 KiB `maxPayload` 对带 JSON envelope 的 action 在 data 恰为 256 KiB 时返回可见 1009；这是 fail-closed 的边界观察，不是本轮编号不变式或静默错误 finding。
+- `sessionId`、`outputSeq`、`pendingMirrorWrite`、`mirrorFailed`、`inputActions`、`MAX_ACTION_ID_BYTES` 等新增状态/字段都有跨方法或协议生产/消费方，分别直接服务 snapshot、mirror 或 action 不变式；没有发现单消费者转发层、无依据的通用化或额外持久化/TTL/fallback/重试。
+- `SessionClient.send` 的发送竞态 `try/catch` 是存量代码。它会同样影响新 ack，但 socket 已关闭时 ack 不可达，重送会命中 Map；本轮问题的独立根因是 accepted 在异步 PTY 写真正完成前被发出，不把该存量 catch 重复计入。
+
+## 最终 verdict
+
+`fail`
+
+P1 计数：`1`
+
+本轮审查工作本身完成（executor outcome 为 `succeeded`），但冻结范围不能通过恢复可信契约，主脑应先处理 P1-1，再进行下一轮增量审查。
