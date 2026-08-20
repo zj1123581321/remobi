@@ -165,11 +165,13 @@ test('freeze and resume events force a fresh epoch and snapshot', async ({ page 
 	await waitForState(page, 'disconnected')
 	await page.evaluate(() => document.dispatchEvent(new Event('resume')))
 
-	await expect
-		.poll(() => page.evaluate(() => window.term?.getConnectionStatus().state), {
-			timeout: 10_000,
-		})
-		.toMatch(/reconnecting|syncing/)
+	// Do not assert the transient reconnecting/syncing state here: against a local
+	// server the whole reconnect finishes in tens of milliseconds, so polling for
+	// the intermediate state is a race that Chromium happens to win and WebKit
+	// loses. The invariant (resume must go through a fresh epoch and a complete
+	// snapshot) is already pinned by the surrounding assertions: waitForState
+	// above proves we left synced, a new socket construct proves a fresh epoch,
+	// and applySnapshot is the only path back into synced.
 	await expect
 		.poll(() => getSocketConstructs(page), { timeout: 15_000 })
 		.toBeGreaterThan(socketCountBefore)
