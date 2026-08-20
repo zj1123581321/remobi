@@ -22,8 +22,8 @@ function createCtrlState(): CtrlState {
 	return { active: false, disposer: null, buttonEl: null }
 }
 
-/** Create the inline microphone icon used by the circular voice-input button. */
-function createMicIcon(): SVGSVGElement {
+/** Create the inline composer icon used by the circular voice-input entry. */
+function createComposerIcon(): SVGSVGElement {
 	return svg(
 		'svg',
 		{
@@ -32,12 +32,15 @@ function createMicIcon(): SVGSVGElement {
 			focusable: 'false',
 		},
 		svg('path', {
-			d: 'M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z',
+			d: 'M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v7a2.5 2.5 0 0 1-2.5 2.5h-5.4l-3.9 3.2V15H6.5A2.5 2.5 0 0 1 4 12.5v-7Z',
 		}),
 		svg('path', {
-			d: 'M19 11a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V21H8a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2h-3v-3.08A7 7 0 0 0 19 11Z',
+			d: 'M8 8.5h8M8 11.5h5',
+			fill: 'none',
+			stroke: 'currentColor',
+			'stroke-linecap': 'round',
+			'stroke-width': '1.7',
 		}),
-		svg('path', { d: 'M11 21h2v-4h-2v4Z' }),
 	)
 }
 
@@ -92,7 +95,7 @@ function wireButton(
 ): void {
 	if (def.action.type === 'voice-input') {
 		if (!micController) throw new Error('remobi: voice-input action requires a mic controller')
-		micController.attach(button)
+		micController.attachComposerToggle(button)
 		return
 	}
 
@@ -205,7 +208,7 @@ function buildRow(
 		button.dataset.remobiButtonId = def.id
 		if (def.action.type === 'voice-input') {
 			button.classList.add('wt-mic')
-			button.appendChild(createMicIcon())
+			button.appendChild(createComposerIcon())
 		} else {
 			button.textContent = def.label
 		}

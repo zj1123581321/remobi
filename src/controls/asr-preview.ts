@@ -1,12 +1,16 @@
-import { el } from '../util/dom'
+import { el, svg } from '../util/dom'
 import { onTap } from '../util/tap'
 
 export interface AsrPreview {
 	readonly element: HTMLDivElement
 	readonly input: HTMLInputElement
 	readonly message: HTMLDivElement
+	readonly isOpen: () => boolean
+	/** @deprecated Use isOpen; retained for existing preview consumers. */
 	readonly isVisible: () => boolean
 	readonly getText: () => string
+	open(): void
+	close(): void
 	readonly show: (text: string) => void
 	readonly setPartial: (text: string) => void
 	readonly showMessage: (message: string) => void
@@ -15,74 +19,96 @@ export interface AsrPreview {
 	readonly onCancel: (handler: () => void) => { dispose(): void }
 }
 
-/** Create the ordinary input-based speech preview; terminal keyboard suppression does not apply. */
+function createMicIcon(): SVGSVGElement {
+	return svg(
+		'svg',
+		{
+			viewBox: '0 0 24 24',
+			'aria-hidden': 'true',
+			focusable: 'false',
+		},
+		svg('path', {
+			d: 'M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z',
+		}),
+		svg('path', {
+			d: 'M19 11a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V21H8a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2h-3v-3.08A7 7 0 0 0 19 11Z',
+		}),
+		svg('path', { d: 'M11 21h2v-4h-2v4Z' }),
+	)
+}
+
+/** Create the two-layer voice composer; opening it never focuses or starts ASR. */
 export function createAsrPreview(): AsrPreview {
 	const element = el('div', {
-		id: 'wt-asr-preview',
+		id: 'wt-asr-composer',
 		role: 'dialog',
-		'aria-label': 'Speech preview',
+		'aria-modal': 'true',
+		'aria-label': 'Voice composer',
 	})
 	element.style.display = 'none'
-	element.style.position = 'fixed'
-	element.style.left = '8px'
-	element.style.right = '8px'
-	element.style.bottom = '72px'
-	element.style.zIndex = '10002'
-	element.style.padding = '10px'
-	element.style.borderRadius = '10px'
-	element.style.background = '#313244'
-	element.style.color = '#cdd6f4'
-	element.style.boxShadow = '0 4px 18px rgba(0,0,0,.35)'
 
-	const input = el('input', { type: 'text', placeholder: 'Speech preview' })
-	input.style.boxSizing = 'border-box'
-	input.style.width = '100%'
-	input.style.minHeight = '42px'
-	input.style.padding = '8px'
-	input.style.border = '1px solid #585b70'
-	input.style.borderRadius = '6px'
-	input.style.background = '#1e1e2e'
-	input.style.color = '#cdd6f4'
+	const panel = el('div', { id: 'wt-asr-composer-panel' })
+	const header = el('div', { class: 'wt-asr-composer-header' })
+	const title = el('h3', {}, 'Voice composer')
+	const closeButton = el('button', {
+		type: 'button',
+		'class': 'wt-asr-composer-close',
+		'aria-label': 'Close voice composer',
+	})
+	closeButton.textContent = '×'
+	header.append(title, closeButton)
 
-	const message = el('div', { 'aria-live': 'polite' })
-	message.style.minHeight = '1.3em'
-	message.style.marginTop = '5px'
-	message.style.fontSize = '12px'
-	message.style.color = '#f9e2af'
+	const input = el('input', {
+		type: 'text',
+		placeholder: 'Speak or type…',
+		'aria-label': 'Voice composer input',
+		autocomplete: 'off',
+	})
+	const message = el('div', { class: 'wt-asr-composer-message', 'aria-live': 'polite' })
+	const actions = el('div', { class: 'wt-asr-composer-actions' })
+	const micButton = el('button', {
+		type: 'button',
+		'class': 'wt-composer-mic',
+		'aria-label': 'Toggle microphone',
+		'aria-pressed': 'false',
+		'data-remobi-control': 'composer-mic',
+	})
+	micButton.appendChild(createMicIcon())
+	const sendButton = el('button', {
+		type: 'button',
+		'class': 'wt-composer-send',
+	})
+	sendButton.textContent = 'Send'
+	actions.append(micButton, sendButton)
 
-	const actions = el('div')
-	actions.style.display = 'flex'
-	actions.style.justifyContent = 'flex-end'
-	actions.style.gap = '8px'
-	actions.style.marginTop = '8px'
-	const cancel = el('button', { type: 'button' }, 'Cancel')
-	const confirm = el('button', { type: 'button' }, 'Send')
-	for (const button of [cancel, confirm]) {
-		button.style.minHeight = '40px'
-		button.style.padding = '6px 14px'
-		button.style.border = '0'
-		button.style.borderRadius = '6px'
-		button.style.background = '#45475a'
-		button.style.color = '#cdd6f4'
-	}
-	confirm.style.background = '#a6e3a1'
-	confirm.style.color = '#1e1e2e'
-	actions.append(cancel, confirm)
-	element.append(input, message, actions)
+	panel.append(header, input, message, actions)
+	element.appendChild(panel)
 
-	let visible = false
+	let open = false
 	let pendingPartial: string | undefined
 	let partialFrame: number | undefined
 
-	function setVisible(next: boolean): void {
-		visible = next
-		element.style.display = next ? 'block' : 'none'
+	function setOpen(next: boolean): void {
+		open = next
+		element.style.display = next ? 'flex' : 'none'
+		element.setAttribute('aria-hidden', next ? 'false' : 'true')
+	}
+
+	function openComposer(): void {
+		input.value = ''
+		message.textContent = ''
+		input.readOnly = false
+		setOpen(true)
+	}
+
+	function closeComposer(): void {
+		setOpen(false)
 	}
 
 	function show(text: string): void {
 		input.value = text
 		message.textContent = ''
-		setVisible(true)
+		setOpen(true)
 	}
 
 	function setPartial(text: string): void {
@@ -97,7 +123,7 @@ export function createAsrPreview(): AsrPreview {
 
 	function showMessage(text: string): void {
 		message.textContent = text
-		setVisible(true)
+		setOpen(true)
 	}
 
 	function clear(): void {
@@ -106,19 +132,40 @@ export function createAsrPreview(): AsrPreview {
 		pendingPartial = undefined
 		input.value = ''
 		message.textContent = ''
-		setVisible(false)
+		setOpen(false)
 	}
 
-	function register(button: HTMLButtonElement, handler: () => void): { dispose(): void } {
+	function register(
+		target: HTMLButtonElement,
+		handler: () => void,
+	): { dispose(): void } {
 		const callback = (event: Event): void => {
 			event.stopPropagation()
 			handler()
 		}
-		onTap(button, callback)
+		onTap(target, callback)
 		return {
 			dispose() {
-				button.removeEventListener('click', callback)
-				button.removeEventListener('touchend', callback)
+				target.removeEventListener('click', callback)
+				target.removeEventListener('touchend', callback)
+			},
+		}
+	}
+
+	function registerCancel(handler: () => void): { dispose(): void } {
+		const callback = (event: Event): void => {
+			if (event.currentTarget === element && event.target !== element) return
+			event.stopPropagation()
+			handler()
+		}
+		onTap(closeButton, callback)
+		onTap(element, callback)
+		return {
+			dispose() {
+				closeButton.removeEventListener('click', callback)
+				closeButton.removeEventListener('touchend', callback)
+				element.removeEventListener('click', callback)
+				element.removeEventListener('touchend', callback)
 			},
 		}
 	}
@@ -127,13 +174,16 @@ export function createAsrPreview(): AsrPreview {
 		element,
 		input,
 		message,
-		isVisible: () => visible,
+		isOpen: () => open,
+		isVisible: () => open,
 		getText: () => input.value,
+		open: openComposer,
+		close: closeComposer,
 		show,
 		setPartial,
 		showMessage,
 		clear,
-		onConfirm: (handler) => register(confirm, handler),
-		onCancel: (handler) => register(cancel, handler),
+		onConfirm: (handler) => register(sendButton, handler),
+		onCancel: registerCancel,
 	}
 }
