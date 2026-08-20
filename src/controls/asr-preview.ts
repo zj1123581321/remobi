@@ -29,8 +29,7 @@ const DRAFT_RESTORE_FAILURE = 'Draft could not be restored; stored copy left unt
 const DRAFT_STORAGE_FAILURE = 'Draft is not protected on this device.'
 
 function composerStorageKey(): string {
-	const basePath =
-		typeof __remobiBasePath === 'undefined' ? '/' : (__remobiBasePath ?? '/')
+	const basePath = typeof __remobiBasePath === 'undefined' ? '/' : (__remobiBasePath ?? '/')
 	return `${COMPOSER_STORAGE_KEY_PREFIX}${basePath}`
 }
 
@@ -56,15 +55,11 @@ function readComposerStore(): StorageReadResult {
 
 	let parsed: unknown
 	try {
-		parsed = JSON.parse(raw) as unknown
+		parsed = JSON.parse(raw)
 	} catch {
 		return { kind: 'invalid' }
 	}
-	if (
-		!isRecord(parsed) ||
-		parsed.version !== 1 ||
-		typeof parsed.draft !== 'string'
-	) {
+	if (!isRecord(parsed) || parsed.version !== 1 || typeof parsed.draft !== 'string') {
 		return { kind: 'invalid' }
 	}
 
