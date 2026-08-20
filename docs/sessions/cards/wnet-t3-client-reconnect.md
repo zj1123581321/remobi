@@ -111,8 +111,9 @@
 
 - **任务类型**：frontend-ui
 - **复杂度**：L
-- **Base commit**：**T2 卡合并进 `origin/main` 之后的那个 sha**（派发时由主脑回填；
-  执行器请以 `git rev-parse origin/main` 实际值为准并在报告写明）
+- **Base commit**：`513d3fb89af660c5db549ebb3456b490e0f8c4c6`（T2 合并后的 `origin/main`，
+  已含 T1 草稿持久化 + T2 服务端契约 + T2 fix1；若 `origin/main` 已前进，
+  用新的 `git rev-parse origin/main` 实际值作 base 并在报告写明）
 - **Branch**：由 delegate 分配（`card/<worktree 名>`），执行器不得另建分支
 - **Worktree**：由 delegate 分配
 - **当前唯一写入者**：本卡执行器（主脑会话只读）
