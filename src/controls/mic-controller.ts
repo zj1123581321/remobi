@@ -244,7 +244,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			engine.onFinal((text, sequence) => onFinal(text, sequence, sessionGeneration)),
 			engine.onError((code) => {
 				if (code === 'audio-interrupted') {
-					cancelSession(sessionGeneration)
+					showError(code, sessionGeneration)
 					return
 				}
 				showError(code, sessionGeneration)

@@ -482,19 +482,32 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		harness.controller.dispose()
 	})
 
-	test('connection timeout enters error and audio interruption cancels recording', async () => {
+	test('connection timeout enters error and audio interruption keeps the composer visible', async () => {
 		const timeout = createHarness()
 		dispatchTap(timeout.button)
 		vi.advanceTimersByTime(5_000)
 		expect(timeout.controller.state).toBe('error')
 		timeout.controller.dispose()
 
-		const cancelled = createHarness()
-		await startRecording(cancelled)
-		cancelled.engine.emitError('audio-interrupted')
-		expect(cancelled.controller.state).toBe('idle')
-		expect(cancelled.controller.preview.isOpen()).toBe(false)
-		cancelled.controller.dispose()
+		const withPartial = createHarness()
+		await startRecording(withPartial)
+		withPartial.engine.emitPartial('keep interrupted text')
+		vi.advanceTimersByTime(20)
+		withPartial.engine.emitError('audio-interrupted')
+		expect(withPartial.controller.state).toBe('preview')
+		expect(withPartial.controller.preview.isOpen()).toBe(true)
+		expect(withPartial.controller.preview.input.value).toBe('keep interrupted text')
+		expect(withPartial.controller.preview.input.readOnly).toBe(false)
+		expect(withPartial.controller.preview.message.textContent).toContain('interrupted')
+		withPartial.controller.dispose()
+
+		const withoutPartial = createHarness()
+		await startRecording(withoutPartial)
+		withoutPartial.engine.emitError('audio-interrupted')
+		expect(withoutPartial.controller.state).toBe('error')
+		expect(withoutPartial.controller.preview.isOpen()).toBe(true)
+		expect(withoutPartial.controller.preview.message.textContent).toContain('interrupted')
+		withoutPartial.controller.dispose()
 	})
 
 	test('stop rejection is observable while cancellation still reaches idle', async () => {
@@ -509,12 +522,13 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		harness.controller.dispose()
 	})
 
-	test('audio interruption and visibility hidden cancel any active recording', async () => {
+	test('audio interruption preserves an error composer before visibility cancellation', async () => {
 		const first = createHarness()
 		await startRecording(first)
 		first.engine.emitError('audio-interrupted')
-		expect(first.controller.state).toBe('idle')
-		expect(first.controller.preview.isOpen()).toBe(false)
+		expect(first.controller.state).toBe('error')
+		expect(first.controller.preview.isOpen()).toBe(true)
+		expect(first.controller.preview.message.textContent).toContain('interrupted')
 		first.controller.dispose()
 
 		const second = createHarness()
