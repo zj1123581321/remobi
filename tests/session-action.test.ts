@@ -74,15 +74,18 @@ describe('input-action session contract', () => {
 		}
 	})
 
-	test('does not record a synchronous PTY write failure', async () => {
+	test('synchronous PTY write failure fails the terminal before recording the action', async () => {
 		const session = new SharedTerminalSession(['bash', '--norc', '--noprofile', '-lc', 'cat'])
 		const client = recorder()
+		const otherClient = recorder()
+		const lateClient = recorder()
 		const pty = (session as unknown as { pty: { write(data: string): void } }).pty
 		const originalWrite = pty.write
-		let writeCount = 0
+		const inputActions = (session as unknown as { inputActions: Map<string, string> }).inputActions
 		try {
+			await session.addClient(client.client)
+			await session.addClient(otherClient.client)
 			pty.write = () => {
-				writeCount += 1
 				throw new Error('write failed')
 			}
 			session.handleClientMessage(client.client, {
@@ -90,23 +93,28 @@ describe('input-action session contract', () => {
 				id: 'retry-me',
 				data: 'retry-marker',
 			})
-			expect(client.messages.at(-1)).toEqual({
+			expect(client.messages).toContainEqual({
 				type: 'input-rejected',
 				id: 'retry-me',
 				reason: 'session-unavailable',
 			})
-
-			pty.write = (data) => {
-				writeCount += 1
-				originalWrite.call(pty, data)
-			}
-			session.handleClientMessage(client.client, {
-				type: 'input-action',
-				id: 'retry-me',
-				data: 'retry-marker',
+			expect(client.messages).toContainEqual({
+				type: 'error',
+				message: 'Terminal failed; restart remobi.',
 			})
-			expect(acceptedIds(client.messages)).toEqual(['retry-me'])
-			expect(writeCount).toBe(2)
+			expect(otherClient.messages).toContainEqual({
+				type: 'error',
+				message: 'Terminal failed; restart remobi.',
+			})
+			expect(client.closeCount).toBe(1)
+			expect(otherClient.closeCount).toBe(1)
+			expect(inputActions.size).toBe(0)
+
+			await session.addClient(lateClient.client)
+			expect(lateClient.messages).toEqual([
+				{ type: 'error', message: 'Terminal failed; restart remobi.' },
+			])
+			expect(lateClient.closeCount).toBe(1)
 		} finally {
 			pty.write = originalWrite
 			await session.dispose()

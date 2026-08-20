@@ -237,7 +237,7 @@ describe('SharedTerminalSession', () => {
 			await vi.waitFor(() => {
 				expect(watcher.getMessages()).toContainEqual({
 					type: 'error',
-					message: 'Terminal mirror failed; restart remobi.',
+					message: 'Terminal failed; restart remobi.',
 				})
 			})
 			expect(watcher.getMessages()).not.toContainEqual(
@@ -248,7 +248,7 @@ describe('SharedTerminalSession', () => {
 			const lateClient = createClientRecorder()
 			await session.addClient(lateClient.client)
 			expect(lateClient.getMessages()).toEqual([
-				{ type: 'error', message: 'Terminal mirror failed; restart remobi.' },
+				{ type: 'error', message: 'Terminal failed; restart remobi.' },
 			])
 			expect(lateClient.getCloseCount()).toBe(1)
 

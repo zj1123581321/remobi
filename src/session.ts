@@ -7,7 +7,7 @@ import type { ClientMessage, InputRejectedReason, ServerMessage } from './sessio
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
-const TERMINAL_MIRROR_ERROR = 'Terminal mirror failed; restart remobi.'
+const TERMINAL_ERROR = 'Terminal failed; restart remobi.'
 
 const HeadlessTerminal = XtermHeadless.Terminal
 type HeadlessTerminalInstance = InstanceType<typeof HeadlessTerminal>
@@ -83,7 +83,7 @@ export class SharedTerminalSession {
 	private exited: SessionExit | null = null
 	private pendingMirrorWrite: Promise<void> = Promise.resolve()
 	private outputSeq = 0
-	private mirrorFailed = false
+	private terminalFailed = false
 	private readonly inputActions = new Map<string, string>()
 
 	constructor(command: readonly string[]) {
@@ -119,13 +119,13 @@ export class SharedTerminalSession {
 			const seq = ++this.outputSeq
 			this.pendingMirrorWrite = this.pendingMirrorWrite
 				.then(() => {
-					if (this.mirrorFailed) return
+					if (this.terminalFailed) return
 					return new Promise<void>((resolve) => {
 						this.mirror.write(data, resolve)
 					})
 				})
 				.catch(() => {
-					this.failMirror()
+					this.failTerminal()
 				})
 
 			this.broadcast({ type: 'output', data, seq })
@@ -153,7 +153,7 @@ export class SharedTerminalSession {
 	}
 
 	async addClient(client: SessionClient): Promise<void> {
-		if (this.mirrorFailed) {
+		if (this.terminalFailed) {
 			this.rejectUnavailable(client)
 			return
 		}
@@ -161,7 +161,7 @@ export class SharedTerminalSession {
 		const exitedBeforeSnapshot = this.exited
 		if (exitedBeforeSnapshot) {
 			const snapshot = await this.snapshot()
-			if (this.mirrorFailed) {
+			if (this.terminalFailed) {
 				this.rejectUnavailable(client)
 				return
 			}
@@ -177,7 +177,7 @@ export class SharedTerminalSession {
 
 		this.clients.add(client)
 		const snapshot = await this.snapshot()
-		if (this.mirrorFailed) {
+		if (this.terminalFailed) {
 			if (this.clients.delete(client)) {
 				this.rejectUnavailable(client)
 			} else {
@@ -206,7 +206,7 @@ export class SharedTerminalSession {
 	handleClientMessage(client: SessionClient, message: ClientMessage): void {
 		switch (message.type) {
 			case 'input':
-				if (this.exited || this.mirrorFailed) return
+				if (this.exited || this.terminalFailed) return
 				this.pty.write(message.data)
 				return
 
@@ -251,7 +251,7 @@ export class SharedTerminalSession {
 	}
 
 	private handleInputAction(client: SessionClient, id: string, data: string): void {
-		if (this.exited || this.mirrorFailed) {
+		if (this.exited || this.terminalFailed) {
 			this.sendInputRejected(client, id, 'session-unavailable')
 			client.close()
 			this.clients.delete(client)
@@ -272,6 +272,7 @@ export class SharedTerminalSession {
 			this.pty.write(data)
 		} catch {
 			this.sendInputRejected(client, id, 'session-unavailable')
+			this.failTerminal()
 			return
 		}
 
@@ -288,14 +289,14 @@ export class SharedTerminalSession {
 	}
 
 	private rejectUnavailable(client: SessionClient): void {
-		client.send({ type: 'error', message: TERMINAL_MIRROR_ERROR })
+		client.send({ type: 'error', message: TERMINAL_ERROR })
 		client.close()
 	}
 
-	private failMirror(): void {
-		if (this.mirrorFailed) return
-		this.mirrorFailed = true
-		this.broadcast({ type: 'error', message: TERMINAL_MIRROR_ERROR })
+	private failTerminal(): void {
+		if (this.terminalFailed) return
+		this.terminalFailed = true
+		this.broadcast({ type: 'error', message: TERMINAL_ERROR })
 		for (const client of this.clients) {
 			client.close()
 		}
