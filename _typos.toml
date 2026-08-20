@@ -7,6 +7,13 @@
 # pointers (e.g. a2b80ba reads as a typo of "by"/"be") — same reason as docs/sessions.
 extend-exclude = ["CHANGELOG.md", "docs/sessions/**", "tests/fixtures/**", "retro/**"]
 
+[default]
+# Commit SHAs are evidence pointers all over this repo (task cards, review verdicts,
+# acceptance scorecards, milestone files). typos slices them into words and flags the
+# hex prefixes — a2b80ba reads as "by"/"be", ba25ddf likewise. Ignoring 7-40 char hex
+# runs fixes the root cause instead of excluding one more directory each time.
+extend-ignore-re = ["\\b[0-9a-f]{7,40}\\b"]
+
 [default.extend-words]
 # Real proper nouns: byted-ailab-speech-sdk (npm package), firt.dev (mobile web compat reference)
 byted = "byted"
