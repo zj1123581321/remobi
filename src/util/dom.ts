@@ -20,6 +20,22 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 	return element
 }
 
+/** Create a namespaced SVG element with optional attributes and children. */
+export function svg<K extends keyof SVGElementTagNameMap>(
+	tag: K,
+	attrs?: Record<string, string>,
+	...children: Array<string | SVGElement>
+): SVGElementTagNameMap[K] {
+	const element = document.createElementNS('http://www.w3.org/2000/svg', tag)
+	if (attrs) {
+		for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value)
+	}
+	for (const child of children) {
+		element.appendChild(typeof child === 'string' ? document.createTextNode(child) : child)
+	}
+	return element
+}
+
 /** Inject a <style> block into <head> */
 export function injectStyles(css: string): HTMLStyleElement {
 	const style = el('style')

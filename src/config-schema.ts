@@ -35,6 +35,7 @@ const fontSizeActionSchema = v.strictObject({
 const helpActionSchema = v.strictObject({ type: v.literal('help') })
 const keyboardToggleActionSchema = v.strictObject({ type: v.literal('keyboard-toggle') })
 const dpadToggleActionSchema = v.strictObject({ type: v.literal('dpad-toggle') })
+const voiceInputActionSchema = v.strictObject({ type: v.literal('voice-input') })
 
 const buttonActionSchema = v.variant('type', [
 	sendActionSchema,
@@ -47,6 +48,7 @@ const buttonActionSchema = v.variant('type', [
 	helpActionSchema,
 	keyboardToggleActionSchema,
 	dpadToggleActionSchema,
+	voiceInputActionSchema,
 ])
 
 // --- Control button ---
@@ -366,8 +368,89 @@ const asrResolvedSchema = v.pipe(
 
 // --- Top-level schemas ---
 
-/** Schema for config overrides (all fields optional, button arrays accept array | function) */
-export const remobiConfigOverridesSchema = v.strictObject({
+function voiceInputAction(value: unknown): Record<string, unknown> | undefined {
+	if (!isRecord(value) || !isRecord(value.action)) return undefined
+	return value.action.type === 'voice-input' ? value.action : undefined
+}
+
+function addVoiceInputButtonIssues<T>(
+	addIssue: v.RawCheckAddIssue<T>,
+	buttons: readonly unknown[],
+	basePath: readonly [v.IssuePathItem, ...v.IssuePathItem[]],
+): void {
+	for (let buttonIndex = 0; buttonIndex < buttons.length; buttonIndex++) {
+		const button = buttons[buttonIndex]
+		const action = voiceInputAction(button)
+		if (!action || !isRecord(button)) continue
+		const path: [v.IssuePathItem, ...v.IssuePathItem[]] = [
+			...basePath,
+			{
+				type: 'array',
+				origin: 'value',
+				input: buttons,
+				key: buttonIndex,
+				value: button,
+			},
+			{
+				type: 'object',
+				origin: 'value',
+				input: button,
+				key: 'action',
+				value: action,
+			},
+			{
+				type: 'object',
+				origin: 'value',
+				input: action,
+				key: 'type',
+				value: action.type,
+			},
+		]
+		addIssue({
+			message: 'voice-input action is only allowed in toolbar buttons',
+			path,
+		})
+	}
+}
+
+function voiceInputPlacementCheck<T extends Record<string, unknown>>() {
+	return v.rawCheck<T>(({ dataset, addIssue }) => {
+		if (!dataset.typed || !isRecord(dataset.value)) return
+		const value = dataset.value
+		const drawer = isRecord(value.drawer) ? value.drawer : undefined
+		if (drawer && Array.isArray(drawer.buttons)) {
+			addVoiceInputButtonIssues(addIssue, drawer.buttons, [
+				{ type: 'object', origin: 'value', input: value, key: 'drawer', value: drawer },
+				{ type: 'object', origin: 'value', input: drawer, key: 'buttons', value: drawer.buttons },
+			])
+		}
+		const floatingButtons = value.floatingButtons
+		if (!Array.isArray(floatingButtons)) return
+		for (let index = 0; index < floatingButtons.length; index++) {
+			const group = floatingButtons[index]
+			if (!isRecord(group) || !Array.isArray(group.buttons)) continue
+			addVoiceInputButtonIssues(addIssue, group.buttons, [
+				{
+					type: 'object',
+					origin: 'value',
+					input: value,
+					key: 'floatingButtons',
+					value: floatingButtons,
+				},
+				{
+					type: 'array',
+					origin: 'value',
+					input: floatingButtons,
+					key: index,
+					value: group,
+				},
+				{ type: 'object', origin: 'value', input: group, key: 'buttons', value: group.buttons },
+			])
+		}
+	})
+}
+
+const remobiConfigOverridesBaseSchema = v.strictObject({
 	name: v.optional(v.string()),
 	theme: v.optional(termThemeOverridesSchema),
 	font: v.optional(fontOverridesSchema),
@@ -391,8 +474,14 @@ export const remobiConfigOverridesSchema = v.strictObject({
 	asr: v.optional(asrOverridesSchema),
 })
 
+/** Schema for config overrides (all fields optional, button arrays accept array | function) */
+export const remobiConfigOverridesSchema = v.pipe(
+	remobiConfigOverridesBaseSchema,
+	voiceInputPlacementCheck<v.InferOutput<typeof remobiConfigOverridesBaseSchema>>(),
+)
+
 /** Schema for fully resolved config (all required fields, plain button arrays) */
-export const remobiConfigResolvedSchema = v.strictObject({
+const remobiConfigResolvedBaseSchema = v.strictObject({
 	name: v.string(),
 	theme: termThemeResolvedSchema,
 	font: fontResolvedSchema,
@@ -411,3 +500,8 @@ export const remobiConfigResolvedSchema = v.strictObject({
 	reconnect: reconnectResolvedSchema,
 	asr: asrResolvedSchema,
 })
+
+export const remobiConfigResolvedSchema = v.pipe(
+	remobiConfigResolvedBaseSchema,
+	voiceInputPlacementCheck<v.InferOutput<typeof remobiConfigResolvedBaseSchema>>(),
+)

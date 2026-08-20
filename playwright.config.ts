@@ -16,7 +16,12 @@ export default defineConfig({
 	projects: [
 		{
 			name: 'chromium-android',
-			use: { ...devices['Pixel 5'] },
+			use: {
+				...devices['Pixel 5'],
+				launchOptions: {
+					args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+				},
+			},
 		},
 		{
 			name: 'webkit-iphone',

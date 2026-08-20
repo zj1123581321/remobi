@@ -89,6 +89,91 @@ describe('assertValidConfigOverrides', () => {
 		).not.toThrow()
 	})
 
+	test('accepts voice-input in either toolbar row', () => {
+		expect(() =>
+			assertValidConfigOverrides({
+				toolbar: {
+					row1: [
+						{
+							id: 'voice',
+							label: 'Mic',
+							description: 'Hold to speak',
+							action: { type: 'voice-input' },
+						},
+					],
+					row2: [
+						{
+							id: 'voice-2',
+							label: 'Mic 2',
+							description: 'Hold to speak',
+							action: { type: 'voice-input' },
+						},
+					],
+				},
+			}),
+		).not.toThrow()
+	})
+
+	test('rejects voice-input outside the toolbar', () => {
+		const voiceButton = {
+			id: 'voice',
+			label: 'Mic',
+			description: 'Hold to speak',
+			action: { type: 'voice-input' },
+		}
+		const drawerMessage = getValidationMessage(
+			{ drawer: { buttons: [voiceButton] } },
+			assertValidConfigOverrides,
+		)
+		expect(drawerMessage).toContain('only allowed in toolbar buttons')
+		const floatingMessage = getValidationMessage(
+			{
+				floatingButtons: [
+					{
+						position: 'top-left',
+						buttons: [voiceButton],
+					},
+				],
+			},
+			assertValidConfigOverrides,
+		)
+		expect(floatingMessage).toContain('only allowed in toolbar buttons')
+	})
+
+	test('locates every invalid voice-input button by array index and action type', () => {
+		const voice = (id: string) => ({
+			id,
+			label: 'Mic',
+			description: 'Hold to speak',
+			action: { type: 'voice-input' },
+		})
+		const message = getValidationMessage(
+			{
+				drawer: {
+					buttons: [
+						voice('drawer-0'),
+						{ ...voice('regular'), action: { type: 'send', data: 'x' } },
+						voice('drawer-2'),
+					],
+				},
+				floatingButtons: [
+					{ position: 'top-left', buttons: [] },
+					{
+						position: 'top-right',
+						buttons: [
+							{ ...voice('floating-0'), action: { type: 'send', data: 'x' } },
+							voice('floating-1'),
+						],
+					},
+				],
+			},
+			assertValidConfigOverrides,
+		)
+		expect(message).toContain('config.drawer.buttons[0].action.type')
+		expect(message).toContain('config.drawer.buttons[2].action.type')
+		expect(message).toContain('config.floatingButtons[1].buttons[1].action.type')
+	})
+
 	test('rejects unknown root keys', () => {
 		const message = getValidationMessage({ mystery: true }, assertValidConfigOverrides)
 		expect(message).toContain('config.mystery')

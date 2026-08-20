@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { spawnProcess } from '../../src/util/node-compat'
 
 const repoRoot = join(import.meta.dirname, '../..')
+const tsxBin = join(repoRoot, 'node_modules/.bin/tsx')
 
 export async function reservePort(): Promise<number> {
 	const server = createNetServer()
@@ -65,19 +66,18 @@ interface IsolatedServe {
 }
 
 export async function startIsolatedServe(
-	options: { basePath?: string; command?: string[] } = {},
+	options: { basePath?: string; command?: string[]; configPath?: string } = {},
 ): Promise<IsolatedServe> {
-	const { basePath, command = ['bash', '--norc', '--noprofile'] } = options
+	const { basePath, command = ['bash', '--norc', '--noprofile'], configPath } = options
 	const port = await reservePort()
 	const home = mkdtempSync(join(tmpdir(), 'remobi-playwright-home-'))
 
 	const proc = spawnProcess(
 		[
-			'pnpm',
-			'exec',
-			'tsx',
+			tsxBin,
 			'cli.ts',
 			'serve',
+			...(configPath ? ['--config', configPath] : []),
 			'--port',
 			String(port),
 			...(basePath ? ['--base-path', basePath] : []),
@@ -98,7 +98,16 @@ export async function startIsolatedServe(
 	})
 
 	const url = `http://127.0.0.1:${port}${basePath ?? ''}`
-	await waitForHttp(url)
+	try {
+		await waitForHttp(url, 30_000)
+	} catch (error) {
+		if (!exited) {
+			proc.kill('SIGINT')
+			await proc.exited
+		}
+		rmSync(home, { recursive: true, force: true })
+		throw error
+	}
 
 	return {
 		port,

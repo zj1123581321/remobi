@@ -10,6 +10,7 @@ export type ButtonAction =
 	| { readonly type: 'help' }
 	| { readonly type: 'keyboard-toggle' }
 	| { readonly type: 'dpad-toggle' }
+	| { readonly type: 'voice-input' }
 
 /** A generic control button definition used by toolbar and drawer */
 export interface ControlButton {
@@ -245,6 +246,10 @@ export interface XTerminal {
 	/** Track terminal textarea focus/blur events */
 	onFocusChange?(handler: (focused: boolean) => void): { dispose(): void }
 	onData(handler: (data: string) => void): { dispose(): void }
+	/** Whether the terminal input WebSocket is currently OPEN. */
+	isConnected(): boolean
+	/** Observe terminal WebSocket open/close transitions. */
+	onConnectionChange(handler: (connected: boolean) => void): { dispose(): void }
 }
 
 /** ttyd sets window.term — typed globally to avoid unsafe casts */

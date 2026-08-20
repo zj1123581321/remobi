@@ -42,7 +42,12 @@ function flushQueuedMessages(socket: WebSocket, queued: ClientMessage[]): void {
 	}
 }
 
-function createTermBridge(term: Terminal, send: (message: ClientMessage) => void): XTerminal {
+function createTermBridge(
+	term: Terminal,
+	send: (message: ClientMessage) => void,
+	isConnected: () => boolean,
+	onConnectionChange: (handler: (connected: boolean) => void) => { dispose(): void },
+): XTerminal {
 	const options: XTerminal['options'] = {
 		get fontSize() {
 			return typeof term.options.fontSize === 'number' ? term.options.fontSize : 14
@@ -124,6 +129,8 @@ function createTermBridge(term: Terminal, send: (message: ClientMessage) => void
 		onData(handler: (data: string) => void) {
 			return term.onData(handler)
 		},
+		isConnected,
+		onConnectionChange,
 	}
 }
 
@@ -199,6 +206,8 @@ function main(config: RemobiConfig, version: string | undefined): void {
 
 	const queuedMessages: ClientMessage[] = []
 	let socket: WebSocket | null = null
+	const connectionListeners = new Set<(connected: boolean) => void>()
+	let lastConnectionState: boolean | undefined
 	let snapshotLoaded = false
 	const pendingOutput: string[] = []
 	let exitReceived = false
@@ -243,7 +252,30 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		statusOverlay.button.focus()
 	}
 
-	const termBridge = createTermBridge(term, send)
+	function isConnected(): boolean {
+		return socket?.readyState === WebSocket.OPEN
+	}
+
+	function onConnectionChange(handler: (connected: boolean) => void): { dispose(): void } {
+		connectionListeners.add(handler)
+		const connected = isConnected()
+		lastConnectionState = connected
+		handler(connected)
+		return {
+			dispose() {
+				connectionListeners.delete(handler)
+			},
+		}
+	}
+
+	function notifyConnectionChange(): void {
+		const connected = isConnected()
+		if (connected === lastConnectionState) return
+		lastConnectionState = connected
+		for (const listener of connectionListeners) listener(connected)
+	}
+
+	const termBridge = createTermBridge(term, send, isConnected, onConnectionChange)
 	// xterm handles real keyboard/touch input locally; forward it to the shared PTY.
 	term.onData((data) => {
 		send({ type: 'input', data })
@@ -255,13 +287,16 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	window.__remobiSockets = [socket]
 
 	socket.addEventListener('open', () => {
+		notifyConnectionChange()
 		syncSize()
 		flushQueuedMessages(socket, queuedMessages)
 	})
 	socket.addEventListener('close', () => {
+		notifyConnectionChange()
 		showSessionStatus(exitReceived ? 'Session ended' : 'Connection lost')
 	})
 	socket.addEventListener('error', () => {
+		notifyConnectionChange()
 		showSessionStatus('Connection lost')
 	})
 

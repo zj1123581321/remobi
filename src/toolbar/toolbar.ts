@@ -1,9 +1,10 @@
 import { createDefaultActionRegistry } from '../actions/registry'
 import type { ActionRegistry } from '../actions/registry'
 import { decorateKeyboardToggleButton } from '../controls/keyboard-controller'
+import type { MicController } from '../controls/mic-controller'
 import type { HookRegistry } from '../hooks/registry'
 import type { ControlButton, RemobiConfig, XTerminal } from '../types'
-import { el } from '../util/dom'
+import { el, svg } from '../util/dom'
 import { haptic } from '../util/haptic'
 import { conditionalFocus, isKeyboardOpen } from '../util/keyboard'
 import { onTap } from '../util/tap'
@@ -19,6 +20,25 @@ interface CtrlState {
 /** Create the ctrl modifier state manager */
 function createCtrlState(): CtrlState {
 	return { active: false, disposer: null, buttonEl: null }
+}
+
+/** Create the inline microphone icon used by the circular voice-input button. */
+function createMicIcon(): SVGSVGElement {
+	return svg(
+		'svg',
+		{
+			viewBox: '0 0 24 24',
+			'aria-hidden': 'true',
+			focusable: 'false',
+		},
+		svg('path', {
+			d: 'M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z',
+		}),
+		svg('path', {
+			d: 'M19 11a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V21H8a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2h-3v-3.08A7 7 0 0 0 19 11Z',
+		}),
+		svg('path', { d: 'M11 21h2v-4h-2v4Z' }),
+	)
 }
 
 /** Activate ctrl sticky modifier */
@@ -64,11 +84,18 @@ function wireButton(
 	registry: ActionRegistry,
 	hooks: HookRegistry,
 	openDrawer: () => void,
+	micController: MicController | undefined,
 	openComboPicker?: (options: {
 		readonly sendText: (data: string) => Promise<void>
 		readonly focusIfNeeded: () => void
 	}) => void,
 ): void {
+	if (def.action.type === 'voice-input') {
+		if (!micController) throw new Error('remobi: voice-input action requires a mic controller')
+		micController.attach(button)
+		return
+	}
+
 	onTap(button, () => {
 		const kbWasOpen = isKeyboardOpen()
 		haptic()
@@ -163,6 +190,7 @@ function buildRow(
 	registry: ActionRegistry,
 	hooks: HookRegistry,
 	openDrawer: () => void,
+	micController: MicController | undefined,
 	openComboPicker?: (options: {
 		readonly sendText: (data: string) => Promise<void>
 		readonly focusIfNeeded: () => void
@@ -171,15 +199,34 @@ function buildRow(
 	const row = el('div', { class: 'wt-row' })
 
 	for (const def of buttons) {
+		if (def.action.type === 'voice-input' && !micController) continue
 		const button = el('button')
-		button.textContent = def.label
+		button.dataset.remobiAction = def.action.type
+		button.dataset.remobiButtonId = def.id
+		if (def.action.type === 'voice-input') {
+			button.classList.add('wt-mic')
+			button.appendChild(createMicIcon())
+		} else {
+			button.textContent = def.label
+		}
 		if (def.action.type === 'ctrl-modifier') {
 			ctrlState.buttonEl = button
 		}
 		if (def.action.type === 'keyboard-toggle') {
 			decorateKeyboardToggleButton(button)
 		}
-		wireButton(button, def, term, ctrlState, config, registry, hooks, openDrawer, openComboPicker)
+		wireButton(
+			button,
+			def,
+			term,
+			ctrlState,
+			config,
+			registry,
+			hooks,
+			openDrawer,
+			micController,
+			openComboPicker,
+		)
 		row.appendChild(button)
 	}
 
@@ -202,6 +249,7 @@ export function createToolbar(
 		readonly sendText: (data: string) => Promise<void>
 		readonly focusIfNeeded: () => void
 	}) => void,
+	micController?: MicController,
 ): ToolbarResult {
 	const toolbar = el('div', { id: 'wt-toolbar' })
 	const ctrlState = createCtrlState()
@@ -209,7 +257,17 @@ export function createToolbar(
 	for (const buttons of [config.toolbar.row1, config.toolbar.row2]) {
 		if (buttons.length === 0) continue
 		toolbar.appendChild(
-			buildRow(buttons, term, ctrlState, config, actions, hooks, openDrawer, openComboPicker),
+			buildRow(
+				buttons,
+				term,
+				ctrlState,
+				config,
+				actions,
+				hooks,
+				openDrawer,
+				micController,
+				openComboPicker,
+			),
 		)
 	}
 

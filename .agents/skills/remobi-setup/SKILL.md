@@ -301,6 +301,7 @@ Tell the user:
    - **Landscape + keyboard**: When on-screen keyboard opens in landscape, row 2 auto-hides (except the ⌨ button) and buttons shrink — only if a second row exists; the default single-row toolbar stays fully visible. No config needed
    - **Floating d-pad**: `✥` button on toolbar row1 pops up a six-key arrow cluster (← ↑ ↓ → ⌫ ⏎) above the toolbar — moshi style. Taps send keys without stealing terminal focus or popping the soft keyboard; in `keyboardMode: 'manual'` the input lock stays untouched. No config needed
    - **Keyboard sovereignty**: `mobile.keyboardMode` — `'auto'` (default): tapping the terminal opens the soft keyboard, ⌨ is momentary focus/blur. `'manual'`: the keyboard never pops up on terminal taps — only the ⌨ button (toolbar row1, next to ☰ More) grants/revokes input permission. If a manual-mode config has no ⌨ button anywhere, remobi injects one into row1 so the keyboard stays reachable
+   - **Voice input**: when configured, hold the Mic toolbar button for push-to-talk, then edit or send the speech preview. It requires HTTPS (except localhost/127.0.0.1); iOS backgrounding, locking, calls, Siri, or another app interrupting audio cancels the recording.
 6. PWA: enabled by default. On mobile Safari/Chrome, tap Share then "Add to Home Screen" for standalone app experience. Config options:
    - `pwa.enabled` (default `true`) — set `false` to disable manifest + icons
    - `pwa.themeColor` (default `'#1e1e2e'`) — status bar colour on mobile
@@ -333,6 +334,7 @@ name  theme  font  toolbar  drawer  gestures  mobile  floatingButtons  scrollBut
 | `help`           | (none)              | Opens the help overlay |
 | `keyboard-toggle` | (none)             | Toggles the soft keyboard. Default on toolbar row1 (next to ☰ More). In `mobile.keyboardMode: 'manual'` it is the only way to summon the keyboard; remobi injects one into row1 if the config has none |
 | `dpad-toggle`    | (none)              | Toggles the floating d-pad (← ↑ ↓ → ⌫ ⏎) above the toolbar. Default on toolbar row1 (between ⏎ and ⌨). D-pad taps never steal terminal focus or pop the soft keyboard |
+| `voice-input`    | (none)              | Hold-to-speak microphone control. Toolbar rows only; drawer/floating placement is rejected by validation. Requires `asr.enabled: true` and a secure context |
 
 Non-`send`/`prefix` actions must NOT have `data` or `keyLabel` — the validator rejects them.
 
@@ -367,6 +369,10 @@ toolbar: { row1: (defaults) => defaults.filter(b => b.id !== 'tab') }
 // - Replace: (d) => d.map(b => b.id === 'tmux-prefix' ? newBtn : b)
 // - Insert:  (d) => { const i = d.findIndex(b => b.id === 'tab'); return [...d.slice(0,i), newBtn, ...d.slice(i)] }
 ```
+
+`voice-input` buttons may be placed in either toolbar row. They are intentionally not supported in
+the drawer or `floatingButtons`; config validation rejects those placements because PTT needs the
+full pointerdown/pointerup/pointercancel lifecycle.
 
 ### Floating buttons
 
@@ -493,7 +499,12 @@ the shared config file).
 | `asr.provider` | `'doubao'` | The only provider in the current release |
 | `asr.doubao.apiKey` | `''` | Single query-auth API key; keep it in the `.local` config |
 | `asr.doubao.resourceId` | `'volc.seedasr.sauc.duration'` | Volcengine SAUC resource id |
-| `asr.autoEnter` | `false` | Reserved for the voice-input flow; PTT UI is separate from the engine |
+| `asr.autoEnter` | `false` | After confirmed text, sends a separate Enter key; it is not part of text sanitization |
+
+Voice input uses browser-direct provider credentials under a single-user self-hosting trust model.
+The API key is embedded in the browser config when enabled, so keep it in the `.local` config and
+do not expose an enabled deployment to an untrusted network. Microphone capture is hidden when the
+browser is not secure or lacks `getUserMedia`.
 
 ### Hooks (advanced)
 

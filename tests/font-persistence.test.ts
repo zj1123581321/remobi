@@ -46,6 +46,12 @@ async function bootOverlay(config: RemobiConfig = defineConfig()): Promise<XTerm
 		onData(_handler: (data: string) => void) {
 			return { dispose() {} }
 		},
+		isConnected() {
+			return true
+		},
+		onConnectionChange(_handler: (connected: boolean) => void) {
+			return { dispose() {} }
+		},
 	}
 	window.term = term
 
