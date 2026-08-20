@@ -248,8 +248,12 @@ function main(config: RemobiConfig, version: string | undefined): void {
 
 	function send(message: ClientMessage): void {
 		if (connectionStatus.state === 'synced' && socket?.readyState === WebSocket.OPEN) {
-			socket.send(serialiseClientMessage(message))
-			return
+			if (message.type === 'input' && socket.bufferedAmount > 0) {
+				failConnection(currentEpoch, 'socket-error')
+			} else {
+				socket.send(serialiseClientMessage(message))
+				return
+			}
 		}
 		if (message.type === 'resize') {
 			pendingResize = { cols: message.cols, rows: message.rows }
@@ -654,10 +658,32 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		queueImmediateConnect()
 	}
 
+	function onOffline(): void {
+		suspendConnection()
+	}
+
+	function dispose(): void {
+		suspendConnection()
+		document.removeEventListener('visibilitychange', onVisibilityChange)
+		document.removeEventListener('freeze', onPageHide)
+		document.removeEventListener('resume', onPageShow)
+		window.removeEventListener('pagehide', onPageHide)
+		window.removeEventListener('pageshow', onPageShow)
+		window.removeEventListener('online', onOnline)
+		window.removeEventListener('offline', onOffline)
+		window.removeEventListener('resize', syncSize)
+		window.removeEventListener('beforeunload', dispose)
+		window.visualViewport?.removeEventListener('resize', syncSize)
+	}
+
 	document.addEventListener('visibilitychange', onVisibilityChange)
+	document.addEventListener('freeze', onPageHide)
+	document.addEventListener('resume', onPageShow)
 	window.addEventListener('pagehide', onPageHide)
 	window.addEventListener('pageshow', onPageShow)
 	window.addEventListener('online', onOnline)
+	window.addEventListener('offline', onOffline)
+	window.addEventListener('beforeunload', dispose)
 
 	connect()
 
