@@ -75,7 +75,8 @@ describe('toolbar integration', () => {
 		const micController: MicController = {
 			preview: createAsrPreview(),
 			state: 'idle',
-			attach() {},
+			attachComposerToggle() {},
+			attachMicButton() {},
 			dispose() {},
 		}
 		const { element: toolbar } = createToolbar(

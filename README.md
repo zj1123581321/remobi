@@ -70,12 +70,12 @@ For local development, see the [Development](#development) section below.
 
 Open `http://localhost:7681` on the same machine to verify it works. For phone access, put a trusted proxy/tunnel in front of it, for example [Tailscale Serve](.agents/skills/remobi-setup/references/tailscale-serve.md). If your proxy mounts remobi under a URL prefix, start remobi with `--base-path /that-prefix` so the HTML, PWA links, and WebSocket all use the same external path.
 
-### Voice input prerequisites
+### Voice composer prerequisites
 
-Push-to-talk microphone capture requires a secure browser context: use HTTPS on a phone (for
+Voice composer microphone capture requires a secure browser context: use HTTPS on a phone (for
 example Tailscale Serve or an HTTPS reverse proxy). `localhost` and `127.0.0.1` are secure-context
 exceptions for local development; a plain HTTP LAN address is not. If the browser cannot use
-`getUserMedia`, remobi hides the voice button instead of showing an unusable control.
+`getUserMedia`, remobi hides the voice composer entry instead of showing an unusable control.
 
 ## Using with zellij
 
@@ -300,7 +300,7 @@ export default {
 
 All fields are optional — the CLI fills in defaults internally when it loads the config.
 
-### Push-to-talk voice input
+### Voice composer input
 
 Voice input is disabled by default. It is a browser-direct Doubao SAUC connection: microphone audio
 and the API key stay in the browser-to-provider path, so enable it only for a trusted single-user
@@ -317,7 +317,7 @@ export default {
   toolbar: {
     row1: (defaults) => [
       ...defaults,
-      { id: 'voice-input', label: 'Mic', description: 'Hold to speak', action: { type: 'voice-input' } },
+      { id: 'voice-input', label: 'Voice', description: 'Open voice composer', action: { type: 'voice-input' } },
     ],
   },
 }
@@ -336,15 +336,20 @@ export default {
 ```
 
 The `voice-input` action is toolbar-only; putting it in `drawer.buttons` or `floatingButtons` is
-rejected by config validation. Hold the Mic button for at least 300 ms, release to wait for the
-final result, then edit, cancel, or send the preview. Before sending, hooks run first and the last
-sanitization pass removes C0 controls (including tab, newline, and carriage return), DEL, and C1
-controls; `autoEnter` appends its carriage return separately. If the terminal WebSocket is down,
-the preview stays visible and is never queued for later delivery.
+rejected by config validation. The toolbar entry opens a full-screen, bottom-sheet voice composer
+without starting a recording or focusing the input. Tap the composer's circular Mic to start or
+stop the session; while recording, partial text is read-only, then the final preview can be edited
+and sent. Typed text can also be sent directly. The Send button closes the composer; × and the
+backdrop discard the current session. When `asr.enabled` is true and no `voice-input` is configured,
+remobi injects the entry after `keyboard-toggle` and before `drawer-toggle` (or appends it to row1).
+Before sending, hooks run first and the last sanitization pass removes C0 controls (including tab,
+newline, and carriage return), DEL, and C1 controls; `autoEnter` appends its carriage return
+separately. If the terminal WebSocket is down, the composer stays visible and is never queued for
+later delivery.
 
 On iOS, Safari/PWA backgrounding, screen locking, calls, Siri, or another app taking the audio
-session can interrupt capture. remobi cancels that recording and keeps the button safe to use
-again; start a new PTT session after returning to the page.
+session can interrupt capture. remobi cancels that recording and keeps the composer safe to use
+again; start a new session after returning to the page.
 
 Shipped tmux drawer defaults stick to stock tmux bindings (`c`, `%`, `"`, `s`, `w`, `[`, `?`, `x`, `z`) rather than personal popup workflows.
 

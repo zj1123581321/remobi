@@ -95,6 +95,7 @@ class FakeEngine implements AsrEngine {
 
 interface TestHarness {
 	readonly button: HTMLButtonElement
+	readonly composerButton: HTMLButtonElement
 	readonly textarea: HTMLTextAreaElement | undefined
 	readonly engine: FakeEngine
 	readonly term: XTerminal & { readonly sent: string[] }
@@ -135,10 +136,13 @@ function createHarness(
 	})
 	if (!controller) throw new Error('expected injected fake engine to create controller')
 	const button = document.createElement('button')
-	controller.attach(button)
-	document.body.append(button)
+	controller.attachMicButton(button)
+	const composerButton = document.createElement('button')
+	controller.attachComposerToggle(composerButton)
+	document.body.append(button, composerButton)
 	return {
 		button,
+		composerButton,
 		textarea,
 		engine,
 		term,
@@ -158,11 +162,10 @@ function dispatchTouchTap(button: HTMLButtonElement): void {
 	button.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }))
 }
 
-function dispatchPreviewTap(harness: TestHarness, label: 'Cancel' | 'Send'): void {
-	const button = Array.from(harness.controller.preview.element.querySelectorAll('button')).find(
-		(candidate) => candidate.textContent === label,
-	)
-	if (!(button instanceof HTMLButtonElement)) throw new Error(`missing preview ${label} button`)
+function dispatchPreviewTap(harness: TestHarness, target: 'close' | 'send'): void {
+	const selector = target === 'close' ? '.wt-asr-composer-close' : '.wt-composer-send'
+	const button = harness.controller.preview.element.querySelector(selector)
+	if (!(button instanceof HTMLButtonElement)) throw new Error(`missing composer ${target} button`)
 	dispatchTap(button)
 }
 
@@ -174,7 +177,7 @@ async function startRecording(harness: TestHarness): Promise<void> {
 	expect(harness.controller.state).toBe('recording')
 	expect(harness.button.getAttribute('aria-pressed')).toBe('true')
 	expect(harness.button.classList.contains('wt-mic-recording')).toBe(true)
-	expect(harness.controller.preview.isVisible()).toBe(true)
+	expect(harness.controller.preview.isOpen()).toBe(true)
 	expect(harness.controller.preview.message.textContent).toContain('Listening')
 }
 
@@ -215,19 +218,91 @@ describe('sanitizeVoiceText', () => {
 })
 
 describe('mic-controller tap-to-toggle state machine', () => {
+	test('toolbar entry opens composer without starting ASR or focusing input', () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		expect(harness.controller.state).toBe('idle')
+		expect(harness.engine.starts).toBe(0)
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.input.readOnly).toBe(false)
+		expect(document.activeElement).not.toBe(harness.controller.preview.input)
+		harness.controller.dispose()
+	})
+
+	test('composer Mic is the only path that starts recording', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		expect(harness.controller.state).toBe('idle')
+		dispatchTap(harness.button)
+		expect(harness.controller.state).toBe('connecting')
+		expect(harness.engine.starts).toBe(1)
+		harness.engine.resolveStart()
+		await Promise.resolve()
+		await Promise.resolve()
+		harness.engine.emitPartial('partial composer text')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.input.value).toBe('partial composer text')
+		harness.controller.dispose()
+	})
+
+	test('recording Mic tap enters editable preview after final', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		dispatchTap(harness.button)
+		harness.engine.resolveStart()
+		await Promise.resolve()
+		await Promise.resolve()
+		dispatchTap(harness.button)
+		harness.engine.emitFinal('preview text', 1)
+		expect(harness.controller.state).toBe('preview')
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.input.readOnly).toBe(false)
+		harness.controller.dispose()
+	})
+
+	test('idle typed text can be sent through the composer', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'typed command'
+		dispatchPreviewTap(harness, 'send')
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+		expect(harness.term.sent).toEqual(['typed command'])
+		expect(harness.controller.state).toBe('idle')
+		expect(harness.controller.preview.isOpen()).toBe(false)
+		harness.controller.dispose()
+	})
+
+	test('idle close and backdrop discard without starting the engine', () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'discard me'
+		harness.controller.preview.element.dispatchEvent(
+			new Event('click', { bubbles: true, cancelable: true }),
+		)
+		expect(harness.controller.state).toBe('idle')
+		expect(harness.engine.starts).toBe(0)
+		expect(harness.engine.stops).toBe(0)
+		expect(harness.controller.preview.isOpen()).toBe(false)
+		dispatchTap(harness.composerButton)
+		dispatchPreviewTap(harness, 'close')
+		expect(harness.engine.stops).toBe(0)
+		expect(harness.controller.preview.isOpen()).toBe(false)
+		harness.controller.dispose()
+	})
+
 	test('tap starts connecting immediately and a second tap cancels', async () => {
 		const harness = createHarness()
-		expect(harness.button.getAttribute('aria-label')).toBe('Tap to speak')
+		expect(harness.button.getAttribute('aria-label')).toBe('Toggle microphone')
 		expect(harness.button.getAttribute('aria-pressed')).toBe('false')
 		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('connecting')
 		expect(harness.engine.starts).toBe(1)
-		expect(harness.controller.preview.isVisible()).toBe(true)
+		expect(harness.controller.preview.isOpen()).toBe(true)
 		expect(harness.controller.preview.message.textContent).toContain('Connecting to voice service')
 		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('idle')
 		expect(harness.engine.stops).toBe(1)
-		expect(harness.controller.preview.message.textContent).toContain('cancelled')
+		expect(harness.controller.preview.isOpen()).toBe(false)
 		harness.controller.dispose()
 	})
 
@@ -269,7 +344,8 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		await startRecording(harness)
 		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('waiting-final')
-		expect(harness.controller.preview.isVisible()).toBe(true)
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.input.readOnly).toBe(true)
 		expect(harness.controller.preview.message.textContent).toContain('Finishing')
 		expect(harness.engine.stops).toBe(1)
 		harness.controller.dispose()
@@ -280,23 +356,24 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		await startRecording(harness)
 		harness.engine.emitPartial('send this')
 		vi.advanceTimersByTime(20)
-		dispatchPreviewTap(harness, 'Send')
+		dispatchPreviewTap(harness, 'send')
 		expect(harness.controller.state).toBe('waiting-final')
 		expect(harness.term.sent).toEqual([])
 		harness.engine.emitFinal('send this', 1)
 		for (let index = 0; index < 8; index++) await Promise.resolve()
 		expect(harness.term.sent).toEqual(['send this'])
 		expect(harness.controller.state).toBe('idle')
+		expect(harness.controller.preview.isOpen()).toBe(false)
 		harness.controller.dispose()
 	})
 
 	test('Cancel during recording discards the session', async () => {
 		const harness = createHarness()
 		await startRecording(harness)
-		dispatchPreviewTap(harness, 'Cancel')
+		dispatchPreviewTap(harness, 'close')
 		expect(harness.term.sent).toEqual([])
 		expect(harness.controller.state).toBe('idle')
-		expect(harness.controller.preview.message.textContent).toContain('cancelled')
+		expect(harness.controller.preview.isOpen()).toBe(false)
 		harness.controller.dispose()
 	})
 
@@ -304,7 +381,7 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		const final = createHarness()
 		await startRecording(final)
 		dispatchTap(final.button)
-		dispatchPreviewTap(final, 'Send')
+		dispatchPreviewTap(final, 'send')
 		expect(final.controller.state).toBe('waiting-final')
 		final.engine.emitFinal('final text', 1)
 		for (let index = 0; index < 8; index++) await Promise.resolve()
@@ -317,7 +394,7 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		timeout.engine.emitPartial('partial fallback')
 		vi.advanceTimersByTime(20)
 		dispatchTap(timeout.button)
-		dispatchPreviewTap(timeout, 'Send')
+		dispatchPreviewTap(timeout, 'send')
 		vi.advanceTimersByTime(3_000)
 		for (let index = 0; index < 8; index++) await Promise.resolve()
 		expect(timeout.term.sent).toEqual(['partial fallback'])
@@ -329,7 +406,7 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		const harness = createHarness()
 		await startRecording(harness)
 		dispatchTap(harness.button)
-		dispatchPreviewTap(harness, 'Cancel')
+		dispatchPreviewTap(harness, 'close')
 		expect(harness.term.sent).toEqual([])
 		expect(harness.controller.state).toBe('idle')
 		harness.controller.dispose()
@@ -365,6 +442,7 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		harness.engine.emitFinal('final-2', 2)
 		expect(harness.controller.state).toBe('preview')
 		expect(harness.controller.preview.input.value).toBe('final-2')
+		expect(harness.controller.preview.input.readOnly).toBe(false)
 		harness.engine.emitFinal('stale-1', 1)
 		expect(harness.controller.preview.input.value).toBe('final-2')
 		harness.engine.emitFinal('new-3', 3)
@@ -384,6 +462,8 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
 		expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow()
 		expect(harness.controller.state).toBe('idle')
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.message.textContent).toContain('background')
 		harness.controller.dispose()
 	})
 
@@ -398,27 +478,42 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('connecting')
 		expect(harness.engine.starts).toBe(2)
-		expect(harness.controller.preview.isVisible()).toBe(true)
+		expect(harness.controller.preview.isOpen()).toBe(true)
 		expect(harness.controller.preview.message.textContent).toContain('Connecting to voice service')
 		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
 		expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow()
 		expect(harness.controller.state).toBe('idle')
+		expect(harness.controller.preview.isOpen()).toBe(true)
+		expect(harness.controller.preview.message.textContent).toContain('background')
 		harness.controller.dispose()
 	})
 
-	test('connection timeout enters error and audio interruption cancels recording', async () => {
+	test('connection timeout enters error and audio interruption keeps the composer visible', async () => {
 		const timeout = createHarness()
 		dispatchTap(timeout.button)
 		vi.advanceTimersByTime(5_000)
 		expect(timeout.controller.state).toBe('error')
 		timeout.controller.dispose()
 
-		const cancelled = createHarness()
-		await startRecording(cancelled)
-		cancelled.engine.emitError('audio-interrupted')
-		expect(cancelled.controller.state).toBe('idle')
-		expect(cancelled.controller.preview.message.textContent).toContain('cancelled')
-		cancelled.controller.dispose()
+		const withPartial = createHarness()
+		await startRecording(withPartial)
+		withPartial.engine.emitPartial('keep interrupted text')
+		vi.advanceTimersByTime(20)
+		withPartial.engine.emitError('audio-interrupted')
+		expect(withPartial.controller.state).toBe('preview')
+		expect(withPartial.controller.preview.isOpen()).toBe(true)
+		expect(withPartial.controller.preview.input.value).toBe('keep interrupted text')
+		expect(withPartial.controller.preview.input.readOnly).toBe(false)
+		expect(withPartial.controller.preview.message.textContent).toContain('interrupted')
+		withPartial.controller.dispose()
+
+		const withoutPartial = createHarness()
+		await startRecording(withoutPartial)
+		withoutPartial.engine.emitError('audio-interrupted')
+		expect(withoutPartial.controller.state).toBe('error')
+		expect(withoutPartial.controller.preview.isOpen()).toBe(true)
+		expect(withoutPartial.controller.preview.message.textContent).toContain('interrupted')
+		withoutPartial.controller.dispose()
 	})
 
 	test('stop rejection is observable while cancellation still reaches idle', async () => {
@@ -433,11 +528,12 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		harness.controller.dispose()
 	})
 
-	test('audio interruption and visibility hidden cancel any active recording', async () => {
+	test('audio interruption preserves an error composer before visibility cancellation', async () => {
 		const first = createHarness()
 		await startRecording(first)
 		first.engine.emitError('audio-interrupted')
-		expect(first.controller.state).toBe('idle')
+		expect(first.controller.state).toBe('error')
+		expect(first.controller.preview.isOpen()).toBe(true)
 		expect(first.controller.preview.message.textContent).toContain('interrupted')
 		first.controller.dispose()
 
@@ -449,6 +545,8 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		})
 		document.dispatchEvent(new Event('visibilitychange'))
 		expect(second.controller.state).toBe('idle')
+		expect(second.controller.preview.isOpen()).toBe(true)
+		expect(second.controller.preview.message.textContent).toContain('background')
 		second.controller.dispose()
 	})
 
@@ -457,7 +555,7 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		await startRecording(harness)
 		dispatchTap(harness.button)
 		harness.engine.emitFinal('preview text', 1)
-		dispatchTap(harness.button)
+		dispatchTap(harness.composerButton)
 		expect(harness.engine.starts).toBe(1)
 		expect(harness.controller.state).toBe('preview')
 		harness.controller.dispose()
@@ -490,7 +588,7 @@ describe('preview injection', () => {
 		const controller = createMicController({ term, config, hooks, engine })
 		if (!controller) throw new Error('expected controller')
 		const button = document.createElement('button')
-		controller.attach(button)
+		controller.attachMicButton(button)
 		document.body.append(button)
 		dispatchTap(button)
 		engine.resolveStart()
@@ -498,7 +596,7 @@ describe('preview injection', () => {
 		await Promise.resolve()
 		dispatchTap(button)
 		engine.emitFinal('printf "voice\x00-input\\n"', 1)
-		const sendButton = controller.preview.element.querySelector('button:last-child')
+		const sendButton = controller.preview.element.querySelector('.wt-composer-send')
 		sendButton?.dispatchEvent(new Event('click'))
 		for (let index = 0; index < 8; index++) await Promise.resolve()
 		expect(term.sent).toEqual(['printf "voice-input\\n"', '\r'])
@@ -514,7 +612,7 @@ describe('preview injection', () => {
 		dispatchTap(harness.button)
 		harness.engine.emitFinal('kept text', 1)
 		harness.setConnected(false)
-		const sendButton = harness.controller.preview.element.querySelector('button:last-child')
+		const sendButton = harness.controller.preview.element.querySelector('.wt-composer-send')
 		sendButton?.dispatchEvent(new Event('click'))
 		await Promise.resolve()
 		expect(harness.term.sent).toEqual([])
@@ -535,7 +633,7 @@ describe('preview injection', () => {
 		harness.engine.emitFinal('typed command', 1)
 		harness.controller.preview.input.value = 'typed command'
 		harness.controller.preview.element
-			.querySelector('button:last-child')
+			.querySelector('.wt-composer-send')
 			?.dispatchEvent(new Event('click'))
 		for (let index = 0; index < 8; index++) await Promise.resolve()
 		expect(harness.term.sent).toEqual(['typed command'])
@@ -563,7 +661,7 @@ describe('preview injection', () => {
 		await startRecording(harness)
 		dispatchTap(harness.button)
 		harness.engine.emitFinal('', 1)
-		const sendButton = harness.controller.preview.element.querySelector('button:last-child')
+		const sendButton = harness.controller.preview.element.querySelector('.wt-composer-send')
 		sendButton?.dispatchEvent(new Event('click'))
 		await Promise.resolve()
 		expect(harness.term.sent).toEqual([])

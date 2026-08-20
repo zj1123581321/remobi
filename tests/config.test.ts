@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest'
-import { defaultConfig, defineConfig, mergeConfig, serialiseThemeForTtyd } from '../src/config'
+import {
+	defaultConfig,
+	defineConfig,
+	mergeConfig,
+	serialiseThemeForTtyd,
+	withVoiceComposerEntry,
+} from '../src/config'
 
 describe('defineConfig', () => {
 	test('returns default config when called with no args', () => {
@@ -206,6 +212,81 @@ describe('defaultConfig', () => {
 		expect(defaultConfig.gestures.swipe.right).toBe('\x02p')
 		expect(defaultConfig.gestures.swipe.leftLabel).toBe('Next tmux window')
 		expect(defaultConfig.gestures.swipe.rightLabel).toBe('Previous tmux window')
+	})
+})
+
+describe('withVoiceComposerEntry', () => {
+	test('inserts after keyboard-toggle and before drawer-toggle', () => {
+		const config = defineConfig({ asr: { enabled: true } })
+		const effective = withVoiceComposerEntry(config)
+		const types = effective.toolbar.row1.map((button) => button.action.type)
+
+		expect(types.indexOf('voice-input')).toBe(types.indexOf('keyboard-toggle') + 1)
+		expect(types.indexOf('voice-input')).toBeLessThan(types.indexOf('drawer-toggle'))
+		expect(types.filter((type) => type === 'voice-input')).toHaveLength(1)
+	})
+
+	test('uses row2 anchor when a configured second row is present', () => {
+		const config = defineConfig({
+			asr: { enabled: true },
+			toolbar: {
+				row1: [],
+				row2: [
+					{
+						id: 'drawer',
+						label: 'More',
+						description: 'Open drawer',
+						action: { type: 'drawer-toggle' },
+					},
+				],
+			},
+		})
+		const effective = withVoiceComposerEntry(config)
+
+		expect(effective.toolbar.row1).toEqual([])
+		expect(effective.toolbar.row2.map((button) => button.action.type)).toEqual([
+			'voice-input',
+			'drawer-toggle',
+		])
+	})
+
+	test('does not inject when disabled or already configured', () => {
+		const disabled = defineConfig()
+		expect(withVoiceComposerEntry(disabled)).toBe(disabled)
+
+		const configured = defineConfig({
+			asr: { enabled: true },
+			toolbar: {
+				row1: [
+					{
+						id: 'voice',
+						label: 'Voice',
+						description: 'Open voice composer',
+						action: { type: 'voice-input' },
+					},
+				],
+			},
+		})
+		expect(withVoiceComposerEntry(configured)).toBe(configured)
+		expect(configured.toolbar.row1).toHaveLength(1)
+	})
+
+	test('appends to row1 when neither anchor exists', () => {
+		const config = defineConfig({
+			asr: { enabled: true },
+			toolbar: {
+				row1: [
+					{
+						id: 'esc',
+						label: 'Esc',
+						description: 'Send Escape',
+						action: { type: 'send', data: '\x1b' },
+					},
+				],
+			},
+		})
+		const effective = withVoiceComposerEntry(config)
+		expect(effective.toolbar.row1.at(-1)?.action.type).toBe('voice-input')
 	})
 })
 

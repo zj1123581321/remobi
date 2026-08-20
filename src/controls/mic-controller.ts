@@ -23,7 +23,8 @@ export type MicState =
 export interface MicController {
 	readonly preview: AsrPreview
 	readonly state: MicState
-	attach(button: HTMLButtonElement): void
+	attachComposerToggle(button: HTMLButtonElement): void
+	attachMicButton(button: HTMLButtonElement): void
 	dispose(): void
 }
 
@@ -32,6 +33,7 @@ interface MicControllerOptions {
 	readonly config: RemobiConfig
 	readonly hooks: HookRegistry
 	readonly engine?: AsrEngine
+	readonly closeComposerOverlays?: () => void
 }
 
 const CONNECT_TIMEOUT_MS = 5_000
@@ -89,8 +91,8 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	if (!engine.isSupported()) return undefined
 
 	const preview = createAsrPreview()
-	document.body.appendChild(preview.element)
-	const buttons = new Set<HTMLButtonElement>()
+	const micButtons = new Set<HTMLButtonElement>()
+	const composerButtons = new Set<HTMLButtonElement>()
 	const buttonDisposers = new Map<HTMLButtonElement, () => void>()
 	let currentState: MicState = 'idle'
 	let generation = 0
@@ -106,10 +108,17 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			throw new Error(`Invalid mic transition ${currentState} -> ${to} (${event})`)
 		}
 		currentState = to
-		for (const button of buttons) {
+		preview.input.readOnly = to !== 'idle' && to !== 'preview' && to !== 'error'
+		for (const button of micButtons) {
 			button.dataset.micState = to
 			button.setAttribute('aria-pressed', to === 'recording' ? 'true' : 'false')
 			button.classList.toggle('wt-mic-recording', to === 'recording')
+		}
+	}
+
+	function setComposerExpanded(expanded: boolean): void {
+		for (const button of composerButtons) {
+			button.setAttribute('aria-expanded', expanded ? 'true' : 'false')
 		}
 	}
 
@@ -139,6 +148,8 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	function endAsIdle(): void {
 		generation++
 		cleanupSession()
+		preview.close()
+		setComposerExpanded(false)
 		if (currentState !== 'idle') {
 			transition(
 				['preview', 'error', 'cancelled', 'permission-requesting', 'connecting'],
@@ -164,7 +175,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		if (hadText) transition(['error'], 'preview', 'error-preview')
 	}
 
-	function cancelSession(message: string, sessionGeneration: number): void {
+	function cancelSession(sessionGeneration: number): void {
 		if (disposed || sessionGeneration !== generation || currentState === 'idle') return
 		pendingAction = undefined
 		clearTimers()
@@ -182,11 +193,11 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			'cancel',
 		)
 		preview.clear()
-		preview.showMessage(message)
 		stopEngine()
 		generation++
 		cleanupSession()
 		transition(['cancelled'], 'idle', 'cancelled-idle')
+		setComposerExpanded(false)
 	}
 
 	function finishPreview(sessionGeneration: number): void {
@@ -233,7 +244,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			engine.onFinal((text, sequence) => onFinal(text, sequence, sessionGeneration)),
 			engine.onError((code) => {
 				if (code === 'audio-interrupted') {
-					cancelSession('Audio input was interrupted; recording cancelled.', sessionGeneration)
+					showError(code, sessionGeneration)
 					return
 				}
 				showError(code, sessionGeneration)
@@ -285,6 +296,23 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		beginConnecting(sessionGeneration)
 	}
 
+	function openComposer(): void {
+		if (disposed || currentState !== 'idle') return
+		options.closeComposerOverlays?.()
+		preview.open()
+		setComposerExpanded(true)
+		haptic()
+	}
+
+	function canSendComposerText(sessionGeneration: number, wasOpen: boolean): boolean {
+		return (
+			!disposed &&
+			sessionGeneration === generation &&
+			wasOpen &&
+			(currentState === 'preview' || currentState === 'idle')
+		)
+	}
+
 	function tapToggle(): void {
 		if (disposed) return
 		const kbWasOpen = isKeyboardOpen()
@@ -298,10 +326,10 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			stopRecording(sessionGeneration)
 		} else if (currentState === 'permission-requesting' || currentState === 'connecting') {
 			toggled = true
-			cancelSession('Recording cancelled.', sessionGeneration)
+			cancelSession(sessionGeneration)
 		} else if (currentState === 'error') {
 			toggled = true
-			cancelSession('Recording cancelled.', sessionGeneration)
+			cancelSession(sessionGeneration)
 			startSession()
 		}
 		if (toggled) conditionalFocus(options.term, kbWasOpen)
@@ -318,11 +346,12 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			pendingAction = 'send'
 			return
 		}
-		if (currentState !== 'preview') return
+		if (currentState !== 'preview' && currentState !== 'idle') return
 		const sessionGeneration = generation
+		const wasOpen = preview.isOpen()
 		const rawText = preview.getText()
 		if (!rawText) {
-			preview.showMessage('No speech was recognized.')
+			preview.showMessage('Type or speak something to send.')
 			return
 		}
 		if (!options.term.isConnected()) {
@@ -338,7 +367,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 				kbWasOpen: false,
 				data: rawText,
 			})
-			if (disposed || sessionGeneration !== generation || currentState !== 'preview') return
+			if (!canSendComposerText(sessionGeneration, wasOpen)) return
 			if (before.blocked) return
 			const text = sanitizeVoiceText(before.data)
 			if (!text) {
@@ -358,7 +387,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 				kbWasOpen: false,
 				data: text,
 			})
-			if (disposed || sessionGeneration !== generation || currentState !== 'preview') return
+			if (!canSendComposerText(sessionGeneration, wasOpen)) return
 			if (options.config.asr.autoEnter) {
 				if (!options.term.isConnected()) {
 					preview.showMessage('Terminal disconnected; text is kept here until it reconnects.')
@@ -379,10 +408,15 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			currentState === 'stopping' ||
 			currentState === 'waiting-final'
 		) {
-			cancelSession('Recording cancelled.', generation)
+			cancelSession(generation)
 			return
 		}
-		if (currentState !== 'preview' && currentState !== 'error') return
+		if (currentState !== 'preview' && currentState !== 'error' && currentState !== 'idle') return
+		if (currentState === 'idle') {
+			preview.clear()
+			endAsIdle()
+			return
+		}
 		preview.clear()
 		stopEngine()
 		endAsIdle()
@@ -390,7 +424,9 @@ export function createMicController(options: MicControllerOptions): MicControlle
 
 	function onVisibilityChange(): void {
 		if (document.visibilityState === 'hidden' && currentState !== 'idle') {
-			cancelSession('App went into the background; recording cancelled.', generation)
+			cancelSession(generation)
+			preview.showMessage('Recording cancelled because the app went into the background.')
+			setComposerExpanded(true)
 		}
 	}
 
@@ -408,13 +444,24 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		get state() {
 			return currentState
 		},
-		attach(button) {
+		attachComposerToggle(button) {
+			if (buttonDisposers.has(button)) return
+			suppressSynthesisedMouse(button)
+			onTap(button, openComposer)
+			button.setAttribute('aria-label', 'Voice composer')
+			button.setAttribute('aria-haspopup', 'dialog')
+			button.setAttribute('aria-expanded', 'false')
+			composerButtons.add(button)
+			buttonDisposers.set(button, () => {})
+		},
+		attachMicButton(button) {
 			if (buttonDisposers.has(button)) return
 			suppressSynthesisedMouse(button)
 			onTap(button, tapToggle)
-			button.setAttribute('aria-label', 'Tap to speak')
+			button.setAttribute('aria-label', 'Toggle microphone')
 			button.setAttribute('aria-pressed', 'false')
-			buttons.add(button)
+			button.dataset.micState = 'idle'
+			micButtons.add(button)
 			buttonDisposers.set(button, () => {})
 		},
 		dispose() {
@@ -425,7 +472,8 @@ export function createMicController(options: MicControllerOptions): MicControlle
 			stopEngine()
 			for (const disposeButton of buttonDisposers.values()) disposeButton()
 			buttonDisposers.clear()
-			buttons.clear()
+			micButtons.clear()
+			composerButtons.clear()
 			clearEngineHandlers()
 			previewConfirm.dispose()
 			previewCancel.dispose()

@@ -93,7 +93,8 @@ body {
 }
 
 /* Moshi-style voice entry: a compact icon button instead of a text pill. */
-#wt-toolbar button.wt-mic {
+#wt-toolbar button.wt-mic,
+#wt-toolbar .wt-row:last-child button.wt-mic {
 	width: 44px;
 	min-width: 44px;
 	height: 44px;
@@ -136,6 +137,135 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
 	#wt-toolbar button.wt-mic-recording {
+		animation: none;
+	}
+}
+
+/* Voice composer: the second layer covers the toolbar and never auto-focuses. */
+#wt-asr-composer {
+	display: none;
+	position: fixed;
+	inset: 0;
+	align-items: flex-end;
+	justify-content: center;
+	padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+	box-sizing: border-box;
+	background: rgba(0, 0, 0, 0.58);
+	z-index: 10005;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+#wt-asr-composer-panel {
+	width: min(560px, 100%);
+	box-sizing: border-box;
+	padding: 14px;
+	border-radius: 16px 16px 12px 12px;
+	background: #313244;
+	color: #cdd6f4;
+	box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.3);
+	font-family: system-ui, sans-serif;
+}
+
+#wt-asr-composer .wt-asr-composer-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	min-height: 36px;
+	margin-bottom: 8px;
+}
+
+#wt-asr-composer h3 {
+	margin: 0;
+	font-size: 16px;
+}
+
+#wt-asr-composer .wt-asr-composer-close {
+	width: 40px;
+	height: 40px;
+	border: 0;
+	border-radius: 50%;
+	background: #45475a;
+	color: #cdd6f4;
+	font-size: 24px;
+	line-height: 1;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+#wt-asr-composer input {
+	width: 100%;
+	box-sizing: border-box;
+	min-height: 48px;
+	padding: 10px 12px;
+	border: 1px solid #585b70;
+	border-radius: 10px;
+	outline: none;
+	background: #1e1e2e;
+	color: #cdd6f4;
+	font: inherit;
+	font-size: 16px;
+}
+
+#wt-asr-composer input:focus {
+	border-color: #89b4fa;
+}
+
+#wt-asr-composer .wt-asr-composer-message {
+	min-height: 1.4em;
+	margin: 7px 2px 0;
+	color: #f9e2af;
+	font-size: 12px;
+}
+
+#wt-asr-composer .wt-asr-composer-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 10px;
+}
+
+#wt-asr-composer .wt-asr-composer-actions button {
+	min-height: 44px;
+	border: 0;
+	border-radius: 10px;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+#wt-asr-composer button.wt-composer-mic {
+	width: 48px;
+	min-width: 48px;
+	height: 48px;
+	padding: 0;
+	border-radius: 50%;
+	background: #45475a;
+	color: #cdd6f4;
+	flex: 0 0 48px;
+}
+
+#wt-asr-composer button.wt-composer-mic svg {
+	width: 23px;
+	height: 23px;
+	fill: currentColor;
+}
+
+#wt-asr-composer button.wt-composer-send {
+	flex: 1;
+	background: #89b4fa;
+	color: #1e1e2e;
+}
+
+#wt-asr-composer button.wt-composer-mic.wt-mic-recording {
+	background: #f38ba8;
+	color: #1e1e2e;
+	animation: wt-mic-pulse 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#wt-asr-composer button.wt-composer-mic.wt-mic-recording {
 		animation: none;
 	}
 }

@@ -11,7 +11,7 @@ export default {
 			{
 				id: 'voice-input',
 				label: 'Mic',
-				description: 'Tap to speak',
+				description: 'Open voice composer',
 				action: { type: 'voice-input' },
 			},
 		],

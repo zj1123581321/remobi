@@ -30,7 +30,7 @@ function frameType(message: string | Buffer): { readonly type: number; readonly 
 	return { type: (bytes[1] ?? 0) >> 4, flags: (bytes[1] ?? 0) & 0x0f }
 }
 
-test.describe('Mic tap-to-toggle voice input', () => {
+test.describe('Voice composer tap-to-toggle input', () => {
 	test.skip(({ browserName }) => browserName !== 'chromium', 'full voice flow is chromium-only')
 	let server: Awaited<ReturnType<typeof startIsolatedServe>> | undefined
 
@@ -74,30 +74,47 @@ test.describe('Mic tap-to-toggle voice input', () => {
 			currentText = `printf '\\x4f\\x55\\x54\\x50\\x55\\x54-${attempt}\\n'`
 			const outputMarker = `OUTPUT-${attempt}`
 			expect(currentText).not.toContain(outputMarker)
-			const suffix = attempt === 0 ? '' : `-${attempt}`
 			await page.goto(server.url)
 			await page.waitForSelector('#wt-toolbar [data-remobi-action="voice-input"]')
-			const mic = page.locator('[data-remobi-action="voice-input"]')
-			await expect(mic).toBeVisible()
-			await expect(mic).toHaveAttribute('aria-label', 'Tap to speak')
+			const entry = page.locator('[data-remobi-action="voice-input"]')
+			await expect(entry).toBeVisible()
+			await expect(entry).toHaveAttribute('aria-label', 'Voice composer')
+			await expect(entry).toHaveCSS('width', '44px')
+			await expect(entry).toHaveCSS('height', '44px')
+			await expect(entry).not.toHaveAttribute('data-mic-state', 'recording')
+			if (attempt === 0) await page.screenshot({ path: 'test-results/voice-entry-idle.png' })
 
+			await entry.click()
+			const composer = page.locator('#wt-asr-composer')
+			await expect(composer).toBeVisible()
+			await expect(composer.locator('input')).toHaveAttribute('placeholder', 'Speak or type…')
+			await expect(composer.locator('input')).not.toBeFocused()
+			await expect(composer.locator('[data-remobi-control="composer-mic"]')).toHaveAttribute(
+				'data-mic-state',
+				'idle',
+			)
+			if (attempt === 0) await page.screenshot({ path: 'test-results/voice-composer-idle.png' })
+
+			const mic = composer.locator('[data-remobi-control="composer-mic"]')
 			await mic.click()
 			await page.waitForTimeout(450)
 			await expect(mic).toHaveAttribute('data-mic-state', 'recording')
-			await page.screenshot({ path: `test-results/voice-recording${suffix}.png` })
+			await expect(composer.locator('input')).toHaveAttribute('readonly', '')
+			if (attempt === 0) await page.screenshot({ path: 'test-results/voice-recording.png' })
 
 			await mic.click()
-			await expect(page.locator('#wt-asr-preview')).toBeVisible({ timeout: 5_000 })
-			await expect(page.locator('#wt-asr-preview input')).toHaveValue(currentText, {
+			await expect(composer).toBeVisible({ timeout: 5_000 })
+			await expect(composer.locator('input')).toHaveValue(currentText, {
 				timeout: 5_000,
 			})
-			await page.screenshot({ path: `test-results/voice-preview${suffix}.png` })
+			await expect(composer.locator('input')).not.toHaveAttribute('readonly', '')
+			if (attempt === 0) await page.screenshot({ path: 'test-results/voice-preview.png' })
 
-			await page.locator('#wt-asr-preview button', { hasText: 'Send' }).click()
+			await composer.locator('.wt-composer-send').click()
 			await expect(page.locator('#terminal .xterm-rows')).toContainText(outputMarker, {
 				timeout: 5_000,
 			})
-			await page.screenshot({ path: `test-results/voice-injected${suffix}.png` })
+			await expect(composer).toBeHidden()
 		}
 		expect(asrFrames.some((frame) => ((frame[1] ?? 0) & 0x0f) === 3)).toBe(true)
 		expect(frameCounts.fullRequest).toBeGreaterThanOrEqual(5)

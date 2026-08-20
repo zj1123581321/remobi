@@ -1,5 +1,5 @@
 import { FONT_SIZE_STORAGE_KEY, createDefaultActionRegistry } from './actions/registry'
-import { defaultConfig } from './config'
+import { defaultConfig, withVoiceComposerEntry } from './config'
 import { createComboPicker } from './controls/combo-picker'
 import { createDpad } from './controls/dpad'
 import { createFloatingButtons } from './controls/floating-buttons'
@@ -106,6 +106,17 @@ function setupKeyboard(
 	return { effectiveConfig, keyboard }
 }
 
+/** Mount the composer and attach its internal Mic after capability gating. */
+function attachVoiceComposerMic(controller: MicController | undefined): void {
+	if (!controller) return
+	const micButton = controller.preview.element.querySelector<HTMLButtonElement>(
+		'[data-remobi-control="composer-mic"]',
+	)
+	if (!micButton) throw new Error('remobi: voice composer is missing its microphone button')
+	document.body.appendChild(controller.preview.element)
+	controller.attachMicButton(micButton)
+}
+
 /**
  * Initialise the remobi overlay.
  * Called automatically when loaded in a browser (via the IIFE in build output).
@@ -183,13 +194,16 @@ export function init(
 				// the action registry so keyboard-toggle can be wired via DI.
 				const setup = setupKeyboard(term, config)
 				keyboard = setup.keyboard
-				const effectiveConfig = setup.effectiveConfig
+				const effectiveConfig = withVoiceComposerEntry(setup.effectiveConfig)
 				const keyboardController = setup.keyboard
+				let closeComposerOverlays = (): void => comboPicker.close()
 				micController = createMicController({
 					term,
 					config: effectiveConfig,
 					hooks,
+					closeComposerOverlays: () => closeComposerOverlays(),
 				})
+				attachVoiceComposerMic(micController)
 
 				// Floating d-pad — created before the action registry so
 				// dpad-toggle buttons wire up via DI (same pattern as ⌨).
@@ -218,6 +232,11 @@ export function init(
 					drawer: drawer.drawer,
 					backdrop: drawer.backdrop,
 				})
+				closeComposerOverlays = () => {
+					drawer.close()
+					comboPicker.close()
+					if (dpad.element.classList.contains('open')) dpad.toggle()
+				}
 
 				// Create toolbar
 				const { element: toolbar } = createToolbar(
