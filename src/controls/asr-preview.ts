@@ -288,7 +288,6 @@ export function createAsrPreview(): AsrPreview {
 		}
 		if (stored.kind === 'missing' || !stored.value.draft) return
 		input.value = stored.value.draft
-		setOpen(true)
 		resizeInput()
 	}
 
