@@ -87,7 +87,7 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 const defaultRow2: RemobiConfig['toolbar']['row2'] = []
 
 /** Default toolbar entry for the optional two-layer voice composer. */
-export const voiceComposerButton: ControlButton = {
+const voiceComposerButton: ControlButton = {
 	id: 'voice-input',
 	label: 'Voice',
 	description: 'Open voice composer',

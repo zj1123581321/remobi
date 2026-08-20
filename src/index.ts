@@ -109,11 +109,11 @@ function setupKeyboard(
 /** Mount the composer and attach its internal Mic after capability gating. */
 function attachVoiceComposerMic(controller: MicController | undefined): void {
 	if (!controller) return
-	document.body.appendChild(controller.preview.element)
 	const micButton = controller.preview.element.querySelector<HTMLButtonElement>(
 		'[data-remobi-control="composer-mic"]',
 	)
 	if (!micButton) throw new Error('remobi: voice composer is missing its microphone button')
+	document.body.appendChild(controller.preview.element)
 	controller.attachMicButton(micButton)
 }
 
