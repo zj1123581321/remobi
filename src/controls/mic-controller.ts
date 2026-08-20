@@ -98,6 +98,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	let finalTimer: ReturnType<typeof setTimeout> | undefined
 	let engineUnsubscribers: Array<() => void> = []
 	let appliedSeq = Number.NEGATIVE_INFINITY
+	let pendingAction: 'send' | undefined
 	let disposed = false
 
 	function transition(from: readonly MicState[], to: MicState, event: string): void {
@@ -165,6 +166,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 
 	function cancelSession(message: string, sessionGeneration: number): void {
 		if (disposed || sessionGeneration !== generation || currentState === 'idle') return
+		pendingAction = undefined
 		clearTimers()
 		transition(
 			[
@@ -189,10 +191,13 @@ export function createMicController(options: MicControllerOptions): MicControlle
 
 	function finishPreview(sessionGeneration: number): void {
 		if (disposed || sessionGeneration !== generation || currentState !== 'waiting-final') return
+		const shouldSend = pendingAction === 'send'
+		pendingAction = undefined
 		generation++
 		cleanupSession()
 		transition(['waiting-final'], 'preview', 'final-timeout')
 		preview.showMessage('Ready to send. Edit the text or cancel.')
+		if (shouldSend) confirmPreview()
 	}
 
 	function onFinal(text: string, sequence: number | undefined, sessionGeneration: number): void {
@@ -271,6 +276,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		if (disposed || currentState !== 'idle') return
 		generation++
 		const sessionGeneration = generation
+		pendingAction = undefined
 		appliedSeq = Number.NEGATIVE_INFINITY
 		preview.clear()
 		transition(['idle'], 'permission-requesting', 'tap-start')
@@ -302,7 +308,17 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	}
 
 	function confirmPreview(): void {
-		if (disposed || currentState !== 'preview') return
+		if (disposed) return
+		if (currentState === 'recording') {
+			pendingAction = 'send'
+			stopRecording(generation)
+			return
+		}
+		if (currentState === 'stopping' || currentState === 'waiting-final') {
+			pendingAction = 'send'
+			return
+		}
+		if (currentState !== 'preview') return
 		const sessionGeneration = generation
 		const rawText = preview.getText()
 		if (!rawText) {
@@ -356,6 +372,16 @@ export function createMicController(options: MicControllerOptions): MicControlle
 	}
 
 	function cancelPreview(): void {
+		if (
+			currentState === 'permission-requesting' ||
+			currentState === 'connecting' ||
+			currentState === 'recording' ||
+			currentState === 'stopping' ||
+			currentState === 'waiting-final'
+		) {
+			cancelSession('Recording cancelled.', generation)
+			return
+		}
 		if (currentState !== 'preview' && currentState !== 'error') return
 		preview.clear()
 		stopEngine()

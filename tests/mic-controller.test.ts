@@ -158,6 +158,14 @@ function dispatchTouchTap(button: HTMLButtonElement): void {
 	button.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }))
 }
 
+function dispatchPreviewTap(harness: TestHarness, label: 'Cancel' | 'Send'): void {
+	const button = Array.from(harness.controller.preview.element.querySelectorAll('button')).find(
+		(candidate) => candidate.textContent === label,
+	)
+	if (!(button instanceof HTMLButtonElement)) throw new Error(`missing preview ${label} button`)
+	dispatchTap(button)
+}
+
 async function startRecording(harness: TestHarness): Promise<void> {
 	dispatchTap(harness.button)
 	harness.engine.resolveStart()
@@ -264,6 +272,66 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		expect(harness.controller.preview.isVisible()).toBe(true)
 		expect(harness.controller.preview.message.textContent).toContain('Finishing')
 		expect(harness.engine.stops).toBe(1)
+		harness.controller.dispose()
+	})
+
+	test('Send during recording stops and sends after final', async () => {
+		const harness = createHarness()
+		await startRecording(harness)
+		harness.engine.emitPartial('send this')
+		vi.advanceTimersByTime(20)
+		dispatchPreviewTap(harness, 'Send')
+		expect(harness.controller.state).toBe('waiting-final')
+		expect(harness.term.sent).toEqual([])
+		harness.engine.emitFinal('send this', 1)
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+		expect(harness.term.sent).toEqual(['send this'])
+		expect(harness.controller.state).toBe('idle')
+		harness.controller.dispose()
+	})
+
+	test('Cancel during recording discards the session', async () => {
+		const harness = createHarness()
+		await startRecording(harness)
+		dispatchPreviewTap(harness, 'Cancel')
+		expect(harness.term.sent).toEqual([])
+		expect(harness.controller.state).toBe('idle')
+		expect(harness.controller.preview.message.textContent).toContain('cancelled')
+		harness.controller.dispose()
+	})
+
+	test('Send during waiting-final sends after final or partial timeout', async () => {
+		const final = createHarness()
+		await startRecording(final)
+		dispatchTap(final.button)
+		dispatchPreviewTap(final, 'Send')
+		expect(final.controller.state).toBe('waiting-final')
+		final.engine.emitFinal('final text', 1)
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+		expect(final.term.sent).toEqual(['final text'])
+		expect(final.controller.state).toBe('idle')
+		final.controller.dispose()
+
+		const timeout = createHarness()
+		await startRecording(timeout)
+		timeout.engine.emitPartial('partial fallback')
+		vi.advanceTimersByTime(20)
+		dispatchTap(timeout.button)
+		dispatchPreviewTap(timeout, 'Send')
+		vi.advanceTimersByTime(3_000)
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+		expect(timeout.term.sent).toEqual(['partial fallback'])
+		expect(timeout.controller.state).toBe('idle')
+		timeout.controller.dispose()
+	})
+
+	test('Cancel during waiting-final discards the session', async () => {
+		const harness = createHarness()
+		await startRecording(harness)
+		dispatchTap(harness.button)
+		dispatchPreviewTap(harness, 'Cancel')
+		expect(harness.term.sent).toEqual([])
+		expect(harness.controller.state).toBe('idle')
 		harness.controller.dispose()
 	})
 
