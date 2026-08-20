@@ -484,9 +484,16 @@ describe('client connection state machine', () => {
 	test('pre-snapshot output over one MiB closes the socket and retries', async () => {
 		const socket = await freshPreSyncAttempt()
 		socket.open()
+		let notice = ''
+		const onNotice = (event: Event): void => {
+			if (event instanceof CustomEvent && typeof event.detail === 'string') notice = event.detail
+		}
+		window.addEventListener('remobi-connection-notice', onNotice)
 		receive(socket, { type: 'output', data: '🙂'.repeat(262_145), seq: 1 })
+		window.removeEventListener('remobi-connection-notice', onNotice)
 		expect(socket.readyState).toBe(FakeSocket.CLOSED)
 		expect(getStatus().lastFailureReason).toBe('output-overflow')
+		expect(notice).toBe('Output too fast — resyncing.')
 		const socketCount = harness.sockets.length
 		await vi.advanceTimersByTimeAsync(999)
 		expect(harness.sockets).toHaveLength(socketCount)
