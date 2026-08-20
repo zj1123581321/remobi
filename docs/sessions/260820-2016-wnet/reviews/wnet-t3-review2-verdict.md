@@ -164,3 +164,35 @@ OCR 前置扫描已执行，但包装器三条腿均为 `status=skipped` 等价�
 | reconnect backoff 到期 | synced正常没有 reconnect backoff；若旧 timer残留，connect路径会清理旧 epoch并重新同步。 |
 | bufferedAmount settle | 当前 socket仍 OPEN且仍 synced时，bufferedAmount>0 走 socket-error fail；归零则保持 synced。 |
 | 时间流逝至 freshness window 过期 | 纯时间推进不派事件，状态字段暂仍是 synced；下一次普通 input 先过 `Date.now()` gate，失效并关闭 socket。该时间层是事件漏发/页面冻结的兜底，不把“未收到坏消息”当证据。 |
+
+## 证据源 K：重入与竞态实测
+
+实际 stdout（stderr 中仅有预期的 `remobi: server-side notice`）：
+
+```text
+K1 nested visibilitychange: closed=true state=disconnected sockets-unchanged=true
+K2 timer collision probe: syncing timers=1; at+10000 socket=closed state=reconnecting; heartbeat was not armed
+K3 applySnapshot callback re-entry: offline closed=true final-state=disconnected
+K4 CONNECTING + pagehide/offline: socket=closed hidden-retry=none visible-retry=one
+K5 requestReconnect x8: new-sockets=1 state=reconnecting
+K5b requestReconnect across turns x3: new-sockets=3 final-state=reconnecting previous-connectings=closed
+K6 stale freshness + old pong: closed=true state=reconnecting old-pong-did-not-revive=true
+J-message error/exit: error-only=syncing; close=reconnecting; exit-only=synced; close=disconnected/no-auto-reconnect
+```
+
+逐项判断：
+
+1. K1：事件处理器中再次派发 `visibilitychange`，两次 `suspendConnection()` 都递增 epoch、关闭当前 socket；没有创建额外 socket，也没有让旧状态复活。
+2. K2：open 后只存在一个 snapshot deadline；`applySnapshot()` 先清掉它，随后才由 `startHeartbeat()` 建 heartbeat deadline。将 fake clock 推到 snapshot deadline 同一边界得到一次关闭和一次退避，未观察到两个 deadline 并存或双重失败。
+3. K3：在 `applySnapshot()` 的 `term.write` 回调已把状态写成 `synced`、正在通知状态订阅者的执行期间派发 `offline`。重入的 `suspendConnection()` 使 socket 关闭、epoch 失效，回调后半段的 heartbeat/resize guard 不再发出任何旧 epoch 帧，最终为 `disconnected`。
+4. K4：socket 仍为 CONNECTING 时依次触发 `pagehide` 与 `offline`，当前 socket 关闭，15 秒内没有后台重连；变为 visible 后恰好建立一个新 epoch。
+5. K5：同一 JavaScript turn 内连续 8 次 `requestReconnect()` 被 `immediateAttemptQueued` 合并成一个新 socket。K5b 也观察到跨 turn 的每次调用会按显式“立即重试”语义替换一个 CONNECTING socket；旧 socket 先关闭、最终仍只有一个当前 epoch，没有输入排队或执行。这是显式用户动作的重复请求，不违反已锁定的不变式，未升级为 finding。
+6. K6：freshness gate 触发 `failConnection()` 后立即递增 epoch、清空 heartbeat ID；同一 tick 随后送达旧 pong 没有续命，状态保持 reconnecting。
+
+探针命令与结果：
+
+```text
+./node_modules/.bin/vitest run tests/wnet-t3-review2-race.test.ts --reporter=verbose \
+  --config /home/zlx/projects/oss/remobi-worktrees/wnet-t3/vitest.config.ts
+Test Files 1 passed; Tests 8 passed
+```
