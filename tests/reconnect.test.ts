@@ -1,31 +1,48 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { setupReconnect } from '../src/reconnect'
-import { mockTerminal } from './fixtures'
+import type { ConnectionStatus, XTerminal } from '../src/types'
 
-/** Minimal WebSocket-like object with url and EventTarget methods */
-function mockWebSocket(url: string): WebSocket {
-	const target = new EventTarget()
-	return {
-		url,
-		addEventListener: target.addEventListener.bind(target),
-		removeEventListener: target.removeEventListener.bind(target),
-		dispatchEvent: target.dispatchEvent.bind(target),
-		close() {},
-		// oxlint-disable-next-line typescript/consistent-type-assertions -- mock object for testing
-	} as unknown as WebSocket
+function mockConnectionTerminal(
+	initial: ConnectionStatus = {
+		state: 'disconnected',
+		consecutivePreSyncFailures: 0,
+		lastFailureReason: null,
+	},
+): XTerminal & { setStatus(status: ConnectionStatus): void; reconnectCalls: number } {
+	let status = initial
+	const listeners = new Set<(next: ConnectionStatus) => void>()
+	const term = {
+		reconnectCalls: 0,
+		options: { fontSize: 14 },
+		input() {},
+		focus() {},
+		onData() {
+			return { dispose() {} }
+		},
+		isConnected: () => status.state === 'synced',
+		onConnectionChange() {
+			return { dispose() {} }
+		},
+		getConnectionStatus: () => status,
+		onConnectionStatusChange(handler: (next: ConnectionStatus) => void) {
+			listeners.add(handler)
+			handler(status)
+			return { dispose: () => listeners.delete(handler) }
+		},
+		requestReconnect() {
+			term.reconnectCalls += 1
+		},
+		setStatus(next: ConnectionStatus) {
+			status = next
+			for (const listener of listeners) listener(status)
+		},
+	}
+	return term
 }
 
 function getOverlay(): HTMLElement | null {
 	return document.getElementById('remobi-reconnect-overlay')
-}
-
-function stubLocationReload(): { readonly calls: number[] } {
-	const calls: number[] = []
-	window.location.reload = () => {
-		calls.push(Date.now())
-	}
-	return { calls }
 }
 
 beforeEach(() => {
@@ -40,197 +57,144 @@ afterEach(() => {
 })
 
 describe('setupReconnect', () => {
-	test('overlay is hidden by default', () => {
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
+	test.each([
+		['disconnected', 'Disconnected'],
+		['reconnecting', 'Reconnecting…'],
+		['syncing', 'Syncing…'],
+		['synced', 'Synced'],
+	] as const)('renders the %s state', (state, text) => {
+		const term = mockConnectionTerminal()
+		const dispose = setupReconnect(term, { enabled: true })
+		if (state !== 'disconnected') {
+			term.setStatus({ state, consecutivePreSyncFailures: 0, lastFailureReason: null })
+		}
 		const overlay = getOverlay()
-		expect(overlay).not.toBeNull()
-		expect(overlay?.style.display).toBe('none')
+		expect(overlay?.dataset.connectionState).toBe(state)
+		expect(overlay?.querySelector('div')?.textContent).toBe(text)
+		expect(overlay?.style.display).toBe(state === 'synced' ? 'none' : 'flex')
 		dispose()
 	})
 
-	test('overlay shown when WebSocket closes', () => {
-		const ws = mockWebSocket('ws://localhost:1234/ws')
-		window.__remobiSockets = [ws]
-
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
-
-		ws.dispatchEvent(new Event('close'))
-
-		const overlay = getOverlay()
-		expect(overlay?.style.display).toBe('flex')
-		dispose()
-	})
-
-	test('overlay shown when WebSocket errors', () => {
-		const ws = mockWebSocket('ws://localhost:1234/ws')
-		window.__remobiSockets = [ws]
-
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
-
-		ws.dispatchEvent(new Event('error'))
-
-		const overlay = getOverlay()
-		expect(overlay?.style.display).toBe('flex')
-		dispose()
-	})
-
-	test('does nothing when disabled', () => {
-		const dispose = setupReconnect(mockTerminal(), { enabled: false })
+	test('disabled mode does not render an overlay', () => {
+		const dispose = setupReconnect(mockConnectionTerminal(), { enabled: false })
 		expect(getOverlay()).toBeNull()
 		dispose()
 	})
 
 	test('dispose removes overlay from DOM', () => {
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
+		const dispose = setupReconnect(mockConnectionTerminal(), { enabled: true })
 		expect(getOverlay()).not.toBeNull()
 		dispose()
 		expect(getOverlay()).toBeNull()
 	})
 
-	test('falls back to offline events when no WebSocket found', () => {
-		window.__remobiSockets = []
-
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
-
-		window.dispatchEvent(new Event('offline'))
-
-		const overlay = getOverlay()
-		expect(overlay?.style.display).toBe('flex')
-		dispose()
-	})
-
 	test('overlay contains reconnect button', () => {
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
+		const dispose = setupReconnect(mockConnectionTerminal(), { enabled: true })
 		const overlay = getOverlay()
-		const button = overlay?.querySelector('button')
-		expect(button).not.toBeNull()
-		expect(button?.textContent).toBe('Reconnect')
+		const buttons = [...(overlay?.querySelectorAll('button') ?? [])]
+		expect(buttons.map((button) => button.textContent)).toEqual(['Retry now', 'Re-authenticate'])
 		dispose()
 	})
 
-	test('focuses reconnect button when overlay is shown', () => {
-		const ws = mockWebSocket('ws://localhost:1234/ws')
-		window.__remobiSockets = [ws]
+	test.each(['button', 'backdrop', 'message'] as const)(
+		'clicking %s forwards immediate retry once',
+		(target) => {
+			const term = mockConnectionTerminal()
+			const dispose = setupReconnect(term, { enabled: true })
+			const overlay = getOverlay()
+			const targetElement =
+				target === 'button'
+					? overlay?.querySelector('button')
+					: target === 'message'
+						? overlay?.querySelector('div')
+						: overlay
+			targetElement?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+			expect(term.reconnectCalls).toBe(1)
+			dispose()
+		},
+	)
 
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
-		ws.dispatchEvent(new Event('close'))
+	test.each([
+		['socket-closed', 'Connection failed — you may need to re-authenticate.', 3, true],
+		['protocol-error', 'Connection failed — refresh, and check the server version.', 3, false],
+		['output-overflow', 'Output too fast — resyncing.', 1, false],
+	] as const)('failure hint renders correctly for %s', (reason, message, failures, reloadable) => {
+		const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {})
+		const term = mockConnectionTerminal()
+		const dispose = setupReconnect(term, { enabled: true })
+		term.setStatus({
+			state: 'reconnecting',
+			consecutivePreSyncFailures: failures,
+			lastFailureReason: reason,
+		})
+		const buttons = [...(getOverlay()?.querySelectorAll('button') ?? [])]
+		expect(getOverlay()?.querySelector('div')?.textContent).toBe(message)
+		expect(buttons[1]?.style.display).toBe(failures >= 3 ? 'block' : 'none')
+		if (reloadable) {
+			buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+			expect(reload).toHaveBeenCalledTimes(1)
+		}
+		dispose()
+		reload.mockRestore()
+	})
 
-		const button = getOverlay()?.querySelector('button')
-		expect(document.activeElement).toBe(button)
+	test('connection notice replaces the state message without a second overlay', () => {
+		const term = mockConnectionTerminal({
+			state: 'syncing',
+			consecutivePreSyncFailures: 0,
+			lastFailureReason: null,
+		})
+		const dispose = setupReconnect(term, { enabled: true })
+		window.dispatchEvent(
+			new CustomEvent('remobi-connection-notice', { detail: 'Not sent — still syncing.' }),
+		)
+		expect(document.querySelectorAll('#remobi-reconnect-overlay')).toHaveLength(1)
+		expect(getOverlay()?.querySelector('div')?.textContent).toBe('Not sent — still syncing.')
 		dispose()
 	})
 
-	test('clicking reconnect button reloads once', () => {
-		const reload = stubLocationReload()
-		const ws = mockWebSocket('ws://localhost:1234/ws')
-		window.__remobiSockets = [ws]
-
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
-		ws.dispatchEvent(new Event('close'))
-
-		const button = getOverlay()?.querySelector('button')
-		button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-
-		expect(reload.calls).toHaveLength(1)
+	test('session-ended notice hides re-authentication but keeps retry available', () => {
+		const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {})
+		const term = mockConnectionTerminal({
+			state: 'reconnecting',
+			consecutivePreSyncFailures: 3,
+			lastFailureReason: 'socket-closed',
+		})
+		const dispose = setupReconnect(term, { enabled: true })
+		window.dispatchEvent(
+			new CustomEvent('remobi-connection-notice', {
+				detail: 'Session ended — restart remobi to start a new one.',
+			}),
+		)
+		const buttons = [...(getOverlay()?.querySelectorAll('button') ?? [])]
+		expect(getOverlay()?.querySelector('div')?.textContent).toBe(
+			'Session ended — restart remobi to start a new one.',
+		)
+		expect(buttons[0]?.textContent).toBe('Retry now')
+		expect(buttons[1]?.textContent).toBe('Re-authenticate')
+		expect(buttons[1]?.style.display).toBe('none')
+		buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+		expect(term.reconnectCalls).toBe(1)
+		expect(reload).not.toHaveBeenCalled()
 		dispose()
+		reload.mockRestore()
 	})
 
-	test('clicking overlay backdrop reloads once', () => {
-		const reload = stubLocationReload()
-		const ws = mockWebSocket('ws://localhost:1234/ws')
-		window.__remobiSockets = [ws]
-
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
-		ws.dispatchEvent(new Event('close'))
-
-		getOverlay()?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-
-		expect(reload.calls).toHaveLength(1)
-		dispose()
-	})
-
-	test('clicking overlay message reloads once', () => {
-		const reload = stubLocationReload()
-		const ws = mockWebSocket('ws://localhost:1234/ws')
-		window.__remobiSockets = [ws]
-
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
-		ws.dispatchEvent(new Event('close'))
-
-		const message = getOverlay()?.querySelector('div')
-		message?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-
-		expect(reload.calls).toHaveLength(1)
-		dispose()
-	})
-
-	test('multiple reconnect triggers reload only once', () => {
-		const reload = stubLocationReload()
-		const ws = mockWebSocket('ws://localhost:1234/ws')
-		window.__remobiSockets = [ws]
-
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
-		ws.dispatchEvent(new Event('close'))
-
-		const overlay = getOverlay()
-		overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-		overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-		window.dispatchEvent(new Event('online'))
-
-		expect(reload.calls).toHaveLength(1)
-		dispose()
-	})
-
-	test('dispose removes visibilitychange listener in fallback path', () => {
-		window.__remobiSockets = []
-
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
-
-		// Trigger disconnect so overlay shows
-		window.dispatchEvent(new Event('offline'))
-		expect(getOverlay()?.style.display).toBe('flex')
-
-		// Dispose should remove the visibilitychange listener
-		dispose()
-
-		// Re-add overlay manually to check it stays hidden after dispose
-		const overlay = document.createElement('div')
-		overlay.id = 'remobi-reconnect-overlay'
-		overlay.style.display = 'none'
-		document.body.appendChild(overlay)
-
-		// Dispatching visibilitychange after dispose should have no effect
-		// (the listener was removed, so no reload attempt)
-		document.dispatchEvent(new Event('visibilitychange'))
-		expect(overlay.style.display).toBe('none')
-
-		overlay.remove()
-	})
-
-	test('ignores non-ttyd WebSockets', () => {
-		const ws = mockWebSocket('ws://localhost:1234/other')
-		window.__remobiSockets = [ws]
-
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
-
-		// No WS ending in /ws found → falls back to offline events
-		window.dispatchEvent(new Event('offline'))
-
-		const overlay = getOverlay()
-		expect(overlay?.style.display).toBe('flex')
-		dispose()
-	})
-
-	test('fallback overlay supports tap to reconnect', () => {
-		const reload = stubLocationReload()
-		window.__remobiSockets = []
-
-		const dispose = setupReconnect(mockTerminal(), { enabled: true })
-		window.dispatchEvent(new Event('offline'))
-
-		getOverlay()?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-
-		expect(reload.calls).toHaveLength(1)
+	test('synced clears an explicit session-ended notice', () => {
+		const term = mockConnectionTerminal({
+			state: 'reconnecting',
+			consecutivePreSyncFailures: 0,
+			lastFailureReason: null,
+		})
+		const dispose = setupReconnect(term, { enabled: true })
+		window.dispatchEvent(
+			new CustomEvent('remobi-connection-notice', {
+				detail: 'Session ended — restart remobi to start a new one.',
+			}),
+		)
+		term.setStatus({ state: 'synced', consecutivePreSyncFailures: 0, lastFailureReason: null })
+		expect(getOverlay()?.querySelector('div')?.textContent).toBe('Synced')
+		expect(getOverlay()?.style.display).toBe('none')
 		dispose()
 	})
 })

@@ -1,4 +1,10 @@
-import type { XTerminal } from '../src/types'
+import type { ConnectionStatus, XTerminal } from '../src/types'
+
+const syncedStatus: ConnectionStatus = {
+	state: 'synced',
+	consecutivePreSyncFailures: 0,
+	lastFailureReason: null,
+}
 
 /** Base mock terminal — all methods are no-ops */
 export function mockTerminal(): XTerminal {
@@ -15,6 +21,14 @@ export function mockTerminal(): XTerminal {
 		onConnectionChange(_handler: (connected: boolean) => void) {
 			return { dispose() {} }
 		},
+		getConnectionStatus() {
+			return syncedStatus
+		},
+		onConnectionStatusChange(handler: (status: ConnectionStatus) => void) {
+			handler(syncedStatus)
+			return { dispose() {} }
+		},
+		requestReconnect() {},
 	}
 }
 
@@ -44,6 +58,14 @@ export function mockTerminalWithSent(): MockTermWithSent {
 		onConnectionChange(_handler: (connected: boolean) => void) {
 			return { dispose() {} }
 		},
+		getConnectionStatus() {
+			return syncedStatus
+		},
+		onConnectionStatusChange(handler: (status: ConnectionStatus) => void) {
+			handler(syncedStatus)
+			return { dispose() {} }
+		},
+		requestReconnect() {},
 	}
 }
 
@@ -64,6 +86,14 @@ export function mockTerminalWithFocus(): XTerminal & { focused: boolean } {
 		onConnectionChange(_handler: (connected: boolean) => void) {
 			return { dispose() {} }
 		},
+		getConnectionStatus() {
+			return syncedStatus
+		},
+		onConnectionStatusChange(handler: (status: ConnectionStatus) => void) {
+			handler(syncedStatus)
+			return { dispose() {} }
+		},
+		requestReconnect() {},
 		focused: false,
 	}
 }
