@@ -1,21 +1,15 @@
-import type { ReconnectConfig, XTerminal } from './types'
+import type { ConnectionStatus, ReconnectConfig, XTerminal } from './types'
 import { el } from './util/dom'
 import { onTap } from './util/tap'
 
-/** Find the active remobi terminal WebSocket */
-function findTerminalSocket(): WebSocket | undefined {
-	const sockets = window.__remobiSockets
-	if (!sockets) return undefined
-	return sockets.find((ws) => ws.url.includes('/ws'))
-}
-
 interface ReconnectOverlay {
 	readonly element: HTMLDivElement
-	readonly button: HTMLButtonElement
+	readonly message: HTMLDivElement
+	readonly retryButton: HTMLButtonElement
+	readonly authButton: HTMLButtonElement
 }
 
-/** Create the reconnect overlay DOM (hidden by default) */
-function createOverlay(onReconnect: () => void): ReconnectOverlay {
+function createOverlay(onReconnect: () => void, onReload: () => void): ReconnectOverlay {
 	const overlay = el('div', {
 		id: 'remobi-reconnect-overlay',
 		style: [
@@ -36,9 +30,8 @@ function createOverlay(onReconnect: () => void): ReconnectOverlay {
 	const message = el('div', {
 		style: 'font-size:1.4rem;font-weight:600',
 	})
-	message.textContent = 'Connection lost'
 
-	const button = el('button', {
+	const retryButton = el('button', {
 		style: [
 			'padding:10px 28px',
 			'font-size:1rem',
@@ -50,87 +43,93 @@ function createOverlay(onReconnect: () => void): ReconnectOverlay {
 			'font-weight:600',
 		].join(';'),
 	})
-	button.type = 'button'
-	button.textContent = 'Reconnect'
-	onTap(button, (event: Event) => {
+	retryButton.type = 'button'
+	retryButton.textContent = '立即重试'
+	onTap(retryButton, (event: Event) => {
 		event.stopPropagation()
 		onReconnect()
 	})
 
-	onTap(overlay, () => {
-		onReconnect()
+	const authButton = el('button', {
+		style: [
+			'padding:10px 28px',
+			'font-size:1rem',
+			'border:1px solid #cba6f7',
+			'border-radius:8px',
+			'background:transparent',
+			'color:#cba6f7',
+			'cursor:pointer',
+			'font-weight:600',
+		].join(';'),
+	})
+	authButton.type = 'button'
+	authButton.textContent = '重新认证'
+	onTap(authButton, (event: Event) => {
+		event.stopPropagation()
+		onReload()
 	})
 
-	overlay.appendChild(message)
-	overlay.appendChild(button)
-	return { element: overlay, button }
+	onTap(overlay, () => onReconnect())
+	overlay.append(message, retryButton, authButton)
+	return { element: overlay, message, retryButton, authButton }
 }
 
-/**
- * Set up reconnect detection and overlay.
- *
- * Watches the terminal WebSocket for close/error events. Falls back to
- * navigator.onLine + visibilitychange if no WebSocket found.
- * Returns a dispose function that removes listeners and DOM.
- */
-export function setupReconnect(_term: XTerminal, config: ReconnectConfig): () => void {
-	if (!config.enabled) {
+function statusMessage(status: ConnectionStatus): string {
+	if (status.lastFailureReason === 'output-overflow') return 'Output too fast — resyncing.'
+	if (status.lastFailureReason === 'protocol-error' && status.consecutivePreSyncFailures >= 3) {
+		return 'Connection failed — refresh, and check the server version.'
+	}
+	if (status.consecutivePreSyncFailures >= 3) {
+		return 'Connection failed — you may need to re-authenticate.'
+	}
+	switch (status.state) {
+		case 'disconnected':
+			return 'Disconnected'
+		case 'reconnecting':
+			return 'Reconnecting…'
+		case 'syncing':
+			return 'Syncing…'
+		case 'synced':
+			return 'Synced'
+	}
+}
+
+/** Render client-owned connection status and forward the two user actions. */
+export function setupReconnect(term: XTerminal, config: ReconnectConfig): () => void {
+	if (!config.enabled) return () => {}
+	if (!term.getConnectionStatus || !term.onConnectionStatusChange || !term.requestReconnect) {
 		return () => {}
 	}
 
-	let disconnected = false
-	let reconnectTriggered = false
-
-	function triggerReconnect(): void {
-		if (!disconnected || reconnectTriggered) return
-		reconnectTriggered = true
-		location.reload()
-	}
-
-	const { element: overlay, button } = createOverlay(triggerReconnect)
+	const {
+		element: overlay,
+		message,
+		authButton,
+	} = createOverlay(
+		() => term.requestReconnect?.(),
+		() => location.reload(),
+	)
 	document.body.appendChild(overlay)
 
-	function onDisconnect(): void {
-		if (disconnected) return
-		disconnected = true
+	function render(status: ConnectionStatus): void {
+		message.textContent = statusMessage(status)
+		overlay.dataset.connectionState = status.state
+		authButton.style.display = status.consecutivePreSyncFailures >= 3 ? 'block' : 'none'
+		overlay.style.display = status.state === 'synced' ? 'none' : 'flex'
+	}
+
+	const statusSubscription = term.onConnectionStatusChange(render)
+	const onNotice = (event: Event): void => {
+		const notice = (event as CustomEvent<string>).detail
+		if (typeof notice !== 'string') return
+		message.textContent = notice
 		overlay.style.display = 'flex'
-		button.focus()
 	}
-
-	function onOnline(): void {
-		if (disconnected) {
-			triggerReconnect()
-		}
-	}
-
-	function onVisibilityChange(): void {
-		if (document.visibilityState === 'visible' && disconnected) {
-			triggerReconnect()
-		}
-	}
-
-	// Try direct WebSocket tracking first
-	const ws = findTerminalSocket()
-	if (ws) {
-		ws.addEventListener('close', onDisconnect)
-		ws.addEventListener('error', onDisconnect)
-	} else {
-		// Fallback: online/offline + visibilitychange heuristics
-		window.addEventListener('offline', onDisconnect)
-		document.addEventListener('visibilitychange', onVisibilityChange)
-	}
-
-	window.addEventListener('online', onOnline)
+	window.addEventListener('remobi-connection-notice', onNotice)
 
 	return () => {
-		if (ws) {
-			ws.removeEventListener('close', onDisconnect)
-			ws.removeEventListener('error', onDisconnect)
-		} else {
-			window.removeEventListener('offline', onDisconnect)
-			document.removeEventListener('visibilitychange', onVisibilityChange)
-		}
-		window.removeEventListener('online', onOnline)
+		statusSubscription.dispose()
+		window.removeEventListener('remobi-connection-notice', onNotice)
 		overlay.remove()
 	}
 }
