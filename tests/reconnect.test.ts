@@ -152,4 +152,49 @@ describe('setupReconnect', () => {
 		expect(getOverlay()?.querySelector('div')?.textContent).toBe('Not sent — still syncing.')
 		dispose()
 	})
+
+	test('session-ended notice hides re-authentication but keeps retry available', () => {
+		const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {})
+		const term = mockConnectionTerminal({
+			state: 'reconnecting',
+			consecutivePreSyncFailures: 3,
+			lastFailureReason: 'socket-closed',
+		})
+		const dispose = setupReconnect(term, { enabled: true })
+		window.dispatchEvent(
+			new CustomEvent('remobi-connection-notice', {
+				detail: 'Session ended — restart remobi to start a new one.',
+			}),
+		)
+		const buttons = [...(getOverlay()?.querySelectorAll('button') ?? [])]
+		expect(getOverlay()?.querySelector('div')?.textContent).toBe(
+			'Session ended — restart remobi to start a new one.',
+		)
+		expect(buttons[0]?.textContent).toBe('Retry now')
+		expect(buttons[1]?.textContent).toBe('Re-authenticate')
+		expect(buttons[1]?.style.display).toBe('none')
+		buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+		expect(term.reconnectCalls).toBe(1)
+		expect(reload).not.toHaveBeenCalled()
+		dispose()
+		reload.mockRestore()
+	})
+
+	test('synced clears an explicit session-ended notice', () => {
+		const term = mockConnectionTerminal({
+			state: 'reconnecting',
+			consecutivePreSyncFailures: 0,
+			lastFailureReason: null,
+		})
+		const dispose = setupReconnect(term, { enabled: true })
+		window.dispatchEvent(
+			new CustomEvent('remobi-connection-notice', {
+				detail: 'Session ended — restart remobi to start a new one.',
+			}),
+		)
+		term.setStatus({ state: 'synced', consecutivePreSyncFailures: 0, lastFailureReason: null })
+		expect(getOverlay()?.querySelector('div')?.textContent).toBe('Synced')
+		expect(getOverlay()?.style.display).toBe('none')
+		dispose()
+	})
 })
