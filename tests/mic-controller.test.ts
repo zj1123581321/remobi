@@ -785,16 +785,24 @@ describe('preview injection', () => {
 		)
 		const harness = createHarness()
 		expect(harness.controller.preview.getText()).toBe('stored draft')
+		expect(harness.controller.preview.isOpen()).toBe(false)
+		harness.controller.preview.input.value = ''
+		window.dispatchEvent(new Event('pageshow'))
+		expect(harness.controller.preview.getText()).toBe('stored draft')
+		expect(harness.controller.preview.isOpen()).toBe(false)
 
 		harness.controller.preview.open()
 		expect(harness.controller.preview.getText()).toBe('stored draft')
+		expect(harness.controller.preview.isOpen()).toBe(true)
 		harness.controller.preview.input.value = 'newer draft'
 		window.dispatchEvent(new Event('pageshow'))
 		expect(harness.controller.preview.getText()).toBe('newer draft')
+		expect(harness.controller.preview.isOpen()).toBe(true)
 
 		harness.controller.preview.input.value = ''
 		window.dispatchEvent(new Event('pageshow'))
 		expect(harness.controller.preview.getText()).toBe('stored draft')
+		expect(harness.controller.preview.isOpen()).toBe(true)
 		harness.controller.dispose()
 	})
 

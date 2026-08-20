@@ -49,6 +49,9 @@ describe('composer draft persistence', () => {
 		const composer = createAsrPreview()
 
 		expect(composer.getText()).toBe('长草稿')
+		expect(composer.isOpen()).toBe(false)
+		expect(composer.element.style.display).toBe('none')
+		expect(composer.input.style.height).toBe('48px')
 	})
 
 	test('final text and reset preserve the stored pending value', () => {
@@ -72,9 +75,34 @@ describe('composer draft persistence', () => {
 		expect(readStoredComposer()).toEqual({ version: 1, draft: '', pending })
 	})
 
-	test('typing over corrupt storage replaces it with the current draft', () => {
-		localStorage.setItem(COMPOSER_STORAGE_KEY, '{ corrupt json')
+	test('typing preserves a legal pending value', () => {
+		const pending = {
+			id: 'a',
+			sessionId: 'session',
+			sourceText: 'source',
+			data: 'data',
+			status: 'pending',
+		}
+		localStorage.setItem(
+			COMPOSER_STORAGE_KEY,
+			JSON.stringify({ version: 1, draft: 'old', pending }),
+		)
 		const composer = createAsrPreview()
+		composer.open()
+		composer.input.value = 'typed over pending'
+		composer.input.dispatchEvent(new Event('input', { bubbles: true }))
+
+		expect(readStoredComposer()).toEqual({ version: 1, draft: 'typed over pending', pending })
+	})
+
+	test.each([
+		['bad JSON', '{ corrupt json'],
+		['wrong version', JSON.stringify({ version: 2, draft: 'old', pending: null })],
+	])('typing over %s replaces it with the current draft', (_label, raw) => {
+		localStorage.setItem(COMPOSER_STORAGE_KEY, raw)
+		const composer = createAsrPreview()
+		composer.open()
+		expect(composer.isOpen()).toBe(true)
 
 		composer.input.value = 'new draft after recovery'
 		composer.input.dispatchEvent(new Event('input', { bubbles: true }))
@@ -119,6 +147,7 @@ describe('composer draft persistence', () => {
 
 		expect(composer.getText()).toBe('')
 		expect(composer.message.textContent).toBe(DRAFT_RESTORE_FAILURE)
+		expect(composer.isOpen()).toBe(false)
 		expect(localStorage.getItem(COMPOSER_STORAGE_KEY)).toBe(raw)
 	})
 
@@ -135,6 +164,7 @@ describe('composer draft persistence', () => {
 
 		expect(composer.getText()).toBe('')
 		expect(composer.message.textContent).toBe(DRAFT_STORAGE_FAILURE)
+		expect(composer.isOpen()).toBe(false)
 	})
 
 	test('getItem failure is visible and leaves the textarea usable', () => {
@@ -144,11 +174,13 @@ describe('composer draft persistence', () => {
 		})
 
 		const composer = createAsrPreview()
+		composer.open()
 		composer.input.value = 'still editable'
 		composer.input.dispatchEvent(new Event('input', { bubbles: true }))
 
 		expect(composer.getText()).toBe('still editable')
 		expect(composer.message.textContent).toBe(DRAFT_STORAGE_FAILURE)
+		expect(composer.isOpen()).toBe(true)
 	})
 
 	test('setItem quota failure retries silently after the first visible warning', () => {
@@ -157,6 +189,7 @@ describe('composer draft persistence', () => {
 			throw new DOMException('full', 'QuotaExceededError')
 		})
 		const composer = createAsrPreview()
+		composer.open()
 
 		composer.input.value = 'first draft'
 		composer.input.dispatchEvent(new Event('input', { bubbles: true }))
@@ -165,6 +198,7 @@ describe('composer draft persistence', () => {
 
 		expect(composer.getText()).toBe('second draft')
 		expect(composer.message.textContent).toBe(DRAFT_STORAGE_FAILURE)
+		expect(composer.isOpen()).toBe(true)
 		expect(setItem).toHaveBeenCalledTimes(2)
 		expect(errorSpy).toHaveBeenCalledTimes(1)
 	})

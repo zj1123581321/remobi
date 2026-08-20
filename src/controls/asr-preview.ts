@@ -183,11 +183,11 @@ export function createAsrPreview(): AsrPreview {
 		if (storageFailureShown) return
 		storageFailureShown = true
 		console.error('remobi: composer draft storage unavailable', error)
-		showMessage(DRAFT_STORAGE_FAILURE)
+		message.textContent = DRAFT_STORAGE_FAILURE
 	}
 
 	function showRestoreFailure(): void {
-		showMessage(DRAFT_RESTORE_FAILURE)
+		message.textContent = DRAFT_RESTORE_FAILURE
 	}
 
 	function persistDraft(draft: string): void {
