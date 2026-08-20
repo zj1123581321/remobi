@@ -3,7 +3,7 @@ import { onTap } from '../util/tap'
 
 export interface AsrPreview {
 	readonly element: HTMLDivElement
-	readonly input: HTMLInputElement
+	readonly input: HTMLTextAreaElement
 	readonly message: HTMLDivElement
 	readonly isOpen: () => boolean
 	/** @deprecated Use isOpen; retained for existing preview consumers. */
@@ -14,8 +14,10 @@ export interface AsrPreview {
 	readonly show: (text: string) => void
 	readonly setPartial: (text: string) => void
 	readonly showMessage: (message: string) => void
+	readonly resetDraft: () => void
 	readonly clear: () => void
 	readonly onOpenChange: (handler: (open: boolean) => void) => { dispose(): void }
+	readonly onHeightChange: (handler: () => void) => { dispose(): void }
 	readonly onConfirm: (handler: () => void) => { dispose(): void }
 	readonly onCancel: (handler: () => void) => { dispose(): void }
 }
@@ -56,8 +58,9 @@ export function createAsrPreview(): AsrPreview {
 	})
 	closeButton.textContent = '×'
 
-	const input = el('input', {
-		type: 'text',
+	const input = el('textarea', {
+		rows: '1',
+		wrap: 'soft',
 		placeholder: 'Speak or type…',
 		'aria-label': 'Voice composer input',
 		autocomplete: 'off',
@@ -86,6 +89,21 @@ export function createAsrPreview(): AsrPreview {
 	let pendingPartial: string | undefined
 	let partialFrame: number | undefined
 	const openChangeHandlers = new Set<(open: boolean) => void>()
+	const heightChangeHandlers = new Set<() => void>()
+	let inputHeight = ''
+
+	function resizeInput(): void {
+		const previousHeight = inputHeight
+		input.style.height = 'auto'
+		const nextHeight = `${Math.min(Math.max(input.scrollHeight, 48), 168)}px`
+		input.style.height = nextHeight
+		inputHeight = nextHeight
+		if (nextHeight !== previousHeight) {
+			for (const handler of heightChangeHandlers) handler()
+		}
+	}
+
+	input.addEventListener('input', resizeInput)
 
 	function setOpen(next: boolean): void {
 		if (open === next) return
@@ -97,10 +115,10 @@ export function createAsrPreview(): AsrPreview {
 	}
 
 	function openComposer(): void {
-		input.value = ''
-		message.textContent = ''
+		resetDraft()
 		input.readOnly = false
 		setOpen(true)
+		resizeInput()
 	}
 
 	function closeComposer(): void {
@@ -111,6 +129,7 @@ export function createAsrPreview(): AsrPreview {
 		input.value = text
 		message.textContent = ''
 		setOpen(true)
+		resizeInput()
 	}
 
 	function setPartial(text: string): void {
@@ -128,12 +147,17 @@ export function createAsrPreview(): AsrPreview {
 		setOpen(true)
 	}
 
-	function clear(): void {
+	function resetDraft(): void {
 		if (partialFrame !== undefined) cancelAnimationFrame(partialFrame)
 		partialFrame = undefined
 		pendingPartial = undefined
 		input.value = ''
 		message.textContent = ''
+		resizeInput()
+	}
+
+	function clear(): void {
+		resetDraft()
 		setOpen(false)
 	}
 
@@ -177,10 +201,15 @@ export function createAsrPreview(): AsrPreview {
 		show,
 		setPartial,
 		showMessage,
+		resetDraft,
 		clear,
 		onOpenChange(handler) {
 			openChangeHandlers.add(handler)
 			return { dispose: () => openChangeHandlers.delete(handler) }
+		},
+		onHeightChange(handler) {
+			heightChangeHandlers.add(handler)
+			return { dispose: () => heightChangeHandlers.delete(handler) }
 		},
 		onConfirm: (handler) => register(sendButton, handler),
 		onCancel: registerCancel,

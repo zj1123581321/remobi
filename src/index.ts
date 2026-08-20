@@ -301,7 +301,15 @@ export function init(
 
 				// Height management
 				const scheduleHeightResize = initHeightManager(toolbar, micController?.preview)
-				disposeComposerResize = micController?.preview.onOpenChange(scheduleHeightResize)
+				const composer = micController?.preview
+				const composerOpenChange = composer?.onOpenChange(scheduleHeightResize)
+				const composerHeightChange = composer?.onHeightChange(scheduleHeightResize)
+				disposeComposerResize = {
+					dispose() {
+						composerOpenChange?.dispose()
+						composerHeightChange?.dispose()
+					},
+				}
 
 				// Mobile init data: send once on load if viewport is narrow enough.
 				// Already inside isMobile() guard (touch detection). widthThreshold adds a
