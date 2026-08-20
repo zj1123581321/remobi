@@ -120,7 +120,8 @@ export function setupReconnect(term: XTerminal, config: ReconnectConfig): () => 
 
 	const statusSubscription = term.onConnectionStatusChange(render)
 	const onNotice = (event: Event): void => {
-		const notice = (event as CustomEvent<string>).detail
+		if (!(event instanceof CustomEvent)) return
+		const notice: unknown = event.detail
 		if (typeof notice !== 'string') return
 		message.textContent = notice
 		overlay.style.display = 'flex'

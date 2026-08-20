@@ -152,6 +152,10 @@ interface SessionStatusOverlay {
 	readonly button: HTMLButtonElement
 }
 
+function clearTimer(timer: number | undefined): void {
+	if (timer !== undefined) window.clearTimeout(timer)
+}
+
 function createSessionStatusOverlay(onReload: () => void): SessionStatusOverlay {
 	const overlay = el('div', {
 		id: 'remobi-session-status',
@@ -341,10 +345,6 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		notifyConnectionChange()
 	}
 
-	function clearTimer(timer: number | undefined): void {
-		if (timer !== undefined) window.clearTimeout(timer)
-	}
-
 	function stopHeartbeat(): void {
 		clearTimer(heartbeatDeadlineTimer)
 		clearTimer(heartbeatNextTimer)
@@ -469,6 +469,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 			clearPendingOutput()
 			for (const [, output] of buffered
 				.filter(([seq]) => seq > outputWatermark)
+				// oxlint-disable-next-line unicorn/no-array-sort -- buffered is a fresh local array
 				.sort(([left], [right]) => left - right)) {
 				term.write(output)
 			}
