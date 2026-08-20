@@ -144,6 +144,7 @@ function openSocket(port: number): Promise<WebSocket> {
 function waitForJsonMessage(
 	ws: WebSocket,
 	timeoutMs = 10_000,
+	predicate: (message: ReturnType<typeof parseServerMessage>) => boolean = () => true,
 ): Promise<ReturnType<typeof parseServerMessage>> {
 	return new Promise((resolve, reject) => {
 		const timer = setTimeout(() => {
@@ -154,7 +155,7 @@ function waitForJsonMessage(
 		const onMessage = (data: WebSocket.RawData) => {
 			const payload = rawPayload(data)
 			const parsed = parseServerMessage(payload)
-			if (parsed === null) {
+			if (parsed === null || !predicate(parsed)) {
 				return
 			}
 			cleanup()
@@ -255,10 +256,18 @@ describe('serve websocket hardening', () => {
 			const collectFrame = (data: WebSocket.RawData) => rawFrames.push(rawPayload(data))
 			client.on('message', collectFrame)
 			const action = JSON.stringify({ type: 'input-action', id: 'ws-action-1', data: 'ws-marker' })
-			const firstAccepted = waitForJsonMessage(client)
+			const firstAccepted = waitForJsonMessage(
+				client,
+				10_000,
+				(message) => message?.type === 'input-accepted' && message.id === 'ws-action-1',
+			)
 			client.send(action)
 			expect(await firstAccepted).toEqual({ type: 'input-accepted', id: 'ws-action-1' })
-			const secondAccepted = waitForJsonMessage(client)
+			const secondAccepted = waitForJsonMessage(
+				client,
+				10_000,
+				(message) => message?.type === 'input-accepted' && message.id === 'ws-action-1',
+			)
 			client.send(action)
 			expect(await secondAccepted).toEqual({ type: 'input-accepted', id: 'ws-action-1' })
 
