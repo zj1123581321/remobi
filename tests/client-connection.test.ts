@@ -563,4 +563,29 @@ describe('client connection state machine', () => {
 			lastFailureReason: null,
 		})
 	})
+
+	test('a fresh epoch emits only the final resize after syncing', async () => {
+		await freshSynced()
+		const socket = await freshAttempt()
+		const terminal = harness.terminal as FakeTerminal
+		terminal.cols = 120
+		terminal.rows = 45
+		window.__remobiResize?.()
+		terminal.cols = 140
+		terminal.rows = 50
+		window.__remobiResize?.()
+		window.term?.input('must-not-be-replayed', true)
+		expect(socket.sent).toEqual([])
+
+		socket.open()
+		receive(socket, {
+			type: 'snapshot',
+			data: 'fresh',
+			sessionId: 'fresh-session',
+			outputWatermark: 0,
+		})
+		expect(socket.sent).toHaveLength(2)
+		expect(JSON.parse(socket.sent[0] as string)).toMatchObject({ type: 'ping', id: expect.any(String) })
+		expect(JSON.parse(socket.sent[1] as string)).toEqual({ type: 'resize', cols: 140, rows: 50 })
+	})
 })
