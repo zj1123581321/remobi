@@ -189,4 +189,45 @@ describe('client connection state machine', () => {
 			lastFailureReason: 'snapshot-timeout',
 		})
 	})
+
+	test('protocol errors and UTF-8 output overflow use the normal failure path', async () => {
+		await vi.advanceTimersByTimeAsync(1_000)
+		const protocolSocket = harness.sockets[2] as FakeSocket
+		protocolSocket.receive('{bad frame')
+		expect(window.term?.getConnectionStatus?.()).toMatchObject({
+			consecutivePreSyncFailures: 2,
+			lastFailureReason: 'protocol-error',
+		})
+		await vi.advanceTimersByTimeAsync(2_000)
+		const overflowSocket = harness.sockets[3] as FakeSocket
+		overflowSocket.open()
+		receive(overflowSocket, {
+			type: 'output',
+			data: 'é'.repeat(524_289),
+			seq: 1,
+		})
+		expect(window.term?.getConnectionStatus?.()).toMatchObject({
+			consecutivePreSyncFailures: 3,
+			lastFailureReason: 'output-overflow',
+		})
+	})
+
+	test('visible lifecycle events coalesce into one fresh connection', async () => {
+		Object.defineProperty(document, 'visibilityState', {
+			configurable: true,
+			value: 'hidden',
+		})
+		document.dispatchEvent(new Event('visibilitychange'))
+		window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))
+		const countBeforeVisible = harness.sockets.length
+		Object.defineProperty(document, 'visibilityState', {
+			configurable: true,
+			value: 'visible',
+		})
+		document.dispatchEvent(new Event('visibilitychange'))
+		window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
+		window.dispatchEvent(new Event('online'))
+		await Promise.resolve()
+		expect(harness.sockets).toHaveLength(countBeforeVisible + 1)
+	})
 })
