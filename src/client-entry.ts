@@ -12,6 +12,7 @@ import type {
 	ConnectionFailureReason,
 	ConnectionState,
 	ConnectionStatus,
+	InputActionResult,
 	RemobiConfig,
 	XTerminal,
 } from './types'
@@ -59,6 +60,9 @@ function createTermBridge(
 	getConnectionStatus: () => ConnectionStatus,
 	onConnectionStatusChange: (handler: (status: ConnectionStatus) => void) => { dispose(): void },
 	requestReconnect: () => void,
+	getSessionId: () => string | null,
+	sendInputAction: (id: string, data: string) => boolean,
+	onInputActionResult: (handler: (result: InputActionResult) => void) => { dispose(): void },
 ): XTerminal {
 	const options: XTerminal['options'] = {
 		get fontSize() {
@@ -146,6 +150,9 @@ function createTermBridge(
 		getConnectionStatus,
 		onConnectionStatusChange,
 		requestReconnect,
+		getSessionId,
+		sendInputAction,
+		onInputActionResult,
 	}
 }
 
@@ -235,6 +242,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	let pageHidden = document.visibilityState === 'hidden'
 	const connectionListeners = new Set<(connected: boolean) => void>()
 	const connectionStatusListeners = new Set<(status: ConnectionStatus) => void>()
+	const inputActionResultListeners = new Set<(result: InputActionResult) => void>()
 	let lastConnectedState: boolean | undefined
 	let connectionStatus: ConnectionStatus = {
 		state: 'disconnected',
@@ -243,6 +251,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	}
 	let snapshotLoaded = false
 	let snapshotApplying = false
+	let sessionId: string | null = null
 	let lastProvenFreshAt = 0
 	const pendingOutput = new Map<number, string>()
 	let pendingOutputBytes = 0
@@ -280,6 +289,32 @@ function main(config: RemobiConfig, version: string | undefined): void {
 				}),
 			)
 		}
+	}
+
+	function sendInputAction(id: string, data: string): boolean {
+		if (connectionStatus.state !== 'synced' || socket?.readyState !== WebSocket.OPEN) {
+			if (!notSentNoticeShown) {
+				notSentNoticeShown = true
+				window.dispatchEvent(
+					new CustomEvent('remobi-connection-notice', {
+						detail: 'Not sent — still syncing.',
+					}),
+				)
+			}
+			return false
+		}
+		if (Date.now() - lastProvenFreshAt > FRESHNESS_WINDOW_MS) {
+			failConnection(currentEpoch, 'heartbeat-timeout')
+			return false
+		}
+
+		const activeSocket = socket
+		const wasBuffered = activeSocket.bufferedAmount > 0
+		activeSocket.send(serialiseClientMessage({ type: 'input-action', id, data }))
+		if (wasBuffered || activeSocket.bufferedAmount > 0) {
+			scheduleBufferedAmountCheck(currentEpoch, activeSocket)
+		}
+		return true
 	}
 
 	function syncSize(): void {
@@ -331,6 +366,21 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		return {
 			dispose() {
 				connectionStatusListeners.delete(handler)
+			},
+		}
+	}
+
+	function getSessionId(): string | null {
+		return sessionId
+	}
+
+	function onInputActionResult(handler: (result: InputActionResult) => void): {
+		dispose(): void
+	} {
+		inputActionResultListeners.add(handler)
+		return {
+			dispose() {
+				inputActionResultListeners.delete(handler)
 			},
 		}
 	}
@@ -444,6 +494,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		stopHeartbeat()
 		snapshotLoaded = false
 		snapshotApplying = false
+		sessionId = null
 		clearPendingOutput()
 	}
 
@@ -494,7 +545,12 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		sendHeartbeat(myEpoch)
 	}
 
-	function applySnapshot(myEpoch: number, data: string, outputWatermark: number): void {
+	function applySnapshot(
+		myEpoch: number,
+		data: string,
+		snapshotSessionId: string,
+		outputWatermark: number,
+	): void {
 		if (myEpoch !== currentEpoch || snapshotLoaded || snapshotApplying) return
 		snapshotApplying = true
 		term.reset()
@@ -504,6 +560,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 			snapshotDeadlineTimer = undefined
 			snapshotApplying = false
 			snapshotLoaded = true
+			sessionId = snapshotSessionId
 			connectionStatus = {
 				state: 'synced',
 				consecutivePreSyncFailures: 0,
@@ -573,7 +630,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 
 		switch (message.type) {
 			case 'snapshot':
-				applySnapshot(myEpoch, message.data, message.outputWatermark)
+				applySnapshot(myEpoch, message.data, message.sessionId, message.outputWatermark)
 				return
 			case 'output':
 				handleOutput(myEpoch, message.seq, message.data)
@@ -586,6 +643,20 @@ function main(config: RemobiConfig, version: string | undefined): void {
 				return
 			case 'pong':
 				handlePong(myEpoch, message.id)
+				return
+			case 'input-accepted':
+				for (const handler of inputActionResultListeners) {
+					handler({ id: message.id, accepted: true, reason: null })
+				}
+				return
+			case 'input-rejected':
+				for (const handler of inputActionResultListeners) {
+					handler({
+						id: message.id,
+						accepted: false,
+						reason: message.reason,
+					})
+				}
 				return
 		}
 	}
@@ -627,6 +698,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		previousSocket?.close()
 		snapshotLoaded = false
 		snapshotApplying = false
+		sessionId = null
 		clearPendingOutput()
 		exitReceived = false
 		setConnectionStatus('reconnecting')
@@ -663,6 +735,9 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		getConnectionStatus,
 		onConnectionStatusChange,
 		requestReconnect,
+		getSessionId,
+		sendInputAction,
+		onInputActionResult,
 	)
 	// xterm handles real keyboard/touch input locally; forward it to the shared PTY.
 	term.onData((data) => {

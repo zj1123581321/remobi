@@ -60,6 +60,15 @@ async function bootOverlay(config: RemobiConfig = defineConfig()): Promise<XTerm
 			return { dispose() {} }
 		},
 		requestReconnect() {},
+		getSessionId() {
+			return 'test-session'
+		},
+		sendInputAction() {
+			return true
+		},
+		onInputActionResult() {
+			return { dispose() {} }
+		},
 	}
 	window.term = term
 
