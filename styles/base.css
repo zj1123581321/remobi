@@ -242,29 +242,9 @@ body.wt-composer-open #wt-toolbar {
 	color: #f38ba8;
 }
 
-#wt-asr-composer .wt-asr-composer-message[data-submission-status="accepted"] {
-	color: #a6e3a1;
-}
-
 #wt-asr-composer .wt-asr-composer-message[data-submission-status]::before {
-	display: inline-block;
+	content: "◆";
 	margin-right: 4px;
-}
-
-#wt-asr-composer .wt-asr-composer-message[data-submission-status="pending"]::before {
-	content: "⏳";
-}
-
-#wt-asr-composer .wt-asr-composer-message[data-submission-status="unknown"]::before {
-	content: "❔";
-}
-
-#wt-asr-composer .wt-asr-composer-message[data-submission-status="rejected"]::before {
-	content: "⚠";
-}
-
-#wt-asr-composer .wt-asr-composer-message[data-submission-status="accepted"]::before {
-	content: "✓";
 }
 
 #wt-asr-composer .wt-asr-composer-actions {
@@ -316,11 +296,6 @@ body.wt-composer-open #wt-toolbar {
 
 #wt-asr-composer button.wt-composer-abandon {
 	background: #585b70;
-}
-
-#wt-asr-composer button:disabled {
-	cursor: not-allowed;
-	opacity: 0.55;
 }
 
 #wt-asr-composer button.wt-composer-mic.wt-mic-recording {

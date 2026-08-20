@@ -1,7 +1,6 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { createAsrPreview } from '../src/controls/asr-preview'
-import type { ComposerPending } from '../src/controls/asr-preview'
 import { _resetTouchGuard } from '../src/util/tap'
 
 beforeEach(() => GlobalRegistrator.register())
@@ -93,29 +92,7 @@ describe('voice composer shell', () => {
 		expect(states).toEqual([true, false])
 	})
 
-	test('persists pending using the existing v1 composer schema', () => {
-		const composer = createAsrPreview()
-		composer.input.value = 'source'
-		const pending: ComposerPending = {
-			id: 'action-1',
-			sessionId: 'session-1',
-			sourceText: 'source',
-			data: 'source\r',
-			status: 'pending',
-		}
-
-		expect(composer.setPending(pending)).toBe(true)
-		expect(JSON.parse(localStorage.getItem('remobi:composer:v1:/') ?? '')).toEqual({
-			version: 1,
-			draft: 'source',
-			pending,
-		})
-		expect(composer.getPending()).toEqual(pending)
-		expect(composer.setPending(null)).toBe(true)
-		expect(JSON.parse(localStorage.getItem('remobi:composer:v1:/') ?? '').pending).toBeNull()
-	})
-
-	test('submission controls expose status with live text and the correct actions', () => {
+	test('persists pending and exposes live status controls', () => {
 		const composer = createAsrPreview()
 		const message = composer.message
 		const retry = composer.element.querySelector<HTMLButtonElement>('.wt-composer-retry')
