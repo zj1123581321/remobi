@@ -140,6 +140,7 @@ export function init(
 			let disposed = false
 			let keyboard: KeyboardController | undefined
 			let micController: MicController | undefined
+			let disposeComposerResize: { dispose(): void } | undefined
 			const disposeOverlayReadyResize = hooks.on('overlayReady', () => {
 				startupResize.scheduleAfterLayout()
 			})
@@ -148,6 +149,7 @@ export function init(
 				if (disposed) return
 				disposed = true
 				keyboard?.dispose()
+				disposeComposerResize?.dispose()
 				micController?.dispose()
 				disposeOverlayReadyResize.dispose()
 				startupResize.dispose()
@@ -298,7 +300,8 @@ export function init(
 				}
 
 				// Height management
-				initHeightManager(toolbar)
+				const scheduleHeightResize = initHeightManager(toolbar, micController?.preview)
+				disposeComposerResize = micController?.preview.onOpenChange(scheduleHeightResize)
 
 				// Mobile init data: send once on load if viewport is narrow enough.
 				// Already inside isMobile() guard (touch detection). widthThreshold adds a
