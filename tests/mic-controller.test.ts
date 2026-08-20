@@ -245,7 +245,7 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		harness.controller.dispose()
 	})
 
-	test('keeps a typed draft until a new recording partial replaces it', async () => {
+	test('appends a new recording partial to the typed draft without accumulating frames', async () => {
 		const harness = createHarness()
 		dispatchTap(harness.composerButton)
 		harness.controller.preview.input.value = 'keep this draft'
@@ -257,9 +257,26 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		await Promise.resolve()
 		expect(harness.controller.state).toBe('recording')
 		expect(harness.controller.preview.getText()).toBe('keep this draft')
+		harness.engine.emitPartial('')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('keep this draft')
 		harness.engine.emitPartial('new spoken draft')
 		vi.advanceTimersByTime(20)
-		expect(harness.controller.preview.getText()).toBe('new spoken draft')
+		expect(harness.controller.preview.getText()).toBe('keep this draft new spoken draft')
+		harness.engine.emitPartial('new spoken')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('keep this draft new spoken')
+		harness.controller.dispose()
+	})
+
+	test('does not add a separator after a draft that ends in whitespace', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'keep this '
+		await startRecording(harness)
+		harness.engine.emitPartial('new spoken')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('keep this new spoken')
 		harness.controller.dispose()
 	})
 
@@ -294,6 +311,21 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		for (let index = 0; index < 8; index++) await Promise.resolve()
 		expect(harness.term.sent).toEqual(['typed command', 'second command'])
 		expect(harness.controller.preview.isOpen()).toBe(true)
+		harness.controller.dispose()
+	})
+
+	test('sending clears the base before the next recording session', async () => {
+		const harness = createHarness()
+		dispatchTap(harness.composerButton)
+		harness.controller.preview.input.value = 'already sent'
+		dispatchPreviewTap(harness, 'send')
+		for (let index = 0; index < 8; index++) await Promise.resolve()
+		expect(harness.controller.preview.getText()).toBe('')
+
+		await startRecording(harness)
+		harness.engine.emitPartial('new utterance')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('new utterance')
 		harness.controller.dispose()
 	})
 
@@ -611,6 +643,37 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		expect(harness.controller.state).toBe('connecting')
 		expect(harness.controller.preview.isOpen()).toBe(true)
 		expect(harness.controller.preview.getText()).toBe('preview text')
+		harness.engine.resolveStart()
+		await Promise.resolve()
+		await Promise.resolve()
+		harness.engine.emitPartial('continued text')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('preview text continued text')
+		harness.controller.dispose()
+	})
+
+	test('appends final text across consecutive recording sessions', async () => {
+		const harness = createHarness()
+		await startRecording(harness)
+		harness.engine.emitPartial('aaa')
+		vi.advanceTimersByTime(20)
+		dispatchTap(harness.button)
+		harness.engine.emitFinal('aaa', 1)
+		expect(harness.controller.state).toBe('preview')
+		expect(harness.controller.preview.getText()).toBe('aaa')
+
+		dispatchTap(harness.button)
+		expect(harness.controller.state).toBe('connecting')
+		harness.engine.resolveStart()
+		await Promise.resolve()
+		await Promise.resolve()
+		harness.engine.emitPartial('bbb')
+		vi.advanceTimersByTime(20)
+		expect(harness.controller.preview.getText()).toBe('aaa bbb')
+		dispatchTap(harness.button)
+		harness.engine.emitFinal('bbb', 2)
+		expect(harness.controller.state).toBe('preview')
+		expect(harness.controller.preview.getText()).toBe('aaa bbb')
 		harness.controller.dispose()
 	})
 })
