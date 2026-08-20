@@ -115,20 +115,21 @@ describe('setupReconnect', () => {
 	)
 
 	test.each([
-		['socket-closed', 'Connection failed — you may need to re-authenticate.', true],
-		['protocol-error', 'Connection failed — refresh, and check the server version.', false],
-	] as const)('failure hint renders correctly for %s', (reason, message, reloadable) => {
+		['socket-closed', 'Connection failed — you may need to re-authenticate.', 3, true],
+		['protocol-error', 'Connection failed — refresh, and check the server version.', 3, false],
+		['output-overflow', 'Output too fast — resyncing.', 1, false],
+	] as const)('failure hint renders correctly for %s', (reason, message, failures, reloadable) => {
 		const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {})
 		const term = mockConnectionTerminal()
 		const dispose = setupReconnect(term, { enabled: true })
 		term.setStatus({
 			state: 'reconnecting',
-			consecutivePreSyncFailures: 3,
+			consecutivePreSyncFailures: failures,
 			lastFailureReason: reason,
 		})
 		const buttons = [...(getOverlay()?.querySelectorAll('button') ?? [])]
 		expect(getOverlay()?.querySelector('div')?.textContent).toBe(message)
-		expect(buttons[1]?.style.display).toBe('block')
+		expect(buttons[1]?.style.display).toBe(failures >= 3 ? 'block' : 'none')
 		if (reloadable) {
 			buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 			expect(reload).toHaveBeenCalledTimes(1)
