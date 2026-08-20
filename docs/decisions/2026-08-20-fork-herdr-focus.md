@@ -6,6 +6,8 @@ remobi 从 upstream（connorads/remobi）分叉独立发展，不回馈 upstream
 `remobi` 名字发布（该名字归 upstream 所有）。项目定位收敛为：**优化 herdr 的
 移动端 WebUI 体验**。
 
+herdr 的生产与 Tailscale 调试部署契约归档在本仓的 `docs/deploy-herdr.md`。
+
 ## 背景
 
 - 2026-08-19/20 完成 ASR 语音输入特性（三个增量：spike → 引擎核心 → Mic 交互），
