@@ -51,6 +51,15 @@ From a local build:
 pnpm run build:dist && node dist/cli.mjs serve
 ```
 
+### Production / Debug
+
+```bash
+scripts/install-prod.sh --enable  # 127.0.0.1:7681
+scripts/install-debug.sh          # 127.0.0.1:7691/remobi
+systemctl --user start remobi-debug.service
+systemctl --user stop remobi-debug.service
+```
+
 ## Conventional Commits
 
 Commits must follow [Conventional Commits](https://www.conventionalcommits.org/) format, enforced by hk commit-msg hook.
