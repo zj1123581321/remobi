@@ -166,6 +166,8 @@ async function startRecording(harness: TestHarness): Promise<void> {
 	expect(harness.controller.state).toBe('recording')
 	expect(harness.button.getAttribute('aria-pressed')).toBe('true')
 	expect(harness.button.classList.contains('wt-mic-recording')).toBe(true)
+	expect(harness.controller.preview.isVisible()).toBe(true)
+	expect(harness.controller.preview.message.textContent).toContain('Listening')
 }
 
 beforeEach(() => {
@@ -205,13 +207,15 @@ describe('sanitizeVoiceText', () => {
 })
 
 describe('mic-controller tap-to-toggle state machine', () => {
-	test('tap starts connecting immediately and a second tap cancels', () => {
+	test('tap starts connecting immediately and a second tap cancels', async () => {
 		const harness = createHarness()
 		expect(harness.button.getAttribute('aria-label')).toBe('Tap to speak')
 		expect(harness.button.getAttribute('aria-pressed')).toBe('false')
 		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('connecting')
 		expect(harness.engine.starts).toBe(1)
+		expect(harness.controller.preview.isVisible()).toBe(true)
+		expect(harness.controller.preview.message.textContent).toContain('Connecting to voice service')
 		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('idle')
 		expect(harness.engine.stops).toBe(1)
@@ -257,6 +261,8 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		await startRecording(harness)
 		dispatchTap(harness.button)
 		expect(harness.controller.state).toBe('waiting-final')
+		expect(harness.controller.preview.isVisible()).toBe(true)
+		expect(harness.controller.preview.message.textContent).toContain('Finishing')
 		expect(harness.engine.stops).toBe(1)
 		harness.controller.dispose()
 	})
@@ -313,7 +319,7 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		harness.controller.dispose()
 	})
 
-	test('permission denial enters error and visibility cancellation returns to idle', async () => {
+	test('permission denial enters error and Mic tap starts a new session', async () => {
 		const harness = createHarness()
 		dispatchTap(harness.button)
 		harness.engine.rejectStart(new DOMException('permission denied', 'NotAllowedError'))
@@ -322,8 +328,10 @@ describe('mic-controller tap-to-toggle state machine', () => {
 		expect(harness.controller.state).toBe('error')
 		expect(harness.controller.preview.message.textContent).toContain('permission')
 		dispatchTap(harness.button)
-		expect(harness.controller.state).toBe('error')
-		expect(harness.engine.starts).toBe(1)
+		expect(harness.controller.state).toBe('connecting')
+		expect(harness.engine.starts).toBe(2)
+		expect(harness.controller.preview.isVisible()).toBe(true)
+		expect(harness.controller.preview.message.textContent).toContain('Connecting to voice service')
 		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
 		expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow()
 		expect(harness.controller.state).toBe('idle')

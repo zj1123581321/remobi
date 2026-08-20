@@ -211,6 +211,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		connectTimer = undefined
 		transition(['recording'], 'stopping', 'tap')
 		transition(['stopping'], 'waiting-final', 'stop-requested')
+		preview.showMessage('Finishing…')
 		finalTimer = setTimeout(() => finishPreview(sessionGeneration), WAITING_FINAL_TIMEOUT_MS)
 		void engine.stop().catch((error: unknown) => {
 			console.error('remobi: ASR stop failed', error)
@@ -250,12 +251,14 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		if (connectTimer !== undefined) clearTimeout(connectTimer)
 		connectTimer = undefined
 		transition(['connecting'], 'recording', 'engine-started')
+		preview.showMessage('Listening…')
 	}
 
 	function beginConnecting(sessionGeneration: number): void {
 		if (disposed || sessionGeneration !== generation || currentState !== 'permission-requesting')
 			return
 		transition(['permission-requesting'], 'connecting', 'tap-start')
+		preview.showMessage('Connecting to voice service…')
 		connectTimer = setTimeout(
 			() => showError('connection-failed', sessionGeneration),
 			CONNECT_TIMEOUT_MS,
@@ -271,6 +274,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		appliedSeq = Number.NEGATIVE_INFINITY
 		preview.clear()
 		transition(['idle'], 'permission-requesting', 'tap-start')
+		preview.showMessage('Requesting microphone…')
 		haptic()
 		beginConnecting(sessionGeneration)
 	}
@@ -289,6 +293,10 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		} else if (currentState === 'permission-requesting' || currentState === 'connecting') {
 			toggled = true
 			cancelSession('Recording cancelled.', sessionGeneration)
+		} else if (currentState === 'error') {
+			toggled = true
+			cancelSession('Recording cancelled.', sessionGeneration)
+			startSession()
 		}
 		if (toggled) conditionalFocus(options.term, kbWasOpen)
 	}
