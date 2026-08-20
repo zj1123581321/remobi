@@ -229,6 +229,18 @@ describe('client connection state machine', () => {
 		expect(socket.sent).toHaveLength(sentBefore + 1)
 	})
 
+	test('a mismatched pong cannot refresh stale input freshness', async () => {
+		const socket = await freshSynced()
+		vi.setSystemTime(26_000)
+		receive(socket, { type: 'pong', id: 'wrong-pong-id' })
+		const sentBefore = socket.sent.length
+		window.term?.input('wrong-pong-input', true)
+
+		expect(socket.sent).toHaveLength(sentBefore)
+		expect(socket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().lastFailureReason).toBe('heartbeat-timeout')
+	})
+
 	test.each([
 		[26_000, 'stale-after-26-seconds'],
 		[1_800_000, 'stale-after-30-minutes'],
