@@ -315,6 +315,12 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 		action: { type: 'prefix', data: '\x02' },
 	},
 	{ id: 'paste', label: 'Paste', description: 'Paste from clipboard', action: { type: 'paste' } },
+	{
+		id: 'image-upload',
+		label: '🖼 Image',
+		description: 'Upload an image and insert its temp path into the agent input',
+		action: { type: 'image-upload' },
+	},
 ]
 
 /** Default mobile configuration */

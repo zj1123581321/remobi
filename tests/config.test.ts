@@ -6,6 +6,7 @@ import {
 	serialiseThemeForTtyd,
 	withVoiceComposerEntry,
 } from '../src/config'
+import { ConfigValidationError, assertValidConfigOverrides } from '../src/config-validate'
 
 describe('defineConfig', () => {
 	test('returns default config when called with no args', () => {
@@ -148,8 +149,14 @@ describe('defaultConfig', () => {
 		expect(defaultConfig.toolbar.row2).toEqual([])
 	})
 
-	test('has 30 drawer buttons', () => {
-		expect(defaultConfig.drawer.buttons).toHaveLength(30)
+	test('has 31 drawer buttons', () => {
+		expect(defaultConfig.drawer.buttons).toHaveLength(31)
+	})
+
+	test('default drawer contains the image-upload button', () => {
+		const imageButton = defaultConfig.drawer.buttons.find((button) => button.id === 'image-upload')
+		expect(imageButton).toBeDefined()
+		expect(imageButton?.action).toEqual({ type: 'image-upload' })
 	})
 
 	test('default drawer uses stock tmux bindings only', () => {
@@ -397,5 +404,41 @@ describe('serialiseThemeForTtyd', () => {
 		const parsed = JSON.parse(json)
 		expect(parsed.background).toBe('#1e1e2e')
 		expect(parsed.foreground).toBe('#cdd6f4')
+	})
+})
+
+describe('image-upload action schema', () => {
+	test('accepts a valid image-upload button in the drawer', () => {
+		expect(() =>
+			assertValidConfigOverrides({
+				drawer: {
+					buttons: [
+						{
+							id: 'image-upload',
+							label: '🖼 Image',
+							description: 'Upload an image',
+							action: { type: 'image-upload' },
+						},
+					],
+				},
+			}),
+		).not.toThrow()
+	})
+
+	test('rejects an image-upload action with unknown fields', () => {
+		expect(() =>
+			assertValidConfigOverrides({
+				drawer: {
+					buttons: [
+						{
+							id: 'image-upload',
+							label: '🖼 Image',
+							description: 'Upload an image',
+							action: { type: 'image-upload', data: 'x' },
+						},
+					],
+				},
+			}),
+		).toThrow(ConfigValidationError)
 	})
 })
