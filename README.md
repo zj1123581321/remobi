@@ -271,7 +271,7 @@ export default {
       enabled: true,
       strategy: 'wheel',
       speedMultiplier: 1,
-      linesPerWheel: 3,
+      linesPerWheel: 1,
       momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
       maxLinesPerFrame: 24,
     },
