@@ -552,6 +552,7 @@ describe('assertValidConfigOverrides', () => {
 describe('assertValidResolvedConfig', () => {
 	test('accepts defaultConfig', () => {
 		expect(() => assertValidResolvedConfig(defaultConfig)).not.toThrow()
+		expect(defaultConfig.gestures.scroll.linesPerWheel).toBe(1)
 	})
 
 	test('accepts merged config output', () => {
@@ -597,7 +598,7 @@ describe('assertValidResolvedConfig', () => {
 						enabled: true,
 						strategy: 'wheel',
 						speedMultiplier: 1,
-						linesPerWheel: 3,
+						linesPerWheel: 1,
 						momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
 						maxLinesPerFrame: 24,
 					},

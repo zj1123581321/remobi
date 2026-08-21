@@ -453,7 +453,7 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `gestures.scroll.enabled` | `true` | |
 | `gestures.scroll.strategy` | `'wheel'` | `'wheel'` (recommended) sends SGR mouse wheel sequences — works in vim, less, htop. `'keys'` sends PageUp/PageDown — simpler, works everywhere |
 | `gestures.scroll.speedMultiplier` | `1` | Follow-finger ratio: 1 = finger displacement matches content displacement |
-| `gestures.scroll.linesPerWheel` | `3` | Terminal lines scrolled per SGR wheel event (tmux default) |
+| `gestures.scroll.linesPerWheel` | `1` | Terminal lines scrolled per SGR wheel event (herdr: one SGR event = one line) |
 | `gestures.scroll.momentum.enabled` | `true` | Inertial fling after finger lift |
 | `gestures.scroll.momentum.friction` | `0.95` | Per-frame velocity decay during fling |
 | `gestures.scroll.momentum.minVelocity` | `0.02` | Stop fling below this speed (px/ms) |
