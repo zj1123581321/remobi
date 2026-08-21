@@ -663,6 +663,9 @@ function main(config: RemobiConfig, version: string | undefined): void {
 
 	function queueImmediateConnect(force = false): void {
 		if (pageHidden || immediateAttemptQueued) return
+		// A CONNECTING socket has not produced a snapshot yet, so it is not stale.
+		// Let it finish instead of closing it before the handshake completes.
+		if (socket?.readyState === WebSocket.CONNECTING) return
 		if (!force && (connectionStatus.state === 'synced' || connectionStatus.state === 'syncing'))
 			return
 		immediateAttemptQueued = true
@@ -761,8 +764,10 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		suspendConnection()
 	}
 
-	function onPageShow(): void {
+	function onPageShow(event: Event): void {
 		pageHidden = false
+		const persisted = 'persisted' in event && event.persisted === true
+		if (!persisted && connectionStatus.state === 'synced') return
 		queueImmediateConnect(true)
 	}
 
