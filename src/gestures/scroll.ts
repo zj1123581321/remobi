@@ -61,19 +61,20 @@ export function touchToCell(
 	return { x, y }
 }
 
-export interface ScrollCell {
+interface ScrollCell {
 	readonly x: number
 	readonly y: number
 }
 
-export interface ScrollTickResult {
+interface ScrollTickResult {
 	readonly data: string
 }
 
-export interface ScrollEngine {
+interface ScrollEngine {
 	onTouchStart(nowMs: number): void
 	onTouchMove(nowMs: number, dy: number): void
 	onTouchEnd(nowMs: number): void
+	stopFling(): void
 	tick(nowMs: number, cellHeight: number, cell: ScrollCell): ScrollTickResult | null
 	readonly pendingPx: number
 	readonly isFlinging: boolean
@@ -120,8 +121,7 @@ function redeemPending(
 		return { pendingPx, data: null }
 	}
 
-	const maxEvents =
-		config.strategy === 'keys' ? config.maxLinesPerFrame : maxWheelEventsPerFrame(config)
+	const maxEvents = config.strategy === 'keys' ? 1 : maxWheelEventsPerFrame(config)
 	const n = Math.min(Math.abs(wheels), maxEvents)
 	const dir = scrollDirection(pendingPx)
 	const nextPendingPx = pendingPx - Math.sign(wheels) * n * pxPerWheel
@@ -184,6 +184,8 @@ export function createScrollEngine(config: ScrollConfig): ScrollEngine {
 			}
 		},
 
+		stopFling,
+
 		tick(nowMs: number, cellHeight: number, cell: ScrollCell): ScrollTickResult | null {
 			if (isFlinging) {
 				const dt = Math.max(1, nowMs - lastTickAt)
@@ -237,20 +239,15 @@ export function attachScrollGesture(
 	const engine = createScrollEngine(config)
 	let screenEl: HTMLElement | null = null
 	let layout: ScrollLayoutCache | null = null
-	let layoutValid = false
 	let rafId: number | null = null
 	let startY = 0
 	let lastY = 0
 
-	function invalidateLayout(): void {
-		layoutValid = false
-	}
-
-	function refreshLayout(touch: Touch): void {
+	function refreshLayout(touch: Touch): ScrollLayoutCache | null {
 		const screen = screenEl
-		if (!screen) return
+		if (!screen) return null
 		layout = measureScrollLayout(screen, term, touch)
-		layoutValid = true
+		return layout
 	}
 
 	function stopRaf(): void {
@@ -292,8 +289,8 @@ export function attachScrollGesture(
 		engine.onTouchStart(e.timeStamp)
 		startY = t.clientY
 		lastY = t.clientY
-		refreshLayout(t)
-		if (engine.isAnimationActive(layout.cellHeight)) scheduleRaf()
+		const cached = refreshLayout(t)
+		if (cached && engine.isAnimationActive(cached.cellHeight)) scheduleRaf()
 	}
 
 	function onTouchMove(e: Event): void {
@@ -329,6 +326,15 @@ export function attachScrollGesture(
 		}
 	}
 
+	function onTouchCancel(e: Event): void {
+		if (!(e instanceof TouchEvent)) return
+		if (lock.current === 'scroll') {
+			engine.stopFling()
+			stopRaf()
+			resetLock(lock)
+		}
+	}
+
 	function attach(): void {
 		const screen = document.querySelector('.xterm-screen')
 		if (!(screen instanceof HTMLElement)) {
@@ -340,9 +346,7 @@ export function attachScrollGesture(
 		screen.addEventListener('touchstart', onTouchStart, { passive: true })
 		screen.addEventListener('touchmove', onTouchMove, { passive: false })
 		screen.addEventListener('touchend', onTouchEnd, { passive: true })
-		screen.addEventListener('touchcancel', onTouchEnd, { passive: true })
-		window.addEventListener('resize', invalidateLayout)
-		window.visualViewport?.addEventListener('resize', invalidateLayout)
+		screen.addEventListener('touchcancel', onTouchCancel, { passive: true })
 	}
 
 	attach()

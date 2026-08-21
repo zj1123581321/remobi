@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { isDoubleTap } from '../src/gestures/double-tap'
 import { createGestureLock, resetLock, tryLock } from '../src/gestures/lock'
 import { clampFontSize, touchDistance } from '../src/gestures/pinch'
 import {
+	attachScrollGesture,
 	averageY,
 	createScrollEngine,
 	pageSeq,
@@ -481,23 +482,51 @@ describe('createScrollEngine', () => {
 		expect(frames).toBeLessThan(500)
 	})
 
-	test('keys strategy sends pageSeq batches without fling', () => {
+	test('keys strategy does not fling on touch end', () => {
 		const engine = createScrollEngine({
 			...defaultScrollConfig,
 			strategy: 'keys',
 			linesPerWheel: 3,
-			maxLinesPerFrame: 4,
 		})
 		const cellHeight = 20
 		const pxPerWheel = (cellHeight * 3) / 1
 
 		engine.onTouchStart(0)
-		engine.onTouchMove(16, pxPerWheel * 2)
+		engine.onTouchMove(16, pxPerWheel)
 		engine.onTouchEnd(32)
 		expect(engine.isFlinging).toBe(false)
+	})
 
-		const result = engine.tick(32, cellHeight, cell)
-		expect(result?.data).toBe(pageSeq('up').repeat(2))
+	test('keys strategy emits at most one pageSeq per frame', () => {
+		const engine = createScrollEngine({
+			...defaultScrollConfig,
+			strategy: 'keys',
+			linesPerWheel: 3,
+			maxLinesPerFrame: 24,
+		})
+		const cellHeight = 20
+		const pxPerWheel = (cellHeight * 3) / 1
+
+		engine.onTouchStart(0)
+		engine.onTouchMove(16, pxPerWheel * 3)
+		const result = engine.tick(16, cellHeight, cell)
+
+		expect(result?.data).toBe(pageSeq('up'))
+		expect(Math.abs(engine.pendingPx)).toBeCloseTo(pxPerWheel * 2, 5)
+	})
+
+	test('stopFling cancels inertial scroll', () => {
+		const engine = createScrollEngine({
+			...defaultScrollConfig,
+			momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
+		})
+
+		engine.onTouchStart(0)
+		for (let i = 1; i <= 5; i++) {
+			engine.onTouchMove(i * 16, 40)
+		}
+		engine.stopFling()
+		expect(engine.isFlinging).toBe(false)
 	})
 
 	test('touchmove hot path does not call layout APIs in attachScrollGesture', async () => {
@@ -521,5 +550,107 @@ describe('createScrollEngine', () => {
 			source.indexOf('function onTouchStart'),
 		)
 		expect(frameBlock.match(/sendData\(/g)?.length).toBe(1)
+	})
+})
+
+describe('attachScrollGesture', () => {
+	function makeScreen(width: number, height: number): HTMLElement {
+		const el = document.createElement('div')
+		el.className = 'xterm-screen'
+		Object.defineProperty(el, 'getBoundingClientRect', {
+			value: () => ({
+				left: 0,
+				top: 0,
+				width,
+				height,
+				right: width,
+				bottom: height,
+				x: 0,
+				y: 0,
+				toJSON() {},
+			}),
+		})
+		return el
+	}
+
+	test('touchcancel stops fling and cancels scheduled rAF', () => {
+		const cancelSpy = vi.fn()
+		let pendingRafId: number | null = null
+		vi.stubGlobal('requestAnimationFrame', () => {
+			pendingRafId = 1
+			return pendingRafId
+		})
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			cancelSpy(id)
+			pendingRafId = null
+		})
+
+		const term = { ...mockTerminal(), cols: 80, rows: 24 }
+		const lock = createGestureLock()
+
+		const screen = makeScreen(800, 480)
+		document.body.appendChild(screen)
+
+		attachScrollGesture(term, defaultScrollConfig, lock, () => false)
+
+		const makeTouch = (clientY: number): Touch =>
+			({
+				identifier: 0,
+				target: screen,
+				clientX: 400,
+				clientY,
+				force: 1,
+				radiusX: 1,
+				radiusY: 1,
+				rotationAngle: 0,
+				pageX: 400,
+				pageY: clientY,
+				screenX: 400,
+				screenY: clientY,
+			}) as Touch
+
+		screen.dispatchEvent(
+			new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [makeTouch(100)] }),
+		)
+		screen.dispatchEvent(
+			new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [makeTouch(200)] }),
+		)
+		expect(pendingRafId).not.toBeNull()
+
+		screen.dispatchEvent(
+			new TouchEvent('touchcancel', { bubbles: true, cancelable: true, touches: [] }),
+		)
+
+		expect(cancelSpy).toHaveBeenCalledWith(1)
+		expect(pendingRafId).toBeNull()
+
+		document.body.removeChild(screen)
+		vi.unstubAllGlobals()
+	})
+
+	test('touchcancel does not start fling', async () => {
+		const { readFileSync } = await import('node:fs')
+		const { resolve } = await import('node:path')
+		const source = readFileSync(resolve(import.meta.dirname, '../src/gestures/scroll.ts'), 'utf-8')
+		const cancelBlock = source.slice(
+			source.indexOf('function onTouchCancel'),
+			source.indexOf('function attach():'),
+		)
+		expect(cancelBlock).toContain('engine.stopFling()')
+		expect(cancelBlock).toContain('stopRaf()')
+		expect(cancelBlock).not.toContain('onTouchEnd')
+	})
+
+	test('touchstart remeasures cellHeight on every gesture', async () => {
+		const { readFileSync } = await import('node:fs')
+		const { resolve } = await import('node:path')
+		const source = readFileSync(resolve(import.meta.dirname, '../src/gestures/scroll.ts'), 'utf-8')
+		const startBlock = source.slice(
+			source.indexOf('function onTouchStart'),
+			source.indexOf('function onTouchMove'),
+		)
+		expect(startBlock).toContain('refreshLayout(t)')
+		expect(source).not.toContain('layoutValid')
+		expect(source).not.toContain('invalidateLayout')
 	})
 })
