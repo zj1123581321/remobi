@@ -410,6 +410,34 @@ describe('client connection state machine', () => {
 		expect(getStatus().state).toBe('reconnecting')
 	})
 
+	test('non-persisted pageshow preserves a fresh synced socket', async () => {
+		const freshSocket = await freshSynced()
+		const socketCount = harness.sockets.length
+		window.dispatchEvent(pageshowEvent(false))
+		await Promise.resolve()
+
+		expect(harness.sockets).toHaveLength(socketCount)
+		expect(currentSocket()).toBe(freshSocket)
+		expect(getStatus().state).toBe('synced')
+	})
+
+	test.each([
+		['no lifecycle event while timers are frozen', 25_001],
+		['synced status cannot hide stale proof', 30_000],
+	] as const)('non-persisted pageshow reconnects after %s', async (_name, now) => {
+		const staleSocket = await freshSynced()
+		const socketCount = harness.sockets.length
+		vi.setSystemTime(now)
+		expect(getStatus().state).toBe('synced')
+		window.dispatchEvent(pageshowEvent(false))
+		await Promise.resolve()
+
+		expect(harness.sockets).toHaveLength(socketCount + 1)
+		expect(currentSocket()).not.toBe(staleSocket)
+		expect(staleSocket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().state).toBe('reconnecting')
+	})
+
 	test('visible replaces an OPEN socket that is still syncing', async () => {
 		const oldSocket = await freshAttempt()
 		oldSocket.open()
