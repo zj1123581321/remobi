@@ -1,13 +1,17 @@
+import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
+import { startIsolatedServe } from './isolated-serve'
 
 async function installSocketProbe(page: import('@playwright/test').Page): Promise<void> {
 	await page.addInitScript(() => {
 		const browserWindow = window as typeof window & {
 			__remobiSentFrames?: string[]
+			__remobiPendingAtActionSend?: (string | null)[]
 			__remobiBufferedSamples?: number[]
 			__remobiSocketConstructs?: number
 		}
 		browserWindow.__remobiSentFrames = []
+		browserWindow.__remobiPendingAtActionSend = []
 		browserWindow.__remobiBufferedSamples = []
 		browserWindow.__remobiSocketConstructs = 0
 		const NativeWebSocket = window.WebSocket
@@ -16,7 +20,14 @@ async function installSocketProbe(page: import('@playwright/test').Page): Promis
 			data: string | ArrayBufferLike | Blob | ArrayBufferView,
 		) {
 			const before = this.bufferedAmount
-			if (typeof data === 'string') browserWindow.__remobiSentFrames?.push(data)
+			if (typeof data === 'string') {
+				browserWindow.__remobiSentFrames?.push(data)
+				if (JSON.parse(data).type === 'input-action') {
+					browserWindow.__remobiPendingAtActionSend?.push(
+						localStorage.getItem('remobi:composer:v1:/'),
+					)
+				}
+			}
 			const result = NativeSend.call(this, data)
 			browserWindow.__remobiBufferedSamples?.push(before, this.bufferedAmount)
 			return result
@@ -30,6 +41,20 @@ async function installSocketProbe(page: import('@playwright/test').Page): Promis
 		TrackedWebSocket.prototype = NativeWebSocket.prototype
 		window.WebSocket = TrackedWebSocket
 	})
+}
+
+async function getActionFrames(page: import('@playwright/test').Page): Promise<string[]> {
+	return (await getSentFrames(page)).filter((frame) => JSON.parse(frame).type === 'input-action')
+}
+
+async function getPendingAtActionSend(
+	page: import('@playwright/test').Page,
+): Promise<(string | null)[]> {
+	return page.evaluate(
+		() =>
+			(window as typeof window & { __remobiPendingAtActionSend?: (string | null)[] })
+				.__remobiPendingAtActionSend ?? [],
+	)
 }
 
 async function getSentFrames(page: import('@playwright/test').Page): Promise<string[]> {
@@ -64,6 +89,14 @@ async function waitForState(page: import('@playwright/test').Page, state: string
 async function waitForSynced(page: import('@playwright/test').Page): Promise<void> {
 	await waitForState(page, 'synced')
 }
+
+test('plain page load constructs exactly one terminal WebSocket', async ({ page }) => {
+	await installSocketProbe(page)
+	await page.goto('/')
+	await page.waitForSelector('#terminal .xterm')
+	await waitForSynced(page)
+	await expect.poll(() => getSocketConstructs(page)).toBe(1)
+})
 
 test('offline keyboard input is dropped and recovery requires a fresh synced snapshot', async ({
 	page,
@@ -176,4 +209,83 @@ test('freeze and resume events force a fresh epoch and snapshot', async ({ page 
 		.poll(() => getSocketConstructs(page), { timeout: 15_000 })
 		.toBeGreaterThan(socketCountBefore)
 	await waitForSynced(page)
+})
+
+test.describe('composer action weak network', () => {
+	const repoRoot = join(import.meta.dirname, '../..')
+	const configPath = join(repoRoot, 'tests/playwright/asr.config.ts')
+	let server: Awaited<ReturnType<typeof startIsolatedServe>>
+
+	test.beforeAll(async () => {
+		server = await startIsolatedServe({ configPath })
+	})
+	test.afterAll(async () => {
+		await server.close()
+	})
+
+	test('lost accepted retries the same action once and writes PTY once', async ({
+		page,
+		context,
+	}) => {
+		let dropped = false
+		await page.routeWebSocket(`${server.url.replace('http', 'ws')}/ws`, (socket) => {
+			const upstream = socket.connectToServer()
+			upstream.onMessage((message) => {
+				const parsed = typeof message === 'string' ? JSON.parse(message) : null
+				if (parsed?.type === 'input-accepted' && !dropped) {
+					dropped = true
+					return
+				}
+				socket.send(message)
+			})
+		})
+		await installSocketProbe(page)
+		await page.goto(server.url)
+		await waitForSynced(page)
+		await page.locator('[data-remobi-action="voice-input"]').click()
+		const marker = `T4-${Date.now()}`
+		const escaped = [...marker]
+			.map((character) => `\\x${(character.codePointAt(0) ?? 0).toString(16).padStart(2, '0')}`)
+			.join('')
+		const composer = page.locator('#wt-asr-composer')
+		await composer.locator('textarea').fill(`printf '${escaped}\\n'`)
+		await composer.locator('.wt-composer-send').click()
+		await expect.poll(() => getActionFrames(page)).toHaveLength(1)
+		expect(JSON.parse((await getPendingAtActionSend(page))[0] ?? '{}').pending).toMatchObject({
+			data: `printf '${escaped}\\n'\r`,
+			status: 'pending',
+		})
+		await page.screenshot({ path: 'test-results/composer-pending.png' })
+		await context.setOffline(true)
+		await waitForState(page, 'disconnected')
+		await page.waitForTimeout(15_000)
+		await page.screenshot({ path: 'test-results/composer-unknown.png' })
+		await context.setOffline(false)
+		await waitForSynced(page)
+		await expect.poll(() => getActionFrames(page), { timeout: 15_000 }).toHaveLength(2)
+		await expect(page.locator('#terminal .xterm-rows')).toContainText(marker, { timeout: 5_000 })
+		const terminalText = (await page.locator('#terminal .xterm-rows').textContent()) ?? ''
+		expect(terminalText.split(marker).length - 1).toBe(1)
+		await expect(composer.locator('textarea')).toHaveValue('')
+		await page.screenshot({ path: 'test-results/composer-accepted.png' })
+	})
+
+	test('offline before send keeps draft and emits no action frame', async ({ page, context }) => {
+		await installSocketProbe(page)
+		await page.goto(server.url)
+		await waitForSynced(page)
+		await page.locator('[data-remobi-action="voice-input"]').click()
+		const composer = page.locator('#wt-asr-composer')
+		await composer.locator('textarea').fill("printf 'offline'")
+		await context.setOffline(true)
+		await waitForState(page, 'disconnected')
+		await composer.locator('.wt-composer-send').click()
+		await expect(composer.locator('textarea')).toHaveValue("printf 'offline'")
+		await expect(composer.locator('.wt-asr-composer-message')).toHaveText(
+			'Not sent — still syncing.',
+		)
+		expect(await getActionFrames(page)).toEqual([])
+		await context.setOffline(false)
+		await waitForSynced(page)
+	})
 })

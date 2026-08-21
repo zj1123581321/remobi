@@ -1,22 +1,25 @@
+import type { InputRejectedReason } from '../types'
 import { el, svg } from '../util/dom'
 import { onTap } from '../util/tap'
 
 declare const __remobiBasePath: string | undefined
 
+export type ComposerPending = {
+	id: string
+	sessionId: string
+	sourceText: string
+	data: string
+	status: 'pending' | 'unknown' | 'rejected'
+	reason?: InputRejectedReason
+}
+
 type ComposerStore = {
 	version: 1
 	draft: string
-	pending: null | {
-		id: string
-		sessionId: string
-		sourceText: string
-		data: string
-		status: 'pending' | 'unknown' | 'rejected'
-		reason?: string
-	}
+	pending: ComposerPending | null
 }
 
-type StoredComposer = Omit<ComposerStore, 'pending'> & { pending: unknown }
+type StoredComposer = Omit<ComposerStore, 'pending'> & { pending: ComposerPending | null }
 
 type StorageReadResult =
 	| { readonly kind: 'missing'; readonly storage: Storage }
@@ -36,6 +39,22 @@ function composerStorageKey(): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null
+}
+
+function isComposerPending(value: unknown): value is ComposerPending {
+	if (!isRecord(value)) return false
+	return (
+		typeof value.id === 'string' &&
+		value.id.length > 0 &&
+		typeof value.sessionId === 'string' &&
+		value.sessionId.length > 0 &&
+		typeof value.sourceText === 'string' &&
+		typeof value.data === 'string' &&
+		(value.status === 'pending' || value.status === 'unknown' || value.status === 'rejected') &&
+		(value.reason === undefined ||
+			value.reason === 'id-conflict' ||
+			value.reason === 'session-unavailable')
+	)
 }
 
 function readComposerStore(): StorageReadResult {
@@ -70,7 +89,12 @@ function readComposerStore(): StorageReadResult {
 		value: {
 			version: 1,
 			draft: parsed.draft,
-			pending: Object.hasOwn(parsed, 'pending') ? parsed.pending : null,
+			pending:
+				parsed.pending === null || parsed.pending === undefined
+					? null
+					: isComposerPending(parsed.pending)
+						? parsed.pending
+						: null,
 		},
 	}
 }
@@ -88,12 +112,21 @@ export interface AsrPreview {
 	readonly show: (text: string) => void
 	readonly setPartial: (text: string) => void
 	readonly showMessage: (message: string) => void
+	readonly setSubmissionStatus: (
+		status: 'pending' | 'unknown' | 'rejected' | 'accepted' | null,
+		message: string,
+	) => void
+	readonly setSubmissionControls: (status: 'pending' | 'unknown' | 'rejected' | null) => void
+	readonly getPending: () => ComposerPending | null
+	readonly setPending: (pending: ComposerPending | null) => boolean
 	readonly restoreDraft: () => void
 	readonly resetDraft: () => void
 	readonly clear: () => void
 	readonly onOpenChange: (handler: (open: boolean) => void) => { dispose(): void }
 	readonly onHeightChange: (handler: () => void) => { dispose(): void }
 	readonly onConfirm: (handler: () => void) => { dispose(): void }
+	readonly onRetry: (handler: () => void) => { dispose(): void }
+	readonly onAbandon: (handler: () => void) => { dispose(): void }
 	readonly onCancel: (handler: () => void) => { dispose(): void }
 }
 
@@ -155,7 +188,19 @@ export function createAsrPreview(): AsrPreview {
 		class: 'wt-composer-send',
 	})
 	sendButton.textContent = 'Send'
-	actions.append(closeButton, micButton, sendButton)
+	const retryButton = el('button', {
+		type: 'button',
+		class: 'wt-composer-retry',
+	})
+	retryButton.textContent = 'Retry'
+	retryButton.hidden = true
+	const abandonButton = el('button', {
+		type: 'button',
+		class: 'wt-composer-abandon',
+	})
+	abandonButton.textContent = 'Abandon'
+	abandonButton.hidden = true
+	actions.append(closeButton, micButton, sendButton, retryButton, abandonButton)
 
 	panel.append(input, message, actions)
 	element.appendChild(panel)
@@ -186,27 +231,54 @@ export function createAsrPreview(): AsrPreview {
 		message.textContent = DRAFT_STORAGE_FAILURE
 	}
 
+	function setSubmissionStatus(
+		status: 'pending' | 'unknown' | 'rejected' | 'accepted' | null,
+		text: string,
+	): void {
+		if (status === null) {
+			delete message.dataset.submissionStatus
+		} else {
+			message.dataset.submissionStatus = status
+		}
+		message.textContent = text
+	}
+
+	function setSubmissionControls(status: 'pending' | 'unknown' | 'rejected' | null): void {
+		sendButton.disabled = status !== null
+		retryButton.hidden = status !== 'unknown'
+		retryButton.disabled = status !== 'unknown'
+		abandonButton.hidden = status !== 'unknown' && status !== 'rejected'
+		abandonButton.disabled = status !== 'unknown' && status !== 'rejected'
+	}
+
 	function showRestoreFailure(): void {
 		message.textContent = DRAFT_RESTORE_FAILURE
 	}
 
-	function persistDraft(draft: string): void {
+	function persistComposer(draft: string, pending: ComposerPending | null): boolean {
 		const stored = readComposerStore()
 		if (stored.kind === 'unavailable') {
 			showStorageFailure(stored.error)
-			return
+			return false
 		}
 		const corrupt = stored.kind === 'invalid'
-		const pending = stored.kind === 'valid' ? stored.value.pending : null
 		try {
 			stored.storage.setItem(
 				composerStorageKey(),
 				JSON.stringify({ version: 1 satisfies ComposerStore['version'], draft, pending }),
 			)
 			if (corrupt) showMessage(DRAFT_CORRUPT_RESET)
+			return true
 		} catch (error: unknown) {
 			showStorageFailure(error)
+			return false
 		}
+	}
+
+	function persistDraft(draft: string): void {
+		const stored = readComposerStore()
+		const pending = stored.kind === 'valid' ? stored.value.pending : null
+		persistComposer(draft, pending)
 	}
 
 	input.addEventListener('input', () => {
@@ -235,7 +307,7 @@ export function createAsrPreview(): AsrPreview {
 
 	function renderText(text: string, persist: boolean): void {
 		input.value = text
-		message.textContent = ''
+		setSubmissionStatus(null, '')
 		setOpen(true)
 		resizeInput()
 		if (persist) persistDraft(text)
@@ -256,8 +328,17 @@ export function createAsrPreview(): AsrPreview {
 	}
 
 	function showMessage(text: string): void {
-		message.textContent = text
+		setSubmissionStatus(null, text)
 		setOpen(true)
+	}
+
+	function getPending(): ComposerPending | null {
+		const stored = readComposerStore()
+		return stored.kind === 'valid' ? stored.value.pending : null
+	}
+
+	function setPending(pending: ComposerPending | null): boolean {
+		return persistComposer(input.value, pending)
 	}
 
 	function resetDraft(): void {
@@ -265,7 +346,7 @@ export function createAsrPreview(): AsrPreview {
 		partialFrame = undefined
 		pendingPartial = undefined
 		input.value = ''
-		message.textContent = ''
+		setSubmissionStatus(null, '')
 		resizeInput()
 		persistDraft('')
 	}
@@ -319,6 +400,10 @@ export function createAsrPreview(): AsrPreview {
 		}
 	}
 
+	function registerAction(target: HTMLButtonElement, handler: () => void): { dispose(): void } {
+		return register(target, handler)
+	}
+
 	restoreDraft()
 
 	return {
@@ -333,6 +418,10 @@ export function createAsrPreview(): AsrPreview {
 		show,
 		setPartial,
 		showMessage,
+		setSubmissionStatus,
+		setSubmissionControls,
+		getPending,
+		setPending,
 		restoreDraft,
 		resetDraft,
 		clear,
@@ -345,6 +434,8 @@ export function createAsrPreview(): AsrPreview {
 			return { dispose: () => heightChangeHandlers.delete(handler) }
 		},
 		onConfirm: (handler) => register(sendButton, handler),
+		onRetry: (handler) => registerAction(retryButton, handler),
+		onAbandon: (handler) => registerAction(abandonButton, handler),
 		onCancel: registerCancel,
 	}
 }

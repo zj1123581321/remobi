@@ -82,6 +82,15 @@ function mockSuppressionTerm(): {
 				return { dispose() {} }
 			},
 			requestReconnect() {},
+			getSessionId() {
+				return 'test-session'
+			},
+			sendInputAction() {
+				return true
+			},
+			onInputActionResult() {
+				return { dispose() {} }
+			},
 		},
 	}
 }
@@ -563,6 +572,15 @@ describe('init lifecycle (P2-1)', () => {
 				return { dispose() {} }
 			},
 			requestReconnect() {},
+			getSessionId() {
+				return 'test-session'
+			},
+			sendInputAction() {
+				return true
+			},
+			onInputActionResult() {
+				return { dispose() {} }
+			},
 		}
 		window.term = term
 
