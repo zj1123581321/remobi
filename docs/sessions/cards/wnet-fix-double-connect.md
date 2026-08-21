@@ -55,12 +55,16 @@ Chromium 不打这条日志，所以只是静默多一次握手。
 
 - **任务类型**：frontend-ui
 - **复杂度**：S
-- **Base commit**：`50dd69801b5f95885089787e961b4f0571e7dade`（`card/wnet-t4` 的 HEAD；
-  本修复直接落在 T4 分支上，与 T4 一起合并，避免 main 长时间红着）
-- **Branch**：`card/wnet-t4`（delegate resume 到 T4 的 dispatch，同一 worktree 续修）
-- **Worktree**：`/home/zlx/projects/oss/remobi-worktrees/wnet-t4`
+- **Base commit**：`1a00a2638778dc4e4478c97a2533ce807ab463a8`（当前 `origin/main`）。
+  **本修复独立成一个 PR**：它修的是 T3 合并进 main 后就存在的债，与 T4 无关；
+  先让 main 转绿，T4 分支再 merge 新主干即可跟着绿。
+- **Branch**：由 delegate 分配（`card/<worktree 名>`），执行器不得另建分支
+- **Worktree**：由 delegate 分配
 - **当前唯一写入者**：本卡执行器
-- **执行器与模型**：codex（`delegate resume`）
+- **执行器与模型**：codex（`delegate --class big`，新会话）
+- **执行器角色声明**：本会话就是执行器（implementer 角色），全局 AGENTS.md「模型编排」段的主代理
+  委派纪律**不适用于本卡**；不限制亲自落盘还是委派子代理，唯一硬约束是最终产物落在指定路径——
+  子代理不返回就直接自己写完。
 - **计划者与审查者**：主脑 claude-opus5；review 按仓 `risk-tier: personal`。
 
 ## 修复卡必填
@@ -111,6 +115,7 @@ CI 侧对应的 WebKit 失败（`main@1a00a263` 与 `card/wnet-t4@50dd698` 两�
 - **行为验收**：
   1. 普通加载页面，WebSocket 构造计数 **= 1**。
   2. bfcache/前后台恢复仍然强制建新 epoch（不许为了修这条把 force 语义削掉）。
+- **Scope-Globs**：src/client-entry.ts tests/client-connection.test.ts tests/playwright/weak-network.spec.ts
 - **相关测试**：`pnpm test` 全量绿。
   轴表每格有断言（单测用假 WebSocket 计数构造次数即可）。
 - **e2e 防回归（必须新增）**：在 `tests/playwright/weak-network.spec.ts` 追加一条——
@@ -143,6 +148,8 @@ CI 侧对应的 WebKit 失败（`main@1a00a263` 与 `card/wnet-t4@50dd698` 两�
   - `queueImmediateConnect()` 在 `src/client-entry.ts`，
     `pageshow` 注册在 `:797`、初始 `connect()` 在 `:801`。
   - T4 的改动全是加法（bridge 方法、sessionId 跟踪、回执分发），**没有碰连接时序**，
-    它的 CI 红是从 main 继承来的。
+    它的 CI 红是从 main 继承来的；T4 在 `card/wnet-t4` 上等本修复合并后 merge 新主干即可。
+  - 本卡曾尝试 `delegate resume` 到 T4 的 dispatch，返回 `DIED reason=rollout_expired`
+    （原会话已过期），因此改为独立新派发。
   - 本机跑不了 WebKit（缺 `libgtk-4-1` 等），跨浏览器差异只能靠 CI 发现。
 - **下一步唯一动作**：加 CONNECTING 守卫，并用 socket 构造计数把它锁死。
