@@ -511,6 +511,35 @@ describe('assertValidConfigOverrides', () => {
 		expect(() => assertValidConfigOverrides({ scrollButtons: { enabled: true } })).not.toThrow()
 	})
 
+	test('rejects scroll momentum friction at upper bound', () => {
+		const message = getValidationMessage(
+			{ gestures: { scroll: { momentum: { friction: 1 } } } },
+			assertValidConfigOverrides,
+		)
+		expect(message).toContain('config.gestures.scroll.momentum.friction')
+	})
+
+	test.each([
+		{ field: 'friction', value: 0 },
+		{ field: 'friction', value: -0.5 },
+		{ field: 'friction', value: 1 },
+		{ field: 'friction', value: 1.5 },
+		{ field: 'minVelocity', value: -1 },
+	] as const)('rejects invalid scroll momentum $field=$value', ({ field, value }) => {
+		const message = getValidationMessage(
+			{ gestures: { scroll: { momentum: { [field]: value } } } },
+			assertValidConfigOverrides,
+		)
+		expect(message).toContain(`config.gestures.scroll.momentum.${field}`)
+	})
+
+	test.each([{ friction: 0.95 }, { friction: 0.5 }, { minVelocity: 0 }] as const)(
+		'accepts valid scroll momentum override %o',
+		(momentum) => {
+			expect(() => assertValidConfigOverrides({ gestures: { scroll: { momentum } } })).not.toThrow()
+		},
+	)
+
 	test('rejects unknown scrollButtons keys', () => {
 		const message = getValidationMessage(
 			{ scrollButtons: { position: 'left' } },
@@ -564,7 +593,14 @@ describe('assertValidResolvedConfig', () => {
 						rightLabel: 'Previous tmux window',
 					},
 					pinch: { enabled: false },
-					scroll: { enabled: true, sensitivity: 40, strategy: 'wheel', wheelIntervalMs: 24 },
+					scroll: {
+						enabled: true,
+						strategy: 'wheel',
+						speedMultiplier: 1,
+						linesPerWheel: 3,
+						momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
+						maxLinesPerFrame: 24,
+					},
 					doubleTap: { enabled: false, data: '\x02z', maxInterval: 300 },
 				},
 				mobile: { initData: null, widthThreshold: 768, keyboardMode: 'auto' },

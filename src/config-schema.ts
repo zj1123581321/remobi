@@ -200,18 +200,42 @@ const pinchResolvedSchema = v.strictObject({
 
 const scrollStrategySchema = v.picklist(['keys', 'wheel'])
 
+const scrollMomentumFrictionSchema = v.pipe(
+	finiteNumber,
+	v.gtValue(0, 'must be greater than 0 and less than 1'),
+	v.ltValue(1, 'must be greater than 0 and less than 1'),
+)
+
+const scrollMomentumMinVelocitySchema = v.pipe(finiteNumber, v.minValue(0, 'must be >= 0'))
+
+const scrollMomentumOverridesSchema = v.strictObject({
+	enabled: v.optional(v.boolean()),
+	friction: v.optional(scrollMomentumFrictionSchema),
+	minVelocity: v.optional(scrollMomentumMinVelocitySchema),
+})
+
+const scrollMomentumResolvedSchema = v.strictObject({
+	enabled: v.boolean(),
+	friction: scrollMomentumFrictionSchema,
+	minVelocity: scrollMomentumMinVelocitySchema,
+})
+
 const scrollOverridesSchema = v.strictObject({
 	enabled: v.optional(v.boolean()),
-	sensitivity: v.optional(finiteNumber),
 	strategy: v.optional(scrollStrategySchema),
-	wheelIntervalMs: v.optional(finiteNumber),
+	speedMultiplier: v.optional(finiteNumber),
+	linesPerWheel: v.optional(finiteNumber),
+	momentum: v.optional(scrollMomentumOverridesSchema),
+	maxLinesPerFrame: v.optional(finiteNumber),
 })
 
 const scrollResolvedSchema = v.strictObject({
 	enabled: v.boolean(),
-	sensitivity: finiteNumber,
 	strategy: scrollStrategySchema,
-	wheelIntervalMs: finiteNumber,
+	speedMultiplier: finiteNumber,
+	linesPerWheel: finiteNumber,
+	momentum: scrollMomentumResolvedSchema,
+	maxLinesPerFrame: finiteNumber,
 })
 
 const doubleTapOverridesSchema = v.strictObject({

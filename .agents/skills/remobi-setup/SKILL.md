@@ -452,8 +452,12 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `gestures.pinch.enabled` | `false` | |
 | `gestures.scroll.enabled` | `true` | |
 | `gestures.scroll.strategy` | `'wheel'` | `'wheel'` (recommended) sends SGR mouse wheel sequences — works in vim, less, htop. `'keys'` sends PageUp/PageDown — simpler, works everywhere |
-| `gestures.scroll.sensitivity` | `40` | |
-| `gestures.scroll.wheelIntervalMs` | `24` | |
+| `gestures.scroll.speedMultiplier` | `1` | Follow-finger ratio: 1 = finger displacement matches content displacement |
+| `gestures.scroll.linesPerWheel` | `3` | Terminal lines scrolled per SGR wheel event (tmux default) |
+| `gestures.scroll.momentum.enabled` | `true` | Inertial fling after finger lift |
+| `gestures.scroll.momentum.friction` | `0.95` | Per-frame velocity decay during fling |
+| `gestures.scroll.momentum.minVelocity` | `0.02` | Stop fling below this speed (px/ms) |
+| `gestures.scroll.maxLinesPerFrame` | `24` | Safety cap on lines redeemed per animation frame |
 | `gestures.doubleTap.enabled` | `false` | Opt-in double-tap gesture on terminal screen |
 | `gestures.doubleTap.data` | `'\x02z'` | Data to send on double-tap (default: tmux zoom toggle) |
 | `gestures.doubleTap.maxInterval` | `300` | Max milliseconds between taps |
