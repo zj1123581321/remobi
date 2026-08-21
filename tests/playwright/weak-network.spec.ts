@@ -90,6 +90,14 @@ async function waitForSynced(page: import('@playwright/test').Page): Promise<voi
 	await waitForState(page, 'synced')
 }
 
+test('plain page load constructs exactly one terminal WebSocket', async ({ page }) => {
+	await installSocketProbe(page)
+	await page.goto('/')
+	await page.waitForSelector('#terminal .xterm')
+	await waitForSynced(page)
+	await expect.poll(() => getSocketConstructs(page)).toBe(1)
+})
+
 test('offline keyboard input is dropped and recovery requires a fresh synced snapshot', async ({
 	page,
 	context,
