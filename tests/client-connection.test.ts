@@ -166,6 +166,17 @@ describe('client connection state machine', () => {
 		vi.unstubAllGlobals()
 	})
 
+	test('initial load keeps its sole CONNECTING socket when pageshow arrives', async () => {
+		expect(harness.sockets).toHaveLength(1)
+		const initialSocket = currentSocket()
+		window.dispatchEvent(pageshowEvent(false))
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(harness.sockets).toHaveLength(1)
+		expect(currentSocket()).toBe(initialSocket)
+		expect(initialSocket.readyState).toBe(FakeSocket.CONNECTING)
+	})
+
 	test('drops input while syncing, then emits ping before the coalesced resize after snapshot', () => {
 		const terminal = harness.terminal as FakeTerminal
 		window.term?.input('dangerous-command\r', true)
@@ -387,31 +398,7 @@ describe('client connection state machine', () => {
 		expect(getStatus().state).toBe('reconnecting')
 	})
 
-	test('pageshow creates a new epoch after the old socket is closed', async () => {
-		const oldSocket = await freshSynced()
-		const socketCount = harness.sockets.length
-		setVisibility('hidden')
-		document.dispatchEvent(new Event('visibilitychange'))
-		setVisibility('visible')
-		window.dispatchEvent(pageshowEvent(true))
-		await vi.advanceTimersByTimeAsync(0)
-
-		expect(harness.sockets).toHaveLength(socketCount + 1)
-		expect(currentSocket()).not.toBe(oldSocket)
-		expect(getStatus().state).toBe('reconnecting')
-	})
-
-	test('initial pageshow does not replace an already synced socket', async () => {
-		const socket = await freshSynced()
-		const socketCount = harness.sockets.length
-		window.dispatchEvent(pageshowEvent(false))
-		await vi.advanceTimersByTimeAsync(0)
-
-		expect(harness.sockets).toHaveLength(socketCount)
-		expect(currentSocket()).toBe(socket)
-	})
-
-	test('persisted pageshow replaces a synced socket', async () => {
+	test('pageshow creates a new epoch for an OPEN synced socket', async () => {
 		const oldSocket = await freshSynced()
 		const socketCount = harness.sockets.length
 		window.dispatchEvent(pageshowEvent(true))
@@ -420,6 +407,49 @@ describe('client connection state machine', () => {
 		expect(harness.sockets).toHaveLength(socketCount + 1)
 		expect(currentSocket()).not.toBe(oldSocket)
 		expect(oldSocket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().state).toBe('reconnecting')
+	})
+
+	test('non-persisted pageshow preserves a fresh synced socket', async () => {
+		const freshSocket = await freshSynced()
+		const socketCount = harness.sockets.length
+		window.dispatchEvent(pageshowEvent(false))
+		await Promise.resolve()
+
+		expect(harness.sockets).toHaveLength(socketCount)
+		expect(currentSocket()).toBe(freshSocket)
+		expect(getStatus().state).toBe('synced')
+	})
+
+	test.each([
+		['no lifecycle event while timers are frozen', 25_001],
+		['synced status cannot hide stale proof', 30_000],
+	] as const)('non-persisted pageshow reconnects after %s', async (_name, now) => {
+		const staleSocket = await freshSynced()
+		const socketCount = harness.sockets.length
+		vi.setSystemTime(now)
+		expect(getStatus().state).toBe('synced')
+		window.dispatchEvent(pageshowEvent(false))
+		await Promise.resolve()
+
+		expect(harness.sockets).toHaveLength(socketCount + 1)
+		expect(currentSocket()).not.toBe(staleSocket)
+		expect(staleSocket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().state).toBe('reconnecting')
+	})
+
+	test('visible replaces an OPEN socket that is still syncing', async () => {
+		const oldSocket = await freshAttempt()
+		oldSocket.open()
+		const socketCount = harness.sockets.length
+		setVisibility('visible')
+		document.dispatchEvent(new Event('visibilitychange'))
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(harness.sockets).toHaveLength(socketCount + 1)
+		expect(currentSocket()).not.toBe(oldSocket)
+		expect(oldSocket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().state).toBe('reconnecting')
 	})
 
 	test.each(['pageshow', 'online'] as const)(
@@ -435,42 +465,6 @@ describe('client connection state machine', () => {
 			expect(connectingSocket.readyState).toBe(FakeSocket.CONNECTING)
 		},
 	)
-
-	test('visible replaces an OPEN socket that is still syncing', async () => {
-		const oldSocket = await freshPreSyncAttempt()
-		oldSocket.open()
-		const socketCount = harness.sockets.length
-		setVisibility('visible')
-		document.dispatchEvent(new Event('visibilitychange'))
-		await vi.advanceTimersByTimeAsync(0)
-
-		expect(harness.sockets).toHaveLength(socketCount + 1)
-		expect(currentSocket()).not.toBe(oldSocket)
-		expect(oldSocket.readyState).toBe(FakeSocket.CLOSED)
-	})
-
-	test('online while synced does not create a replacement socket', async () => {
-		const socket = await freshSynced()
-		const socketCount = harness.sockets.length
-		window.dispatchEvent(new Event('online'))
-		await vi.advanceTimersByTimeAsync(0)
-
-		expect(harness.sockets).toHaveLength(socketCount)
-		expect(currentSocket()).toBe(socket)
-	})
-
-	test('a CONNECTING socket failure follows the existing backoff path', async () => {
-		const socket = await freshAttempt()
-		const socketCount = harness.sockets.length
-		socket.dispatchEvent(new Event('error'))
-
-		expect(socket.readyState).toBe(FakeSocket.CLOSED)
-		expect(getStatus().state).toBe('reconnecting')
-		await vi.advanceTimersByTimeAsync(999)
-		expect(harness.sockets).toHaveLength(socketCount)
-		await vi.advanceTimersByTimeAsync(1)
-		expect(harness.sockets).toHaveLength(socketCount + 1)
-	})
 
 	test('visibility, online, and pageshow in one turn create one socket', async () => {
 		await freshSynced()
@@ -494,6 +488,16 @@ describe('client connection state machine', () => {
 		expect(harness.sockets).toHaveLength(socketCount + 1)
 	})
 
+	test('online while synced does not create a replacement socket', async () => {
+		const syncedSocket = await freshSynced()
+		const socketCount = harness.sockets.length
+		window.dispatchEvent(new Event('online'))
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(harness.sockets).toHaveLength(socketCount)
+		expect(currentSocket()).toBe(syncedSocket)
+	})
+
 	test('online while hidden does not create a socket', async () => {
 		await freshSynced()
 		setVisibility('hidden')
@@ -502,6 +506,19 @@ describe('client connection state machine', () => {
 		window.dispatchEvent(new Event('online'))
 		await vi.advanceTimersByTimeAsync(20_000)
 		expect(harness.sockets).toHaveLength(socketCount)
+	})
+
+	test('a CONNECTING socket failure follows the existing backoff path', async () => {
+		const connectingSocket = await freshAttempt()
+		const socketCount = harness.sockets.length
+		connectingSocket.dispatchEvent(new Event('error'))
+
+		expect(connectingSocket.readyState).toBe(FakeSocket.CLOSED)
+		expect(getStatus().state).toBe('reconnecting')
+		await vi.advanceTimersByTimeAsync(999)
+		expect(harness.sockets).toHaveLength(socketCount)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(harness.sockets).toHaveLength(socketCount + 1)
 	})
 
 	test.each(['snapshot', 'output'] as const)('old epoch %s is discarded', async (kind) => {
