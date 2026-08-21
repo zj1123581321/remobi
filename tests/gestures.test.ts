@@ -343,7 +343,8 @@ const defaultScrollConfig = {
 	speedMultiplier: 1,
 	linesPerWheel: 1,
 	momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
-	maxLinesPerFrame: 24,
+	maxLinesPerSend: 24,
+	sendIntervalMs: 33,
 }
 
 const cell = { x: 5, y: 10 }
@@ -412,11 +413,12 @@ describe('createScrollEngine', () => {
 		expect(engine.pendingPx).toBe(15)
 	})
 
-	test('emits one batched sendData payload per frame', () => {
+	test('emits one batched sendData payload per send interval', () => {
 		const engine = createScrollEngine({
 			...defaultScrollConfig,
+			sendIntervalMs: 0,
 			linesPerWheel: 3,
-			maxLinesPerFrame: 24,
+			maxLinesPerSend: 24,
 		})
 		const cellHeight = 20
 		const pxPerWheel = (cellHeight * 3) / 1
@@ -434,11 +436,12 @@ describe('createScrollEngine', () => {
 		).toHaveLength(5)
 	})
 
-	test('maxLinesPerFrame clamps wheel events and leaves remainder in pendingPx', () => {
+	test('maxLinesPerSend clamps wheel events and leaves remainder in pendingPx', () => {
 		const engine = createScrollEngine({
 			...defaultScrollConfig,
+			sendIntervalMs: 0,
 			linesPerWheel: 3,
-			maxLinesPerFrame: 24,
+			maxLinesPerSend: 24,
 		})
 		const cellHeight = 20
 		const pxPerWheel = (cellHeight * 3) / 1
@@ -497,12 +500,13 @@ describe('createScrollEngine', () => {
 		expect(engine.isFlinging).toBe(false)
 	})
 
-	test('keys strategy emits at most one pageSeq per frame', () => {
+	test('keys strategy emits at most one pageSeq per send', () => {
 		const engine = createScrollEngine({
 			...defaultScrollConfig,
+			sendIntervalMs: 0,
 			strategy: 'keys',
 			linesPerWheel: 3,
-			maxLinesPerFrame: 24,
+			maxLinesPerSend: 24,
 		})
 		const cellHeight = 20
 		const pxPerWheel = (cellHeight * 3) / 1
@@ -553,6 +557,126 @@ describe('createScrollEngine', () => {
 		expect(pendingAfterStoppedTick - pendingBeforeStop).toBeLessThan(
 			pendingAfterFlingTick - pendingBeforeStop,
 		)
+	})
+
+	function countSendsOverDuration(
+		config: typeof defaultScrollConfig,
+		cellHeight: number,
+		dyPerFrame: number,
+		frameMs: number,
+		durationMs: number,
+	): { sendCount: number; totalLines: number } {
+		const engine = createScrollEngine(config)
+		let sendCount = 0
+		let totalLines = 0
+		let t = 0
+
+		engine.onTouchStart(0)
+		for (t = frameMs; t <= durationMs; t += frameMs) {
+			engine.onTouchMove(t, dyPerFrame)
+			const result = engine.tick(t, cellHeight, cell)
+			if (result) {
+				sendCount += 1
+				totalLines += countWheelLines(result.data, 'up')
+			}
+		}
+		while (engine.isAnimationActive(cellHeight) && t < durationMs + 10_000) {
+			t += frameMs
+			const result = engine.tick(t, cellHeight, cell)
+			if (result) {
+				sendCount += 1
+				totalLines += countWheelLines(result.data, 'up')
+			}
+		}
+
+		return { sendCount, totalLines }
+	}
+
+	function countFlingEndFrame(config: typeof defaultScrollConfig, cellHeight: number): number {
+		const engine = createScrollEngine(config)
+
+		engine.onTouchStart(0)
+		for (let i = 1; i <= 5; i++) {
+			engine.onTouchMove(i * 16, 40)
+		}
+		engine.onTouchEnd(80)
+
+		let frames = 0
+		let t = 80
+		while (engine.isFlinging && frames < 500) {
+			t += 16
+			engine.tick(t, cellHeight, cell)
+			frames += 1
+		}
+		return frames
+	}
+
+	test('sendIntervalMs throttles wheel sends to ~30Hz without losing displacement', () => {
+		const cellHeight = 20
+		const frameMs = 1000 / 60
+		const durationMs = 1000
+		const pxPerWheel =
+			(cellHeight * defaultScrollConfig.linesPerWheel) / defaultScrollConfig.speedMultiplier
+		const dyPerFrame = pxPerWheel
+		const frameCount = Math.floor((durationMs - frameMs) / frameMs) + 1
+		const totalPx = dyPerFrame * frameCount
+		const expectedLines = Math.trunc(
+			(totalPx * defaultScrollConfig.speedMultiplier) /
+				cellHeight /
+				defaultScrollConfig.linesPerWheel,
+		)
+
+		const throttled = countSendsOverDuration(
+			defaultScrollConfig,
+			cellHeight,
+			dyPerFrame,
+			frameMs,
+			durationMs,
+		)
+		const unthrottled = countSendsOverDuration(
+			{ ...defaultScrollConfig, sendIntervalMs: 0 },
+			cellHeight,
+			dyPerFrame,
+			frameMs,
+			durationMs,
+		)
+
+		expect(unthrottled.sendCount).toBe(frameCount)
+		expect(throttled.sendCount).toBeGreaterThanOrEqual(29)
+		expect(throttled.sendCount).toBeLessThanOrEqual(31)
+		expect(throttled.totalLines).toBe(expectedLines)
+		expect(unthrottled.totalLines).toBe(expectedLines)
+		expect(throttled.totalLines).toBe(unthrottled.totalLines)
+	})
+
+	test('sendIntervalMs: 0 sends every frame with redeemable pending', () => {
+		const cellHeight = 20
+		const frameMs = 16
+		const pxPerWheel =
+			(cellHeight * defaultScrollConfig.linesPerWheel) / defaultScrollConfig.speedMultiplier
+		const engine = createScrollEngine({ ...defaultScrollConfig, sendIntervalMs: 0 })
+
+		engine.onTouchStart(0)
+		let sendCount = 0
+		for (let frame = 1; frame <= 60; frame += 1) {
+			const t = frame * frameMs
+			engine.onTouchMove(t, pxPerWheel)
+			const result = engine.tick(t, cellHeight, cell)
+			if (result) sendCount += 1
+		}
+
+		expect(sendCount).toBe(60)
+	})
+
+	test('fling physics duration is unchanged by send throttling', () => {
+		const cellHeight = 20
+		const throttledFrames = countFlingEndFrame(defaultScrollConfig, cellHeight)
+		const unthrottledFrames = countFlingEndFrame(
+			{ ...defaultScrollConfig, sendIntervalMs: 0 },
+			cellHeight,
+		)
+
+		expect(throttledFrames).toBe(unthrottledFrames)
 	})
 })
 
@@ -632,8 +756,9 @@ describe('attachScrollGesture', () => {
 		const { element: screen } = makeScreen(() => 480)
 		const scrollConfig = {
 			...defaultScrollConfig,
+			sendIntervalMs: 0,
 			linesPerWheel: 3,
-			maxLinesPerFrame: 24,
+			maxLinesPerSend: 24,
 		}
 		const wheelCount = 5
 		const pxPerWheel = (480 / 24) * scrollConfig.linesPerWheel

@@ -40,7 +40,8 @@ const defaultGestures: RemobiConfig['gestures'] = {
 		speedMultiplier: 1,
 		linesPerWheel: 1,
 		momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
-		maxLinesPerFrame: 24,
+		maxLinesPerSend: 24,
+		sendIntervalMs: 33,
 	},
 	doubleTap: { enabled: false, data: '\x02z', maxInterval: 300 },
 }

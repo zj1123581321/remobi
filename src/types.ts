@@ -90,8 +90,10 @@ export interface ScrollConfig {
 	/** Terminal lines scrolled per SGR wheel event (tmux default is 3) */
 	readonly linesPerWheel: number
 	readonly momentum: ScrollMomentumConfig
-	/** Safety cap on lines redeemed per animation frame */
-	readonly maxLinesPerFrame: number
+	/** Safety cap on lines redeemed per send */
+	readonly maxLinesPerSend: number
+	/** Minimum interval (ms) between wheel sends. Default 33 ≈ 30Hz — herdr 1:1 mapping boundary is ~40Hz. Unlike the removed wheelIntervalMs, waiting only defers send; pending displacement is never dropped. */
+	readonly sendIntervalMs: number
 }
 
 /** Double-tap gesture configuration */

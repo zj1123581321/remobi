@@ -97,7 +97,8 @@ describe('createScrollButtons', () => {
 			speedMultiplier: 1,
 			linesPerWheel: 3,
 			momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
-			maxLinesPerFrame: 24,
+			maxLinesPerSend: 24,
+			sendIntervalMs: 33,
 		})
 		document.body.appendChild(element)
 

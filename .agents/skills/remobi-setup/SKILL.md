@@ -457,7 +457,8 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `gestures.scroll.momentum.enabled` | `true` | Inertial fling after finger lift |
 | `gestures.scroll.momentum.friction` | `0.95` | Per-frame velocity decay during fling |
 | `gestures.scroll.momentum.minVelocity` | `0.02` | Stop fling below this speed (px/ms) |
-| `gestures.scroll.maxLinesPerFrame` | `24` | Safety cap on lines redeemed per animation frame |
+| `gestures.scroll.maxLinesPerSend` | `24` | Safety cap on lines redeemed per wheel send |
+| `gestures.scroll.sendIntervalMs` | `33` | Minimum interval between wheel sends (~30Hz). Waiting only defers send; pending displacement is never dropped. `0` disables throttling. |
 | `gestures.doubleTap.enabled` | `false` | Opt-in double-tap gesture on terminal screen |
 | `gestures.doubleTap.data` | `'\x02z'` | Data to send on double-tap (default: tmux zoom toggle) |
 | `gestures.doubleTap.maxInterval` | `300` | Max milliseconds between taps |
