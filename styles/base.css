@@ -262,25 +262,33 @@ body.wt-composer-open #wt-toolbar {
 	touch-action: manipulation;
 }
 
+/* One-handed thumb zone: the mic is the highest-frequency composer action,
+   so it leaves the left corner and becomes a large centred 64px target
+   (WeChat voice style). margin-inline:auto keeps it centred while close
+   stays left and send stays flush right. */
 #wt-asr-composer button.wt-composer-mic {
-	width: 48px;
-	min-width: 48px;
-	height: 48px;
+	width: 64px;
+	min-width: 64px;
+	height: 64px;
 	padding: 0;
 	border-radius: 50%;
 	background: #45475a;
 	color: #cdd6f4;
-	flex: 0 0 48px;
+	flex: 0 0 64px;
+	margin-inline: auto;
 }
 
 #wt-asr-composer button.wt-composer-mic svg {
-	width: 23px;
-	height: 23px;
+	width: 30px;
+	height: 30px;
 	fill: currentColor;
 }
 
+/* Fixed 72px width instead of flex:1 so the mic stays centred and send
+   remains reachable near the right thumb edge; retry/abandon follow it. */
 #wt-asr-composer button.wt-composer-send {
-	flex: 1;
+	flex: 0 0 72px;
+	padding: 0;
 	background: #89b4fa;
 	color: #1e1e2e;
 }
@@ -296,10 +304,22 @@ body.wt-composer-open #wt-toolbar {
 	background: #585b70;
 }
 
+/* Stop target grows from 64px to 72px and the pulse ring widens to 6px so
+   the recording state is unmistakable at thumb distance. */
 #wt-asr-composer button.wt-composer-mic.wt-mic-recording {
+	width: 72px;
+	min-width: 72px;
+	height: 72px;
+	flex-basis: 72px;
 	background: #f38ba8;
 	color: #1e1e2e;
-	animation: wt-mic-pulse 1.2s ease-in-out infinite;
+	animation: wt-mic-pulse-composer 1.2s ease-in-out infinite;
+}
+
+@keyframes wt-mic-pulse-composer {
+	50% {
+		box-shadow: 0 0 0 6px rgba(243, 139, 168, 0.35);
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {

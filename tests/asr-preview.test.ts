@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { createAsrPreview } from '../src/controls/asr-preview'
@@ -117,5 +119,56 @@ describe('voice composer shell', () => {
 		expect(retry.hidden).toBe(true)
 		expect(retry.disabled).toBe(true)
 		expect(abandon.hidden).toBe(false)
+	})
+
+	test('actions row keeps mic ahead of send with failure controls trailing', () => {
+		const composer = createAsrPreview()
+		const actions = composer.element.querySelector('.wt-asr-composer-actions')
+		const classes = Array.from(actions?.children ?? []).map((child) => child.className)
+		expect(classes).toEqual([
+			'wt-asr-composer-close',
+			'wt-composer-mic',
+			'wt-composer-send',
+			'wt-composer-retry',
+			'wt-composer-abandon',
+		])
+	})
+})
+
+// One-handed layout is pure CSS; happy-dom has no layout engine, so lock the
+// rules in the stylesheet source instead of asserting pixels.
+const css = readFileSync(resolve(process.cwd(), 'styles/base.css'), 'utf8')
+
+/** Extract the first declaration block for a selector (same approach as safe-area.test.ts). */
+function blockFor(selector: string): string {
+	const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+	const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))
+	expect(match, `selector ${selector} not found in base.css`).not.toBeNull()
+	return match?.[1] ?? ''
+}
+
+describe('base.css composer one-handed layout', () => {
+	test('mic is a 64px centred target instead of a 48px left-corner button', () => {
+		const block = blockFor('#wt-asr-composer button.wt-composer-mic')
+		expect(block).toContain('width: 64px')
+		expect(block).toContain('height: 64px')
+		expect(block).toContain('flex: 0 0 64px')
+		expect(block).toContain('margin-inline: auto')
+	})
+
+	test('send keeps a fixed width on the right instead of stretching across the row', () => {
+		const block = blockFor('#wt-asr-composer button.wt-composer-send')
+		expect(block).not.toContain('flex: 1')
+		expect(block).toContain('flex: 0 0 72px')
+	})
+
+	test('recording mic grows to 72px with a wider 6px pulse ring', () => {
+		const block = blockFor('#wt-asr-composer button.wt-composer-mic.wt-mic-recording')
+		expect(block).toContain('width: 72px')
+		expect(block).toContain('height: 72px')
+		expect(block).toContain('flex-basis: 72px')
+		expect(block).toContain('animation: wt-mic-pulse-composer')
+		expect(css).toContain('@keyframes wt-mic-pulse-composer')
+		expect(css).toContain('0 0 0 6px rgba(243, 139, 168')
 	})
 })
