@@ -294,15 +294,15 @@ Tell the user:
 3. How to access from their phone (URL from deployment choice)
 4. PWA install: on mobile, tap "Add to Home Screen" for a standalone app experience
 5. Built-in mobile controls (these work out of the box, no config needed):
-   - **Font size**: `Font -`/`Font +` buttons in the command drawer (`☰ More`) — tapping them keeps the drawer open for repeat taps, and the adjusted size persists across reloads (localStorage `remobi:fontSize`). Config: `font.mobileSizeDefault` (default 13px), `font.sizeRange` (default [8, 32]), steps by 2
+   - **Font size**: `Font -`/`Font +` buttons in the command drawer (`☰`) — tapping them keeps the drawer open for repeat taps, and the adjusted size persists across reloads (localStorage `remobi:fontSize`). Config: `font.mobileSizeDefault` (default 13px), `font.sizeRange` (default [8, 32]), steps by 2
    - **Scroll buttons**: Opt-in floating arrow buttons on the right edge — off by default, enable with `scrollButtons.enabled: true`. Long-press for rapid repeat (300ms delay, 100ms interval). Auto-fade after 2s. Strategy follows `gestures.scroll.strategy` (`wheel` sends mouse events, `keys` sends PageUp/PageDown)
    - **Combo picker**: Modal for arbitrary key combos — type `C-s`, `M-Enter`, `Alt-x`, `C-[`. Supports Ctrl, Alt, Shift modifiers + named keys (PageUp, Escape, etc.). Opened via drawer "Combo" button
    - **Help overlay**: `Guide` button in the command drawer. Shows all configured buttons, gestures, and floating buttons in tables. Config-driven, updates when you change buttons
    - **Landscape + keyboard**: When on-screen keyboard opens in landscape, row 2 auto-hides (except the ⌨ button) and buttons shrink — only if a second row exists; the default single-row toolbar stays fully visible. No config needed
    - **Floating d-pad**: `✥` button on toolbar row1 pops up a six-key arrow cluster (← ↑ ↓ → ⌫ ⏎) above the toolbar — moshi style. Taps send keys without stealing terminal focus or popping the soft keyboard; in `keyboardMode: 'manual'` the input lock stays untouched. No config needed
-   - **Keyboard sovereignty**: `mobile.keyboardMode` — `'auto'` (default): tapping the terminal opens the soft keyboard, ⌨ is momentary focus/blur. `'manual'`: the keyboard never pops up on terminal taps — only the ⌨ button (toolbar row1, next to ☰ More) grants/revokes input permission. If a manual-mode config has no ⌨ button anywhere, remobi injects one into row1 so the keyboard stays reachable
+   - **Keyboard sovereignty**: `mobile.keyboardMode` — `'auto'` (default): tapping the terminal opens the soft keyboard, ⌨ is momentary focus/blur. `'manual'`: the keyboard never pops up on terminal taps — only the ⌨ button (toolbar row1, next to ☰) grants/revokes input permission. If a manual-mode config has no ⌨ button anywhere, remobi injects one into row1 so the keyboard stays reachable
    - **Voice composer**: when configured, the toolbar Voice entry opens a second-layer composer without starting ASR or focusing the input. Tap the composer Mic to start/stop, edit the final text, and Send; × or the backdrop discards it. It requires HTTPS (except localhost/127.0.0.1); iOS backgrounding, locking, calls, Siri, or another app interrupting audio cancels the recording.
-   - **Image upload**: 🖼 button on toolbar row 1 (next to ☰ More) — picks a photo and POSTs it raw to the remobi server (`/api/image-drop`, PNG/JPEG/WebP/GIF, 10 MiB max), then inserts the temp file path into the agent input without pressing Enter. Success is a transient toast that auto-hides (the path in the input is the evidence; keep typing or send when ready). Works over plain HTTP — no HTTPS or config needed, the phone only has to reach the server. If the session changed or the insert was not confirmed, the status panel offers Retry insert and Copy path
+   - **Image upload**: 🖼 button on toolbar row 1 (between 🎤 and ⌨) — picks a photo and POSTs it raw to the remobi server (`/api/image-drop`, PNG/JPEG/WebP/GIF, 10 MiB max), then inserts the temp file path into the agent input without pressing Enter. Success is a transient toast that auto-hides (the path in the input is the evidence; keep typing or send when ready). Works over plain HTTP — no HTTPS or config needed, the phone only has to reach the server. If the session changed or the insert was not confirmed, the status panel offers Retry insert and Copy path
 6. PWA: enabled by default. On mobile Safari/Chrome, tap Share then "Add to Home Screen" for standalone app experience. Config options:
    - `pwa.enabled` (default `true`) — set `false` to disable manifest + icons
    - `pwa.themeColor` (default `'#1e1e2e'`) — status bar colour on mobile
@@ -333,10 +333,10 @@ name  theme  font  toolbar  drawer  gestures  mobile  floatingButtons  scrollBut
 | `drawer-toggle`  | (none)              | Opens/closes command drawer |
 | `font-size`      | `delta: number`     | Adjust terminal font size, clamped to `font.sizeRange` |
 | `help`           | (none)              | Opens the help overlay |
-| `keyboard-toggle` | (none)             | Toggles the soft keyboard. Default on toolbar row1 (next to ☰ More). In `mobile.keyboardMode: 'manual'` it is the only way to summon the keyboard; remobi injects one into row1 if the config has none |
-| `dpad-toggle`    | (none)              | Toggles the floating d-pad (← ↑ ↓ → ⌫ ⏎) above the toolbar. Default on toolbar row1 (between ⏎ and ⌨). D-pad taps never steal terminal focus or pop the soft keyboard |
-| `voice-input`    | (none)              | Toolbar-only voice-composer entry; its internal Mic uses tap-to-toggle. Drawer/floating placement is rejected by validation. Requires `asr.enabled: true` and a secure context |
-| `image-upload`   | (none)              | Uploads an image to the server (`POST /api/image-drop`: raw bytes, PNG/JPEG/WebP/GIF sniffed from magic bytes, exact 10 MiB limit, stored as a `0600` temp file) and inserts the temp path into the agent input — never sends Enter. Default on toolbar row1 (🖼, next to ☰ More). No HTTPS or config prerequisite; the phone just needs to reach the remobi server |
+| `keyboard-toggle` | (none)             | Toggles the soft keyboard. Default on toolbar row1 (next to ☰). In `mobile.keyboardMode: 'manual'` it is the only way to summon the keyboard; remobi injects one into row1 if the config has none |
+| `dpad-toggle`    | (none)              | Toggles the floating d-pad (← ↑ ↓ → ⌫ ⏎) above the toolbar. Default on toolbar row1 (between C-c and ⏎). D-pad taps never steal terminal focus or pop the soft keyboard |
+| `voice-input`    | (none)              | Toolbar-only voice-composer entry; its internal Mic uses tap-to-toggle. Drawer/floating placement is rejected by validation. Default on toolbar row1 (between ⏎ and 🖼), hidden until ASR is available. Requires `asr.enabled: true` and a secure context |
+| `image-upload`   | (none)              | Uploads an image to the server (`POST /api/image-drop`: raw bytes, PNG/JPEG/WebP/GIF sniffed from magic bytes, exact 10 MiB limit, stored as a `0600` temp file) and inserts the temp path into the agent input — never sends Enter. Default on toolbar row1 (🖼, between 🎤 and ⌨). No HTTPS or config prerequisite; the phone just needs to reach the remobi server |
 
 Non-`send`/`prefix` actions must NOT have `data` or `keyLabel` — the validator rejects them.
 
@@ -402,12 +402,12 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 |------|---------|----------|
 | `esc` | Esc | `send` `\x1b` |
 | `ctrl-c` | C-c | `send` `\x03` (dedicated — tap twice to quit coding agents) |
-| `backspace` | ⌫ | `send` `\x7f` |
+| `dpad-toggle` | ✥ | `dpad-toggle` (floating d-pad owns the arrow keys and ⌫) |
 | `enter` | enter ⏎ | `send` `\r` |
-| `dpad-toggle` | ✥ | `dpad-toggle` (floating d-pad owns the arrow keys) |
-| `keyboard-toggle` | keyboard ⌨ | `keyboard-toggle` |
+| `voice-input` | Voice (🎤 icon) | `voice-input` (hidden until ASR is available) |
 | `image-upload` | 🖼 | `image-upload` (uploads to the server tmp dir, inserts the path into the agent input — no Enter) |
-| `drawer-toggle` | hamburger More | `drawer-toggle` |
+| `keyboard-toggle` | keyboard ⌨ | `keyboard-toggle` |
+| `drawer-toggle` | hamburger ☰ | `drawer-toggle` |
 
 **Toolbar row 2**: empty by default (single-row toolbar). Set `toolbar.row2` to opt into a second row.
 
@@ -430,7 +430,7 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `font-decrease` | Font - | `font-size` `delta: -2` |
 | `font-increase` | Font + | `font-size` `delta: 2` |
 | `guide` | Guide | `help` |
-| `tab` | Tab | `send` `\t` (row1 alumni — ⌫ took its slot) |
+| `tab` | Tab | `send` `\t` (row1 alumni) |
 | `shift-tab` | S-Tab | `send` `\x1b[Z` |
 | `left` | <- | `send` `\x1b[D` |
 | `right` | -> | `send` `\x1b[C` |

@@ -236,10 +236,11 @@ export default {
     sizeRange: [8, 32],
   },
   toolbar: {
-    // Single row by default (7 keys): Esc, C-c, ⌫ Backspace, Enter,
-    // ✥ dpad-toggle, keyboard-toggle, drawer-toggle. ✥ pops up a floating
-    // d-pad (← ↑ ↓ → ⌫ ⏎) above the toolbar — the arrow keys live there
-    // now (up/down also keep fallback buttons in the drawer). row2
+    // Single row by default (8 buttons): Esc, C-c, ✥ dpad-toggle, ⏎ Enter,
+    // 🎤 voice-input (hidden unless ASR is available), 🖼 image-upload,
+    // ⌨ keyboard-toggle, ☰ drawer-toggle. ✥ pops up a floating d-pad
+    // (← ↑ ↓ → ⌫ ⏎) above the toolbar — the arrow keys and ⌫ live there
+    // now (⌫ and up/down also keep fallback buttons in the drawer). row2
     // defaults to empty — set it to opt into a second row.
     // Ctrl/Prefix/Paste/Tab live in the drawer.
     row1: [
@@ -317,12 +318,6 @@ export default {
     enabled: true,
     autoEnter: true, // sends a separate Enter after confirmed text
   },
-  toolbar: {
-    row1: (defaults) => [
-      ...defaults,
-      { id: 'voice-input', label: 'Voice', description: 'Open voice composer', action: { type: 'voice-input' } },
-    ],
-  },
 }
 ```
 
@@ -343,8 +338,9 @@ rejected by config validation. The toolbar entry opens a full-screen, bottom-she
 without starting a recording or focusing the input. Tap the composer's circular Mic to start or
 stop the session; while recording, partial text is read-only, then the final preview can be edited
 and sent. Typed text can also be sent directly. The Send button closes the composer; × and the
-backdrop discard the current session. When `asr.enabled` is true and no `voice-input` is configured,
-remobi injects the entry after `keyboard-toggle` and before `drawer-toggle` (or appends it to row1).
+backdrop discard the current session. The default row1 already carries `voice-input` (between ⏎
+and 🖼) — it stays hidden until ASR is available. With a custom row1 that lacks it, remobi injects
+the entry after `keyboard-toggle` and before `drawer-toggle` (or appends it to row1).
 Before sending, hooks run first and the last sanitization pass removes C0 controls (including tab,
 newline, and carriage return), DEL, and C1 controls; `autoEnter` appends its carriage return
 separately. If the terminal WebSocket is down, the composer stays visible and is never queued for

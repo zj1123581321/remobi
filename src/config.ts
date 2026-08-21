@@ -46,7 +46,21 @@ const defaultGestures: RemobiConfig['gestures'] = {
 	doubleTap: { enabled: false, data: '\x02z', maxInterval: 300 },
 }
 
-/** Default row 1 buttons (moshi-style single row: the high-frequency keys) */
+/** Default toolbar entry for the two-layer voice composer. */
+const voiceComposerButton: ControlButton = {
+	id: 'voice-input',
+	label: 'Voice',
+	description: 'Open voice composer',
+	action: { type: 'voice-input' },
+}
+
+/**
+ * Default row 1 buttons (moshi-style single row): control keys on the left
+ * (Esc, C-c, ✥, ⏎), input modes on the right (🎤, 🖼, ⌨, ☰). ⌫ left the row —
+ * the floating d-pad and the voice composer textarea cover it day-to-day,
+ * and the drawer keeps a fallback. The voice entry stays on the row even
+ * when ASR is disabled; the toolbar hides it until a mic controller exists.
+ */
 const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 	{
 		id: 'esc',
@@ -62,23 +76,18 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 		description: 'Send Ctrl-C interrupt (tap twice to quit agents)',
 		action: { type: 'send', data: '\x03' },
 	},
-	{
-		id: 'backspace',
-		label: '⌫',
-		description: 'Send Backspace key',
-		action: { type: 'send', data: '\x7f' },
-	},
+	// ✥ toggles the floating d-pad — it owns the arrow keys and ⌫ now (up/down
+	// also keep drawer fallback entries below).
+	dpadToggleButton,
 	{
 		id: 'enter',
 		label: '\u23CE',
 		description: 'Send Enter/Return key',
 		action: { type: 'send', data: '\r' },
 	},
-	// ✥ toggles the floating d-pad — it owns the arrow keys now (up/down were
-	// on this row until the d-pad landed; all four arrows stay reachable via
-	// the d-pad, and up/down also keep drawer fallback entries below).
-	dpadToggleButton,
-	keyboardToggleButton,
+	// Voice is the primary input method — a first-class row1 member, not an
+	// asr.enabled patch-in. Hidden by the toolbar when no mic controller exists.
+	voiceComposerButton,
 	{
 		// Image insert is a high-frequency agent action — one tap from row1,
 		// no drawer round trip (success is a transient toast, nothing to close).
@@ -87,9 +96,11 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 		description: 'Upload an image and insert its temp path into the agent input',
 		action: { type: 'image-upload' },
 	},
+	// ⌨ stays on the first layer as the soft-keyboard escape hatch.
+	keyboardToggleButton,
 	{
 		id: 'drawer-toggle',
-		label: '\u2630 More',
+		label: '\u2630',
 		description: 'Open command drawer',
 		action: { type: 'drawer-toggle' },
 	},
@@ -102,15 +113,11 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
  */
 const defaultRow2: RemobiConfig['toolbar']['row2'] = []
 
-/** Default toolbar entry for the optional two-layer voice composer. */
-const voiceComposerButton: ControlButton = {
-	id: 'voice-input',
-	label: 'Voice',
-	description: 'Open voice composer',
-	action: { type: 'voice-input' },
-}
-
-/** Purely inject the voice entry into the reachable toolbar when ASR is enabled. */
+/**
+ * Inject the voice entry into the reachable toolbar when ASR is enabled.
+ * The default row1 already carries voice-input, so this is a no-op for
+ * default configs; it only patches custom rows that lack a voice entry.
+ */
 export function withVoiceComposerEntry(config: RemobiConfig): RemobiConfig {
 	if (!config.asr.enabled) return config
 
@@ -236,7 +243,7 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 	},
 	// Keys removed from the toolbar when it went single-row stay reachable here
 	{
-		// Tab left row1 for the more-used ⌫ — drawer fallback
+		// Tab left row1 when the row shrank — drawer fallback
 		id: 'tab',
 		label: 'Tab',
 		description: 'Send Tab key',
@@ -304,6 +311,7 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 		action: { type: 'send', data: ' ' },
 	},
 	{
+		// ⌫ left row1 in the portrait recut — the d-pad owns it day-to-day; drawer fallback
 		id: 'backspace',
 		label: '\u232b',
 		description: 'Send Backspace key',

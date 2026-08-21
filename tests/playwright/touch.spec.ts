@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('drawer toggle responds to touchend-only (no click)', async ({ page }) => {
-	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	const toggle = page.locator('#wt-toolbar button', { hasText: '☰' })
 	await expect(toggle).toBeVisible()
 
 	// Dispatch only touchend — simulates iOS Safari not firing click
@@ -34,7 +34,7 @@ test('drawer toggle responds to touchend-only (no click)', async ({ page }) => {
 
 test('drawer button responds to touchend-only', async ({ page }) => {
 	// Open drawer via tap() (known working method) to set up state
-	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	const toggle = page.locator('#wt-toolbar button', { hasText: '☰' })
 	await toggle.tap()
 	await expect(page.locator('#wt-drawer')).toHaveClass(/open/)
 
@@ -51,7 +51,7 @@ test('drawer button responds to touchend-only', async ({ page }) => {
 })
 
 test('backdrop responds to touchend-only', async ({ page }) => {
-	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	const toggle = page.locator('#wt-toolbar button', { hasText: '☰' })
 	await toggle.tap()
 	await expect(page.locator('#wt-drawer')).toHaveClass(/open/)
 
@@ -66,7 +66,7 @@ test('backdrop responds to touchend-only', async ({ page }) => {
 })
 
 test('drawer open → close → re-open cycle', async ({ page }) => {
-	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	const toggle = page.locator('#wt-toolbar button', { hasText: '☰' })
 	const drawer = page.locator('#wt-drawer')
 
 	// Open
@@ -109,7 +109,7 @@ test('synthesised click from tap() hits backdrop (regression guard)', async ({ p
 		)
 	})
 
-	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	const toggle = page.locator('#wt-toolbar button', { hasText: '☰' })
 	await toggle.tap()
 	await page.waitForTimeout(200)
 
@@ -126,7 +126,7 @@ test('synthesised click from tap() hits backdrop (regression guard)', async ({ p
 
 test('guide button responds to touchend-only', async ({ page }) => {
 	// Open the drawer via touchend (no click follows on affected iOS Safari)
-	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	const toggle = page.locator('#wt-toolbar button', { hasText: '☰' })
 	await toggle.dispatchEvent('touchend', {
 		touches: [],
 		changedTouches: [],
