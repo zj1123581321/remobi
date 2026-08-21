@@ -200,18 +200,34 @@ const pinchResolvedSchema = v.strictObject({
 
 const scrollStrategySchema = v.picklist(['keys', 'wheel'])
 
+const scrollMomentumOverridesSchema = v.strictObject({
+	enabled: v.optional(v.boolean()),
+	friction: v.optional(finiteNumber),
+	minVelocity: v.optional(finiteNumber),
+})
+
+const scrollMomentumResolvedSchema = v.strictObject({
+	enabled: v.boolean(),
+	friction: finiteNumber,
+	minVelocity: finiteNumber,
+})
+
 const scrollOverridesSchema = v.strictObject({
 	enabled: v.optional(v.boolean()),
-	sensitivity: v.optional(finiteNumber),
 	strategy: v.optional(scrollStrategySchema),
-	wheelIntervalMs: v.optional(finiteNumber),
+	speedMultiplier: v.optional(finiteNumber),
+	linesPerWheel: v.optional(finiteNumber),
+	momentum: v.optional(scrollMomentumOverridesSchema),
+	maxLinesPerFrame: v.optional(finiteNumber),
 })
 
 const scrollResolvedSchema = v.strictObject({
 	enabled: v.boolean(),
-	sensitivity: finiteNumber,
 	strategy: scrollStrategySchema,
-	wheelIntervalMs: finiteNumber,
+	speedMultiplier: finiteNumber,
+	linesPerWheel: finiteNumber,
+	momentum: scrollMomentumResolvedSchema,
+	maxLinesPerFrame: finiteNumber,
 })
 
 const doubleTapOverridesSchema = v.strictObject({

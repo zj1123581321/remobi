@@ -4,8 +4,8 @@ import { createGestureLock, resetLock, tryLock } from '../src/gestures/lock'
 import { clampFontSize, touchDistance } from '../src/gestures/pinch'
 import {
 	averageY,
+	createScrollEngine,
 	pageSeq,
-	resolveScrollAction,
 	scrollSeq,
 	terminalGrid,
 	touchToCell,
@@ -177,12 +177,11 @@ describe('pageSeq', () => {
 		expect(pageSeq('down')).toBe('\x1b[6~')
 	})
 
-	test('uses natural scroll direction (negative delta → down)', async () => {
-		// Fingers up → negative accDelta → 'down' (content scrolls up, showing history)
+	test('uses natural scroll direction (positive pendingPx → up)', async () => {
 		const { readFileSync } = await import('node:fs')
 		const { resolve } = await import('node:path')
 		const source = readFileSync(resolve(import.meta.dirname, '../src/gestures/scroll.ts'), 'utf-8')
-		expect(source).toContain("accDelta < 0 ? 'down' : 'up'")
+		expect(source).toContain("pendingPx > 0 ? 'up' : 'down'")
 	})
 
 	test('source uses \\x3c instead of literal < in SGR sequences', async () => {
@@ -337,53 +336,190 @@ describe('isDoubleTap', () => {
 	})
 })
 
-describe('resolveScrollAction', () => {
-	test('keys strategy returns pageSeq for up', () => {
-		const action = resolveScrollAction('up', 'keys', { x: 1, y: 1 }, 0, 1000, 50)
-		expect(action).toEqual({ type: 'send', seq: '\x1b[5~', newWheelAt: 0 })
+const defaultScrollConfig = {
+	enabled: true,
+	strategy: 'wheel' as const,
+	speedMultiplier: 1,
+	linesPerWheel: 1,
+	momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
+	maxLinesPerFrame: 24,
+}
+
+const cell = { x: 5, y: 10 }
+
+function countWheelLines(data: string | undefined, direction: 'up' | 'down'): number {
+	if (!data) return 0
+	const unit = scrollSeq(direction, cell.x, cell.y)
+	let count = 0
+	let idx = 0
+	while (idx < data.length) {
+		if (data.startsWith(unit, idx)) {
+			count += 1
+			idx += unit.length
+			continue
+		}
+		break
+	}
+	return count
+}
+
+describe('createScrollEngine', () => {
+	test('quantizes small deltas without line drift (linesPerWheel=1)', () => {
+		const engine = createScrollEngine(defaultScrollConfig)
+		const cellHeight = 20
+		const deltas = [3, 4, 5, 3, 4, 5, 3, 4, 5]
+		const totalPx = deltas.reduce((sum, dy) => sum + dy, 0)
+		const expectedLines = Math.trunc((totalPx * defaultScrollConfig.speedMultiplier) / cellHeight)
+
+		engine.onTouchStart(0)
+		let lines = 0
+		let t = 0
+		for (const dy of deltas) {
+			t += 16
+			engine.onTouchMove(t, dy)
+			const result = engine.tick(t, cellHeight, cell)
+			if (result) {
+				lines += countWheelLines(result.data, 'up')
+			}
+		}
+		while (engine.isAnimationActive(cellHeight) && t < 10_000) {
+			t += 16
+			const result = engine.tick(t, cellHeight, cell)
+			if (result) {
+				lines += countWheelLines(result.data, 'up')
+			}
+		}
+
+		expect(lines).toBe(expectedLines)
+		expect(Math.abs(engine.pendingPx)).toBeLessThan(cellHeight)
 	})
 
-	test('keys strategy returns pageSeq for down', () => {
-		const action = resolveScrollAction('down', 'keys', { x: 1, y: 1 }, 0, 1000, 50)
-		expect(action).toEqual({ type: 'send', seq: '\x1b[6~', newWheelAt: 0 })
+	test('touchstart preserves pendingPx remainder across gestures', () => {
+		const engine = createScrollEngine(defaultScrollConfig)
+		const cellHeight = 20
+
+		engine.onTouchStart(0)
+		engine.onTouchMove(16, 15)
+		expect(engine.pendingPx).toBe(15)
+
+		engine.onTouchEnd(32)
+		engine.onTouchStart(100)
+		expect(engine.pendingPx).toBe(15)
+
+		const result = engine.tick(116, cellHeight, cell)
+		expect(result).toBeNull()
+		expect(engine.pendingPx).toBe(15)
 	})
 
-	test('keys strategy preserves lastWheelAt unchanged', () => {
-		const action = resolveScrollAction('up', 'keys', { x: 1, y: 1 }, 500, 1000, 50)
-		expect(action).toEqual({ type: 'send', seq: '\x1b[5~', newWheelAt: 500 })
-	})
-
-	test('wheel strategy returns scrollSeq when interval elapsed', () => {
-		const action = resolveScrollAction('up', 'wheel', { x: 5, y: 10 }, 0, 1000, 50)
-		expect(action).toEqual({
-			type: 'send',
-			seq: scrollSeq('up', 5, 10),
-			newWheelAt: 1000,
+	test('emits one batched sendData payload per frame', () => {
+		const engine = createScrollEngine({
+			...defaultScrollConfig,
+			linesPerWheel: 3,
+			maxLinesPerFrame: 24,
 		})
+		const cellHeight = 20
+		const pxPerWheel = (cellHeight * 3) / 1
+		const dy = pxPerWheel * 5
+
+		engine.onTouchStart(0)
+		engine.onTouchMove(16, dy)
+		const result = engine.tick(16, cellHeight, cell)
+
+		expect(result).not.toBeNull()
+		const unit = scrollSeq('up', cell.x, cell.y)
+		expect(result?.data).toBe(unit.repeat(5))
+		expect(
+			result?.data.match(new RegExp(unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')),
+		).toHaveLength(5)
 	})
 
-	test('wheel strategy skips when rate limited', () => {
-		// lastWheelAt=990, now=1000, interval=50 → 10ms < 50ms → skip
-		const action = resolveScrollAction('up', 'wheel', { x: 5, y: 10 }, 990, 1000, 50)
-		expect(action).toEqual({ type: 'skip' })
-	})
-
-	test('wheel strategy sends when exactly at interval boundary', () => {
-		// lastWheelAt=950, now=1000, interval=50 → 50ms >= 50ms → send
-		const action = resolveScrollAction('up', 'wheel', { x: 1, y: 1 }, 950, 1000, 50)
-		expect(action).toEqual({
-			type: 'send',
-			seq: scrollSeq('up', 1, 1),
-			newWheelAt: 1000,
+	test('maxLinesPerFrame clamps wheel events and leaves remainder in pendingPx', () => {
+		const engine = createScrollEngine({
+			...defaultScrollConfig,
+			linesPerWheel: 3,
+			maxLinesPerFrame: 24,
 		})
+		const cellHeight = 20
+		const pxPerWheel = (cellHeight * 3) / 1
+		const maxEvents = Math.floor(24 / 3)
+		const dy = pxPerWheel * (maxEvents + 3)
+
+		engine.onTouchStart(0)
+		engine.onTouchMove(16, dy)
+		const result = engine.tick(16, cellHeight, cell)
+
+		expect(result).not.toBeNull()
+		const unit = scrollSeq('up', cell.x, cell.y)
+		expect(result?.data).toBe(unit.repeat(maxEvents))
+		expect(Math.abs(engine.pendingPx)).toBeCloseTo(pxPerWheel * 3, 5)
 	})
 
-	test('wheel strategy down returns correct sequence', () => {
-		const action = resolveScrollAction('down', 'wheel', { x: 3, y: 7 }, 0, 1000, 50)
-		expect(action).toEqual({
-			type: 'send',
-			seq: scrollSeq('down', 3, 7),
-			newWheelAt: 1000,
+	test('fling decays to minVelocity and stops scheduling', () => {
+		const engine = createScrollEngine({
+			...defaultScrollConfig,
+			momentum: { enabled: true, friction: 0.5, minVelocity: 0.02 },
 		})
+		const cellHeight = 20
+
+		engine.onTouchStart(0)
+		for (let i = 1; i <= 5; i++) {
+			engine.onTouchMove(i * 16, 40)
+		}
+		engine.onTouchEnd(80)
+		expect(engine.isFlinging).toBe(true)
+
+		let frames = 0
+		let t = 80
+		while (engine.isAnimationActive(cellHeight) && frames < 500) {
+			t += 16
+			engine.tick(t, cellHeight, cell)
+			frames += 1
+		}
+
+		expect(engine.isFlinging).toBe(false)
+		expect(engine.isAnimationActive(cellHeight)).toBe(false)
+		expect(frames).toBeLessThan(500)
+	})
+
+	test('keys strategy sends pageSeq batches without fling', () => {
+		const engine = createScrollEngine({
+			...defaultScrollConfig,
+			strategy: 'keys',
+			linesPerWheel: 3,
+			maxLinesPerFrame: 4,
+		})
+		const cellHeight = 20
+		const pxPerWheel = (cellHeight * 3) / 1
+
+		engine.onTouchStart(0)
+		engine.onTouchMove(16, pxPerWheel * 2)
+		engine.onTouchEnd(32)
+		expect(engine.isFlinging).toBe(false)
+
+		const result = engine.tick(32, cellHeight, cell)
+		expect(result?.data).toBe(pageSeq('up').repeat(2))
+	})
+
+	test('touchmove hot path does not call layout APIs in attachScrollGesture', async () => {
+		const { readFileSync } = await import('node:fs')
+		const { resolve } = await import('node:path')
+		const source = readFileSync(resolve(import.meta.dirname, '../src/gestures/scroll.ts'), 'utf-8')
+		const moveBlock = source.slice(
+			source.indexOf('function onTouchMove'),
+			source.indexOf('function onTouchEnd'),
+		)
+		expect(moveBlock).not.toContain('getBoundingClientRect')
+		expect(moveBlock).not.toContain('querySelector')
+	})
+
+	test('adapter calls sendData once per animation frame', async () => {
+		const { readFileSync } = await import('node:fs')
+		const { resolve } = await import('node:path')
+		const source = readFileSync(resolve(import.meta.dirname, '../src/gestures/scroll.ts'), 'utf-8')
+		const frameBlock = source.slice(
+			source.indexOf('function onFrame'),
+			source.indexOf('function onTouchStart'),
+		)
+		expect(frameBlock.match(/sendData\(/g)?.length).toBe(1)
 	})
 })

@@ -270,8 +270,10 @@ export default {
     scroll: {
       enabled: true,
       strategy: 'wheel',
-      sensitivity: 40,
-      wheelIntervalMs: 24,
+      speedMultiplier: 1,
+      linesPerWheel: 3,
+      momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
+      maxLinesPerFrame: 24,
     },
     pinch: { enabled: true },
   },

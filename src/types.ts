@@ -72,12 +72,26 @@ export interface PinchConfig {
 /** Scroll gesture configuration */
 export type ScrollStrategy = 'keys' | 'wheel'
 
+/** Inertial fling configuration for touch scroll */
+export interface ScrollMomentumConfig {
+	readonly enabled: boolean
+	/** Per-frame velocity decay factor in (0, 1); 0.95 is a typical value */
+	readonly friction: number
+	/** Stop fling when |velocity| drops below this threshold (px/ms) */
+	readonly minVelocity: number
+}
+
 /** Scroll gesture configuration */
 export interface ScrollConfig {
 	readonly enabled: boolean
-	readonly sensitivity: number
 	readonly strategy: ScrollStrategy
-	readonly wheelIntervalMs: number
+	/** Follow-finger ratio: 1 = finger displacement matches content displacement */
+	readonly speedMultiplier: number
+	/** Terminal lines scrolled per SGR wheel event (tmux default is 3) */
+	readonly linesPerWheel: number
+	readonly momentum: ScrollMomentumConfig
+	/** Safety cap on lines redeemed per animation frame */
+	readonly maxLinesPerFrame: number
 }
 
 /** Double-tap gesture configuration */

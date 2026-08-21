@@ -34,7 +34,14 @@ const defaultGestures: RemobiConfig['gestures'] = {
 		rightLabel: 'Previous tmux window',
 	},
 	pinch: { enabled: false },
-	scroll: { enabled: true, sensitivity: 40, strategy: 'wheel', wheelIntervalMs: 24 },
+	scroll: {
+		enabled: true,
+		strategy: 'wheel',
+		speedMultiplier: 1,
+		linesPerWheel: 3,
+		momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
+		maxLinesPerFrame: 24,
+	},
 	doubleTap: { enabled: false, data: '\x02z', maxInterval: 300 },
 }
 

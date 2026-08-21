@@ -29,7 +29,7 @@ body {
 @media (pointer: coarse) {
 	.xterm-screen {
 		overscroll-behavior: none;
-		touch-action: manipulation;
+		touch-action: none;
 	}
 }
 
