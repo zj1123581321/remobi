@@ -772,3 +772,50 @@ body.wt-composer-open #wt-toolbar {
 		min-height: 36px;
 	}
 }
+
+/* Image drop: status panel for the image-upload drawer action */
+#wt-image-drop {
+	display: none;
+	position: fixed;
+	left: 12px;
+	right: 12px;
+	bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	background: #313244;
+	color: #cdd6f4;
+	border-radius: 12px;
+	z-index: 10005;
+	font-family: system-ui, sans-serif;
+	font-size: 14px;
+}
+
+/* Path must stay selectable so users can copy it manually */
+#wt-image-drop .wt-image-drop-path {
+	background: #1e1e2e;
+	border-radius: 6px;
+	padding: 8px;
+	font-size: 13px;
+	word-break: break-all;
+	-webkit-user-select: text;
+	user-select: text;
+}
+
+#wt-image-drop button {
+	background: #45475a;
+	color: #cdd6f4;
+	border: none;
+	border-radius: 6px;
+	min-height: 44px;
+	margin-right: 8px;
+	padding: 4px 12px;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+#wt-image-drop button:disabled {
+	opacity: 0.5;
+}
