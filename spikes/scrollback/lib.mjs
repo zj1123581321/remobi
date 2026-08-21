@@ -22,23 +22,16 @@ export const SESSION_SOCKET = join(
 export const ARTIFACTS_DIR = join(tmpdir(), 'spike-scrollback-captures')
 export const CAPTURE_DIR = ARTIFACTS_DIR
 
-const NESTED_MUX_ENV_VARS = new Set([
-	'TMUX',
-	'TMUX_PANE',
-	'ZELLIJ',
-	'ZELLIJ_PANE_ID',
-	'ZELLIJ_SESSION_NAME',
-	'HERDR_SESSION',
-	'HERDR_SOCKET_PATH',
-	'HERDR_PANE_ID',
-	'HERDR_TAB_ID',
-	'HERDR_WORKSPACE_ID',
-])
+const NESTED_MUX_ENV_PREFIXES = ['TMUX', 'ZELLIJ', 'HERDR']
+
+function isNestedMuxEnvVar(key) {
+	return NESTED_MUX_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))
+}
 
 // Mirrors buildSessionEnv() from src/session.ts.
 export function ptyEnv(sourceEnv) {
 	const rest = Object.fromEntries(
-		Object.entries(sourceEnv).filter(([key]) => !NESTED_MUX_ENV_VARS.has(key)),
+		Object.entries(sourceEnv).filter(([key]) => !isNestedMuxEnvVar(key)),
 	)
 	return { ...rest, TERM: 'xterm-256color' }
 }

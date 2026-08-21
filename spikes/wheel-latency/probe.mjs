@@ -4,12 +4,7 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 const nowMs = () => Date.now()
-import {
-	ARTIFACTS_DIR,
-	HerdrCapture,
-	startCleanSession,
-	teardown,
-} from './lib.mjs'
+import { ARTIFACTS_DIR, HerdrCapture, startCleanSession, teardown } from './lib.mjs'
 
 const PANE = 'w1:p1'
 // SGR wheel-up at cell (40, 12) — matches task card and scroll.ts scrollSeq('up', 40, 12).
@@ -47,8 +42,7 @@ function intervalStats(events, t0, t1) {
 	const intervals = []
 	for (let i = 1; i < ts.length; i++) intervals.push(ts[i] - ts[i - 1])
 	const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length
-	const variance =
-		intervals.reduce((a, v) => a + (v - mean) ** 2, 0) / intervals.length
+	const variance = intervals.reduce((a, v) => a + (v - mean) ** 2, 0) / intervals.length
 	return { count: ts.length, meanMs: mean, stdMs: Math.sqrt(variance), intervals }
 }
 
@@ -76,9 +70,7 @@ function bytesFromEvents(events, fromIdx) {
 }
 
 function byteSizes(events, t0, t1) {
-	return events
-		.filter((e) => e.type === 'data' && e.t >= t0 && e.t <= t1)
-		.map((e) => e.bytes)
+	return events.filter((e) => e.type === 'data' && e.t >= t0 && e.t <= t1).map((e) => e.bytes)
 }
 
 async function prepareScrollablePane(cap) {
@@ -90,10 +82,11 @@ async function verifyWheelProducesOutput(cap) {
 	const before = cap.events.length
 	const t0 = nowMs()
 	cap.write(WHEEL_UP)
-	await cap.waitFor(
-		() => cap.events.length > before,
-		{ timeoutMs: 2000, intervalMs: 10, what: 'wheel output' },
-	)
+	await cap.waitFor(() => cap.events.length > before, {
+		timeoutMs: 2000,
+		intervalMs: 10,
+		what: 'wheel output',
+	})
 	const dt = nowMs() - t0
 	const newEvents = cap.events.length - before
 	console.log(`[verify] wheel produced ${newEvents} PTY chunk(s) in ${dt.toFixed(1)}ms`)
@@ -192,13 +185,22 @@ function findSaturation(freqResults) {
 
 async function runProbe() {
 	const cap = await startCleanSession()
-	const result = { env: {}, verify: null, metric1: null, metric2: [], saturation: null, ts: new Date().toISOString() }
+	const result = {
+		env: {},
+		verify: null,
+		metric1: null,
+		metric2: [],
+		saturation: null,
+		ts: new Date().toISOString(),
+	}
 
 	try {
 		result.env = {
-			herdr: (await import('node:child_process')).execFileSync('herdr', ['--version'], {
-				encoding: 'utf8',
-			}).trim(),
+			herdr: (await import('node:child_process'))
+				.execFileSync('herdr', ['--version'], {
+					encoding: 'utf8',
+				})
+				.trim(),
 			session: 'spike-wheel',
 			cols: cap.cols,
 			rows: cap.rows,
