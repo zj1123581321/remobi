@@ -329,7 +329,9 @@ export async function writeImageDrop(bytes: Uint8Array, format: ImageDropFormat)
 	try {
 		await handle.writeFile(bytes)
 	} catch (error) {
-		await handle.close()
+		// The original write error must reach the caller; a secondary close
+		// failure is swallowed so the partial-file cleanup below always runs.
+		await handle.close().catch(() => {})
 		await rm(path, { force: true })
 		throw error
 	}

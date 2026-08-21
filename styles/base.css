@@ -791,8 +791,15 @@ body.wt-composer-open #wt-toolbar {
 	font-size: 14px;
 }
 
+#wt-image-drop .wt-image-drop-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
 /* Path must stay selectable so users can copy it manually */
 #wt-image-drop .wt-image-drop-path {
+	display: block;
 	background: #1e1e2e;
 	border-radius: 6px;
 	padding: 8px;
@@ -808,7 +815,6 @@ body.wt-composer-open #wt-toolbar {
 	border: none;
 	border-radius: 6px;
 	min-height: 44px;
-	margin-right: 8px;
 	padding: 4px 12px;
 	font-size: 13px;
 	font-weight: 600;

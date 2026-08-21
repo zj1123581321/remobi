@@ -167,7 +167,7 @@ export function createImageDropController(deps: ImageDropControllerDeps): ImageD
 		if (path === null) return
 		clipboard.writeText(path).then(
 			() => setState(state, 'Copied to clipboard.'),
-			() => setState(state, 'Copy failed — long-press the path to copy it manually.'),
+			() => setState(state, 'Copy failed — select the path and copy it manually.'),
 		)
 	})
 
