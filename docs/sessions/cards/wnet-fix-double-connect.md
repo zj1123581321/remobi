@@ -111,7 +111,7 @@ CI 侧对应的 WebKit 失败（`main@1a00a263` 与 `card/wnet-t4@50dd698` 两�
 
 ## 完成条件
 
-- **产物入库**：提交到 `card/wnet-t4`；报告贴出 `git log --oneline -1` 与 `git show --stat HEAD`。
+- **产物入库**：提交到 delegate 分配的 `card/<worktree 名>` 分支；报告贴出 `git log --oneline -1` 与 `git show --stat HEAD`。
 - **行为验收**：
   1. 普通加载页面，WebSocket 构造计数 **= 1**。
   2. bfcache/前后台恢复仍然强制建新 epoch（不许为了修这条把 force 语义削掉）。
@@ -127,7 +127,7 @@ CI 侧对应的 WebKit 失败（`main@1a00a263` 与 `card/wnet-t4@50dd698` 两�
   `pnpm run lint:knip`、`pnpm run build:dist`
 - **WebKit**：本机缺系统库跑不起来，**不要装系统包**；这条修复能否真正让 WebKit 转绿
   由 CI 验证，报告里注明"本机未验证 WebKit，待 CI 确认"。
-- **现场还原**：停在 `card/wnet-t4`；不要留 Playwright 进程。
+- **现场还原**：停在 delegate 分配的卡分支；不要留 Playwright 进程。
 - **提交纪律**（固定条款，原样保留）：必须在本卡分支上小步 commit，未提交的工作按未完成处理。
   **本卡按 ①CONNECTING 守卫 + 单测轴表 ②e2e 防回归 两次提交。**
 - **红验安全**（固定条款，原样保留）：红验前先 commit 已验证的真修复；还原只还原改坏的那一处。
