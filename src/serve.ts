@@ -1,9 +1,11 @@
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { open, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { serve as honoServe } from '@hono/node-server'
 import { createNodeWebSocket } from '@hono/node-ws'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import type { WSContext } from 'hono/ws'
 import type WebSocket from 'ws'
 import { bundleClientAssets, bundleWorkletAsset, renderClientHtml } from '../build'
@@ -278,6 +280,107 @@ function routeVariants(basePath: string, path: string): readonly string[] {
 	return Array.from(new Set([path, joinBasePath(basePath, path)]))
 }
 
+const IMAGE_DROP_MAX_BYTES = 10 * 1024 * 1024
+
+export type ImageDropFormat = 'png' | 'jpeg' | 'webp' | 'gif'
+const HEIC_MAJOR_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heif', 'mif1', 'msf1'])
+
+function asciiAt(bytes: Uint8Array, offset: number, text: string): boolean {
+	if (bytes.length < offset + text.length) return false
+	return [...text].every((char, index) => bytes[offset + index] === char.charCodeAt(0))
+}
+
+/** Sniff the image drop format from magic bytes only; client Content-Type and file names are untrusted. */
+export function detectImageDropFormat(bytes: Uint8Array): ImageDropFormat | 'heic' | null {
+	if (asciiAt(bytes, 0, '\x89PNG\r\n\x1a\n')) return 'png'
+	if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpeg'
+	if (asciiAt(bytes, 0, 'RIFF') && asciiAt(bytes, 8, 'WEBP')) return 'webp'
+	if (asciiAt(bytes, 0, 'GIF8')) return 'gif'
+	const brand = asciiAt(bytes, 4, 'ftyp') ? String.fromCharCode(...bytes.subarray(8, 12)) : ''
+	if (HEIC_MAJOR_BRANDS.has(brand)) return 'heic'
+	return null
+}
+
+/** Buffer a raw image drop body, returning null the moment it exceeds the 10 MiB limit. */
+async function readImageDropBody(
+	stream: ReadableStream<Uint8Array> | null,
+): Promise<Uint8Array | null> {
+	if (stream === null) return new Uint8Array(0)
+	const chunks: Uint8Array[] = []
+	let total = 0
+	const reader = stream.getReader()
+	for (;;) {
+		const { done, value } = await reader.read()
+		if (done || value === undefined) break
+		total += value.byteLength
+		if (total > IMAGE_DROP_MAX_BYTES) {
+			await reader.cancel()
+			return null
+		}
+		chunks.push(value)
+	}
+	return new Uint8Array(await new Blob(chunks as BlobPart[]).arrayBuffer())
+}
+
+/** Write an image drop to a fresh 0600 temp file; on failure removes only this call's own partial file. */
+export async function writeImageDrop(bytes: Uint8Array, format: ImageDropFormat): Promise<string> {
+	const path = join(tmpdir(), `remobi-drop-${randomUUID()}.${format === 'jpeg' ? 'jpg' : format}`)
+	const handle = await open(path, 'wx', 0o600)
+	try {
+		await handle.writeFile(bytes)
+	} catch (error) {
+		await handle.close()
+		await rm(path, { force: true })
+		throw error
+	}
+	await handle.close()
+	return path
+}
+
+/** Handle a raw image drop POST: origin check, exact 10 MiB limit, magic-byte sniff, 0600 temp file. */
+async function handleImageDropRequest(
+	c: Context,
+	securityHeadersForRequest: (hostHeader: string | undefined) => Record<string, string>,
+): Promise<Response> {
+	const securityHeaders = securityHeadersForRequest(c.req.header('host'))
+	const deny = (message: string, status: 400 | 403 | 413 | 415): Response =>
+		withSecurityHeaders(c.text(message, status), securityHeaders)
+	if (!isAllowedOrigin(c.req.header('origin'), c.req.header('host'))) {
+		return deny('Forbidden', 403)
+	}
+	const declaredLength = Number(c.req.header('content-length') ?? 0)
+	const body =
+		declaredLength > IMAGE_DROP_MAX_BYTES ? null : await readImageDropBody(c.req.raw.body)
+	if (body === null) return deny('image drop too large: 10 MiB maximum', 413)
+	if (body.byteLength === 0) return deny('image drop is empty: POST the raw image file bytes', 400)
+	const format = detectImageDropFormat(body)
+	if (format === 'heic') {
+		return deny(
+			'HEIC photos are not supported: convert the photo to JPEG or PNG in the iPhone Photos app first',
+			415,
+		)
+	}
+	if (format === null) {
+		return deny('unrecognized image drop format: send PNG, JPEG, WebP, or GIF', 415)
+	}
+
+	const path = await writeImageDrop(body, format)
+	const response = c.json({ path, format, size: body.byteLength })
+	response.headers.set('cache-control', 'no-store')
+	return withSecurityHeaders(response, securityHeaders)
+}
+
+/** Mount the image drop POST route on every base-path variant. */
+function registerImageDropRoutes(
+	app: Hono,
+	basePath: string,
+	securityHeadersForRequest: (hostHeader: string | undefined) => Record<string, string>,
+): void {
+	for (const route of routeVariants(basePath, '/api/image-drop')) {
+		app.post(route, (c) => handleImageDropRequest(c, securityHeadersForRequest))
+	}
+}
+
 /** Log the executable without leaking full argv, which may contain secrets or tokens. */
 export function describeCommandForLogs(command: readonly string[]): string {
 	const [file, ...args] = command
@@ -508,6 +611,8 @@ export async function serve(
 			)
 		}
 	}
+
+	registerImageDropRoutes(app, basePath, securityHeadersForRequest)
 
 	const server = honoServe({ fetch: app.fetch, port, hostname: host })
 	injectWebSocket(server)

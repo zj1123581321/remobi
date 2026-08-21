@@ -1,4 +1,7 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { request as httpRequest } from 'node:http'
 import { createServer } from 'node:net'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import WebSocket from 'ws'
@@ -66,6 +69,7 @@ async function waitForHttp(url: string, timeoutMs = 10_000): Promise<void> {
 function startServe(
 	port: number,
 	command = ['bash', '--norc', '--noprofile'],
+	env?: NodeJS.ProcessEnv,
 ): ReturnType<typeof spawnProcess> {
 	const proc = spawnProcess(
 		['tsx', join(repoRoot, 'cli.ts'), 'serve', '--port', String(port), '--', ...command],
@@ -74,6 +78,7 @@ function startServe(
 			stdin: 'ignore',
 			stdout: 'pipe',
 			stderr: 'pipe',
+			env: { ...process.env, ...env },
 		},
 	)
 	runningProcesses.push(proc)
@@ -290,6 +295,71 @@ describe('serve websocket hardening', () => {
 			client.close()
 		} finally {
 			await stopServe(proc)
+		}
+	})
+})
+
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+function postRawImageDrop(
+	url: string,
+	body: Buffer,
+	chunked: boolean,
+): Promise<{ statusCode: number; path?: string; size?: number }> {
+	return new Promise((resolve, reject) => {
+		let responded = false
+		const request = httpRequest(
+			url,
+			{ method: 'POST', headers: chunked ? {} : { 'content-length': body.length } },
+			(response) => {
+				responded = true
+				const chunks: Buffer[] = []
+				response.on('data', (chunk: Buffer) => chunks.push(chunk))
+				response.once('end', () => {
+					const text = Buffer.concat(chunks).toString('utf-8')
+					const parsed: { path?: string; size?: number } =
+						response.statusCode === 200 ? JSON.parse(text) : {}
+					resolve({ statusCode: response.statusCode ?? 0, ...parsed })
+				})
+			},
+		)
+		request.once('error', (error) => {
+			if (!responded) reject(error)
+		})
+		if (chunked) {
+			for (let offset = 0; offset < body.length; offset += 262_144) {
+				request.write(body.subarray(offset, offset + 262_144))
+			}
+		}
+		request.end(chunked ? undefined : body)
+	})
+}
+
+describe('image drop body limits', () => {
+	test('accepts exactly 10 MiB and rejects 10 MiB + 1, with content-length or chunked', async () => {
+		const port = await reservePort()
+		const dropDir = mkdtempSync(join(tmpdir(), 'remobi-drop-abuse-'))
+		const proc = startServe(port, ['bash', '--norc', '--noprofile'], { TMPDIR: dropDir })
+		try {
+			const endpoint = `http://127.0.0.1:${port}/api/image-drop`
+			await waitForHttp(`http://127.0.0.1:${port}`)
+
+			const tenMiB = Buffer.alloc(10 * 1024 * 1024)
+			PNG_MAGIC.copy(tenMiB)
+			const accepted = await postRawImageDrop(endpoint, tenMiB, false)
+			expect(accepted.statusCode).toBe(200)
+			// Boolean comparison: a failing toEqual on 10 MiB buffers would OOM the reporter.
+			expect(readFileSync(accepted.path ?? '').equals(tenMiB)).toBe(true)
+
+			const tooLarge = Buffer.concat([tenMiB, Buffer.from([0])])
+			expect((await postRawImageDrop(endpoint, tooLarge, false)).statusCode).toBe(413)
+			expect((await postRawImageDrop(endpoint, tooLarge, true)).statusCode).toBe(413)
+
+			const chunkedPng = await postRawImageDrop(endpoint, PNG_MAGIC, true)
+			expect(chunkedPng.statusCode).toBe(200)
+			expect(readFileSync(chunkedPng.path ?? '')).toEqual(PNG_MAGIC)
+		} finally {
+			await stopServe(proc)
+			rmSync(dropDir, { recursive: true, force: true })
 		}
 	})
 })
