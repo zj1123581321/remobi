@@ -554,29 +554,6 @@ describe('createScrollEngine', () => {
 			pendingAfterFlingTick - pendingBeforeStop,
 		)
 	})
-
-	test('touchmove hot path does not call layout APIs in attachScrollGesture', async () => {
-		const { readFileSync } = await import('node:fs')
-		const { resolve } = await import('node:path')
-		const source = readFileSync(resolve(import.meta.dirname, '../src/gestures/scroll.ts'), 'utf-8')
-		const moveBlock = source.slice(
-			source.indexOf('function onTouchMove'),
-			source.indexOf('function onTouchEnd'),
-		)
-		expect(moveBlock).not.toContain('getBoundingClientRect')
-		expect(moveBlock).not.toContain('querySelector')
-	})
-
-	test('adapter calls sendData once per animation frame', async () => {
-		const { readFileSync } = await import('node:fs')
-		const { resolve } = await import('node:path')
-		const source = readFileSync(resolve(import.meta.dirname, '../src/gestures/scroll.ts'), 'utf-8')
-		const frameBlock = source.slice(
-			source.indexOf('function onFrame'),
-			source.indexOf('function onTouchStart'),
-		)
-		expect(frameBlock.match(/sendData\(/g)?.length).toBe(1)
-	})
 })
 
 describe('attachScrollGesture', () => {
@@ -640,6 +617,98 @@ describe('attachScrollGesture', () => {
 			new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [] }),
 		)
 	}
+
+	test('adapter calls sendData once per animation frame with batched payload', () => {
+		const sent: string[] = []
+		const term = {
+			...mockTerminal(),
+			cols: 80,
+			rows: 24,
+			input(data: string) {
+				sent.push(data)
+			},
+		}
+		const lock = createGestureLock()
+		const { element: screen } = makeScreen(() => 480)
+		const scrollConfig = {
+			...defaultScrollConfig,
+			linesPerWheel: 3,
+			maxLinesPerFrame: 24,
+		}
+		const wheelCount = 5
+		const pxPerWheel = (480 / 24) * scrollConfig.linesPerWheel
+
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			cb(16)
+			return 1
+		})
+		vi.stubGlobal('cancelAnimationFrame', vi.fn())
+
+		document.body.appendChild(screen)
+		attachScrollGesture(term, scrollConfig, lock, () => false)
+
+		screen.dispatchEvent(
+			new TouchEvent('touchstart', {
+				bubbles: true,
+				cancelable: true,
+				touches: [makeTouch(screen, 100)],
+			}),
+		)
+		sent.length = 0
+		screen.dispatchEvent(
+			new TouchEvent('touchmove', {
+				bubbles: true,
+				cancelable: true,
+				touches: [makeTouch(screen, 100 + wheelCount * pxPerWheel)],
+			}),
+		)
+
+		expect(sent.length).toBe(1)
+		const { x, y } = touchToCell(makeTouch(screen, 100), screen, term)
+		expect(sent[0]).toBe(scrollSeq('up', x, y).repeat(wheelCount))
+
+		document.body.removeChild(screen)
+		vi.unstubAllGlobals()
+	})
+
+	test('touchmove hot path does not call layout APIs in attachScrollGesture', () => {
+		const term = { ...mockTerminal(), cols: 80, rows: 24 }
+		const lock = createGestureLock()
+		const { element: screen, measureSpy } = makeScreen(() => 480)
+
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			cb(16)
+			return 1
+		})
+		vi.stubGlobal('cancelAnimationFrame', vi.fn())
+
+		document.body.appendChild(screen)
+		attachScrollGesture(term, defaultScrollConfig, lock, () => false)
+
+		screen.dispatchEvent(
+			new TouchEvent('touchstart', {
+				bubbles: true,
+				cancelable: true,
+				touches: [makeTouch(screen, 100)],
+			}),
+		)
+		const measureCallsAfterStart = measureSpy.mock.calls.length
+
+		for (let i = 1; i <= 5; i++) {
+			screen.dispatchEvent(
+				new TouchEvent('touchmove', {
+					bubbles: true,
+					cancelable: true,
+					touches: [makeTouch(screen, 100 + i * 30)],
+				}),
+			)
+		}
+
+		expect(measureSpy.mock.calls.length).toBe(measureCallsAfterStart)
+
+		document.body.removeChild(screen)
+		vi.unstubAllGlobals()
+	})
 
 	test('touchcancel stops fling and cancels scheduled rAF', () => {
 		const cancelSpy = vi.fn()
