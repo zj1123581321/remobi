@@ -1,7 +1,7 @@
 # 里程碑进度：M3 — 提交不重不漏
 
 - **负责主脑**：claude-opus5（herdr tab `w15:t1`）
-- **状态**：未开始（等 M1 + M2 全部合并）
+- **状态**：进行中（代码已合并进 main，只等真机入口层证据）
 - **预期产出**：合并后主干上，提交一整条长语音指令会得到诚实的状态——
   「未发送 / 待确认 / 已接收 / 结果未知 / 未接收+原因」；确认帧丢失后用同一 ID 重送，
   **PTY 不会被写第二次**；`autoEnter` 的回车与正文是同一次写入。
@@ -23,7 +23,11 @@
      盲目重送等于重复执行一条命令。
   5. 自动重送**每个 epoch 至多一次**，且**不跑** before/after hook——
      传输层重试不是一次新的业务动作。
-- **已知阻塞**：等 T1（存储 schema）与 T3（`synced` / `ConnectionStatus` / epoch）合并进 `main`。
+- **已知阻塞**：只剩真机入口层证据（依赖用户本人跑 T0 场景）。
+- **进度**：**T4 已合并**（PR #18 → `f40fd6a`），首轮即过。
+  核心 e2e `lost accepted retries the same action once and writes PTY once` 通过——
+  确认帧丢失后同 ID 重送，PTY 只被写一次，即设计成功判据 #4。
+  `sendInputAction` 复用 T3 的三道可达性门槛，但失败时保留 pending 而非丢弃。
 - **推进前必须拿到的证据**：
   - [ ] 全量单测 + Playwright 绿；环境：本地；命令：`pnpm test`、`pnpm run test:pw`
   - [ ] **时序测试连跑 5 次全绿**（含 15 秒 deadline 与自动重送）；环境：本地；

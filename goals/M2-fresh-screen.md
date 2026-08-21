@@ -1,7 +1,7 @@
 # 里程碑进度：M2 — 画面新鲜可信
 
 - **负责主脑**：claude-opus5（herdr tab `w15:t1`）
-- **状态**：进行中
+- **状态**：进行中（代码已合并进 main，只等真机入口层证据）
 - **预期产出**：合并后主干上，用户回到页面时能分辨画面是「过期 / 重连中 / 同步中 / 已同步」，
   而 `已同步` **只**由当前连接的完整 snapshot 产生；断线期间敲的键**不会**被重放进终端。
 - **当前范围**：
@@ -35,7 +35,14 @@
     `Terminal failed; restart remobi.`，开销只存在于"看到错误却不重启"的窗口。
   - **已记录的设计限制**：`accepted` 只证明 data 已交给 PTY 写入队列，不保证操作系统层面
     写入成功（详见设计文档 `## Known Limitations`）。
-  - **T3 已派发**（`card/wnet-t3`，base `513d3fb`）。
+  - **T3 已合并**（PR #17 → `1a00a26`）。四轮修复，中途触发过一次补丁追逐熔断：
+    四条 finding 全落在生命周期/可达性边界，遂改做系统性收口——加不依赖事件的
+    `lastProvenFreshAt` 时间证明，并把 I1/I2/I3 三条不变式写进设计文档。
+    第 3 轮独立审查用真实 Chromium 抓到 2 条 P1（冻结后旧 epoch 仍算 synced；
+    离线时 OPEN socket 让按键进浏览器发送缓冲、恢复后真的执行）——**这两条 happy-dom 测不出来**。
+  - **双连接 bug 已修复并合并**（PR #19 → `9d9b627`）：T3 带进来的时序竞态，
+    每次加载都构造两个 WebSocket，WebKit 报 console error 使 main 红了约 8 小时。
+    教训已提 agent-config issue #419（合并后主干 CI 无人盯）。
 - **推进前必须拿到的证据**：
   - [ ] 全量单测 + Playwright 绿；环境：本地；命令：`pnpm test`、`pnpm run test:pw`
   - [ ] **时序测试连跑 5 次全绿**（T2 的 session 测试、T3 的连接状态机测试各自 5 次）；
