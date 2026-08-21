@@ -62,15 +62,31 @@ export async function waitForHttp(url: string, timeoutMs = 10_000): Promise<void
 interface IsolatedServe {
 	port: number
 	url: string
+	/**
+	 * Isolated TMPDIR of the serve process when `isolateTmpDir` was requested —
+	 * image drops land here instead of the real /tmp; removed by close().
+	 */
+	tmpDir: string | null
 	close(): Promise<void>
 }
 
 export async function startIsolatedServe(
-	options: { basePath?: string; command?: string[]; configPath?: string } = {},
+	options: {
+		basePath?: string
+		command?: string[]
+		configPath?: string
+		isolateTmpDir?: boolean
+	} = {},
 ): Promise<IsolatedServe> {
-	const { basePath, command = ['bash', '--norc', '--noprofile'], configPath } = options
+	const {
+		basePath,
+		command = ['bash', '--norc', '--noprofile'],
+		configPath,
+		isolateTmpDir,
+	} = options
 	const port = await reservePort()
 	const home = mkdtempSync(join(tmpdir(), 'remobi-playwright-home-'))
+	const serveTmp = isolateTmpDir ? mkdtempSync(join(tmpdir(), 'remobi-playwright-tmp-')) : null
 
 	const proc = spawnProcess(
 		[
@@ -86,7 +102,7 @@ export async function startIsolatedServe(
 		],
 		{
 			cwd: repoRoot,
-			env: { ...process.env, HOME: home },
+			env: { ...process.env, HOME: home, ...(serveTmp ? { TMPDIR: serveTmp } : {}) },
 			stdin: 'ignore',
 			stdout: 'pipe',
 			stderr: 'pipe',
@@ -97,6 +113,11 @@ export async function startIsolatedServe(
 		exited = true
 	})
 
+	const cleanup = (): void => {
+		rmSync(home, { recursive: true, force: true })
+		if (serveTmp) rmSync(serveTmp, { recursive: true, force: true })
+	}
+
 	const url = `http://127.0.0.1:${port}${basePath ?? ''}`
 	try {
 		await waitForHttp(url, 30_000)
@@ -105,19 +126,20 @@ export async function startIsolatedServe(
 			proc.kill('SIGINT')
 			await proc.exited
 		}
-		rmSync(home, { recursive: true, force: true })
+		cleanup()
 		throw error
 	}
 
 	return {
 		port,
 		url,
+		tmpDir: serveTmp,
 		async close(): Promise<void> {
 			if (!exited) {
 				proc.kill('SIGINT')
 				await proc.exited
 			}
-			rmSync(home, { recursive: true, force: true })
+			cleanup()
 		},
 	}
 }
