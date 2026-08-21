@@ -174,9 +174,9 @@ describe('defaultConfig', () => {
 		expect(byId.has('tmux-links')).toBe(false)
 	})
 
-	test('row1 is Esc, C-c, ⌫, ⏎, ✥, ⌨, 🖼, ☰ More', () => {
+	test('row1 is Esc, C-c, ✥, ⏎, Voice, 🖼, ⌨, ☰', () => {
 		const labels = defaultConfig.toolbar.row1.map((b) => b.label)
-		expect(labels).toEqual(['Esc', 'C-c', '⌫', '⏎', '✥', '⌨', '🖼', '☰ More'])
+		expect(labels).toEqual(['Esc', 'C-c', '✥', '⏎', 'Voice', '🖼', '⌨', '☰'])
 	})
 
 	test('default mobile font size is 13', () => {
@@ -224,8 +224,16 @@ describe('defaultConfig', () => {
 })
 
 describe('withVoiceComposerEntry', () => {
-	test('inserts after keyboard-toggle and before drawer-toggle', () => {
+	test('is a no-op for the default config — voice-input is already on default row1', () => {
 		const config = defineConfig({ asr: { enabled: true } })
+		expect(withVoiceComposerEntry(config)).toBe(config)
+	})
+
+	test('custom row1 without voice: inserts after keyboard-toggle and before drawer-toggle', () => {
+		const config = defineConfig({
+			asr: { enabled: true },
+			toolbar: { row1: (defaults) => defaults.filter((b) => b.id !== 'voice-input') },
+		})
 		const effective = withVoiceComposerEntry(config)
 		const types = effective.toolbar.row1.map((button) => button.action.type)
 

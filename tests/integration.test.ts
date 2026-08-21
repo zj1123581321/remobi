@@ -42,7 +42,7 @@ describe('toolbar integration', () => {
 		expect(rows[0]?.matches('.wt-row:first-child:last-child')).toBe(true)
 	})
 
-	test('row1 has correct number of buttons', () => {
+	test('row1 renders every default button except voice-input without a micController', () => {
 		const term = mockTerminal()
 		const hooks = createHookRegistry()
 		const drawer = createDrawer(term, defaultConfig.drawer.buttons, {
@@ -55,7 +55,34 @@ describe('toolbar integration', () => {
 
 		const row1 = toolbar.querySelector('.wt-row')
 		const buttons = row1?.querySelectorAll('button')
-		expect(buttons?.length).toBe(defaultConfig.toolbar.row1.length)
+		// voice-input is on default row1 but stays hidden until ASR is available
+		expect(buttons?.length).toBe(defaultConfig.toolbar.row1.length - 1)
+		expect(toolbar.querySelector('[data-remobi-button-id="voice-input"]')).toBeNull()
+	})
+
+	test('row1 renders the voice-input button when a micController is wired', () => {
+		const micController: MicController = {
+			preview: createAsrPreview(),
+			state: 'idle',
+			attachComposerToggle() {},
+			attachMicButton() {},
+			dispose() {},
+		}
+		const { element: toolbar } = createToolbar(
+			mockTerminal(),
+			defaultConfig,
+			() => {},
+			createHookRegistry(),
+			undefined,
+			undefined,
+			micController,
+		)
+
+		document.body.appendChild(toolbar)
+
+		const row1 = toolbar.querySelector('.wt-row')
+		expect(row1?.querySelectorAll('button').length).toBe(defaultConfig.toolbar.row1.length)
+		expect(toolbar.querySelector('[data-remobi-button-id="voice-input"]')).not.toBeNull()
 	})
 
 	test('renders voice input as an icon button with the mic class', () => {

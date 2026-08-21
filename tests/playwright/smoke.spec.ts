@@ -60,7 +60,7 @@ test('help overlay shows version', async ({ page }) => {
 	await page.waitForSelector('#wt-toolbar', { timeout: 10_000 })
 
 	// Open help via touchend — simulates iOS Safari not firing click on dynamic elements
-	const moreBtn = page.locator('#wt-toolbar button', { hasText: 'More' })
+	const moreBtn = page.locator('#wt-toolbar button', { hasText: '☰' })
 	await expect(moreBtn).toBeVisible()
 	await moreBtn.dispatchEvent('touchend', {
 		touches: [],

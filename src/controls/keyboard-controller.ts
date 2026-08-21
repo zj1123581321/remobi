@@ -35,7 +35,7 @@ export function syncKeyboardIndicators(keyboard: KeyboardController, root: Paren
 	}
 }
 
-/** Default keyboard-toggle button (toolbar row1, next to ☰ More) */
+/** Default keyboard-toggle button (toolbar row1, next to ☰) */
 export const keyboardToggleButton: ControlButton = {
 	id: 'keyboard-toggle',
 	label: '⌨',

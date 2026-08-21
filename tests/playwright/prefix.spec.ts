@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 
 /** Open the drawer and tap the Prefix button inside it */
 async function tapDrawerPrefix(page: Page): Promise<void> {
-	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	const toggle = page.locator('#wt-toolbar button', { hasText: '☰' })
 	await toggle.tap()
 	await expect(page.locator('#wt-drawer')).toHaveClass(/open/)
 	const prefixBtn = page.locator('#wt-drawer-grid button', { hasText: 'Prefix' })
@@ -31,7 +31,7 @@ test('prefix button tap opens combo picker with contextual title', async ({ page
 })
 
 test('prefix button touchend-only opens combo picker', async ({ page }) => {
-	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	const toggle = page.locator('#wt-toolbar button', { hasText: '☰' })
 	await toggle.tap()
 	await expect(page.locator('#wt-drawer')).toHaveClass(/open/)
 	const prefixBtn = page.locator('#wt-drawer-grid button', { hasText: 'Prefix' })
@@ -72,7 +72,7 @@ test('prefix combo picker cancel restores default title', async ({ page }) => {
 	await expect(page.locator('#wt-combo-backdrop')).not.toBeVisible()
 
 	// Re-open via drawer Combo button — should have default title
-	const toggle = page.locator('#wt-toolbar button', { hasText: 'More' })
+	const toggle = page.locator('#wt-toolbar button', { hasText: '☰' })
 	await toggle.tap()
 	await expect(page.locator('#wt-drawer')).toHaveClass(/open/)
 
