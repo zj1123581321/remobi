@@ -14,7 +14,7 @@ import {
 	sanitizeVoiceText,
 } from '../src/controls/mic-controller'
 import { createHookRegistry } from '../src/hooks/registry'
-import type { XTerminal } from '../src/types'
+import type { InputActionResult, XTerminal } from '../src/types'
 import { _resetTouchGuard } from '../src/util/tap'
 import { mockTerminalWithSent } from './fixtures'
 
@@ -114,6 +114,7 @@ function createHarness(
 	if (textarea) document.body.append(textarea)
 	let connected = true
 	const listeners = new Set<(value: boolean) => void>()
+	const actionResultListeners = new Set<(result: InputActionResult) => void>()
 	const term = {
 		...baseTerm,
 		focus() {
@@ -123,6 +124,19 @@ function createHarness(
 		onConnectionChange(handler: (value: boolean) => void) {
 			listeners.add(handler)
 			return { dispose: () => listeners.delete(handler) }
+		},
+		sendInputAction(id: string, data: string) {
+			const sent = baseTerm.sendInputAction(id, data)
+			queueMicrotask(() => {
+				for (const handler of actionResultListeners) {
+					handler({ id, accepted: true, reason: null })
+				}
+			})
+			return sent
+		},
+		onInputActionResult(handler: (result: InputActionResult) => void) {
+			actionResultListeners.add(handler)
+			return { dispose: () => actionResultListeners.delete(handler) }
 		},
 	}
 	const config = defineConfig({
@@ -735,9 +749,9 @@ describe('preview injection', () => {
 		const sendButton = controller.preview.element.querySelector('.wt-composer-send')
 		sendButton?.dispatchEvent(new Event('click'))
 		for (let index = 0; index < 8; index++) await Promise.resolve()
-		expect(term.sent).toEqual(['printf "voice-input\\n"', '\r'])
+		expect(term.sent).toEqual(['printf "voice-input\\n"\r'])
 		expect(hookCalls[0]).toContain('before:')
-		expect(hookCalls[1]).toBe('after:printf "voice-input\\n"')
+		expect(hookCalls[1]).toBe('after:printf "voice-input\\n"\r')
 		expect(controller.state).toBe('idle')
 		controller.dispose()
 	})
@@ -753,7 +767,7 @@ describe('preview injection', () => {
 		await Promise.resolve()
 		expect(harness.term.sent).toEqual([])
 		expect(harness.controller.state).toBe('preview')
-		expect(harness.controller.preview.message.textContent).toContain('disconnected')
+		expect(harness.controller.preview.message.textContent).toBe('Not sent — still syncing.')
 		harness.controller.dispose()
 	})
 
@@ -772,9 +786,8 @@ describe('preview injection', () => {
 			.querySelector('.wt-composer-send')
 			?.dispatchEvent(new Event('click'))
 		for (let index = 0; index < 8; index++) await Promise.resolve()
-		expect(harness.term.sent).toEqual(['typed command'])
-		expect(harness.controller.state).toBe('preview')
-		expect(harness.controller.preview.message.textContent).toContain('disconnected')
+		expect(harness.term.sent).toEqual(['typed command\r'])
+		expect(harness.controller.state).toBe('idle')
 		harness.controller.dispose()
 	})
 
@@ -887,7 +900,7 @@ describe('preview injection', () => {
 			name: 'hello with autoEnter',
 			draft: 'hello',
 			autoEnter: true,
-			sent: ['hello', '\r'],
+			sent: ['hello\r'],
 			message: undefined,
 		},
 	])('$name keeps the submit guards', async ({ draft, autoEnter, sent, message }) => {
@@ -919,8 +932,8 @@ describe('preview injection', () => {
 		dispatchPreviewTap(harness, 'send')
 		for (let index = 0; index < 8; index++) await Promise.resolve()
 
-		expect(harness.term.sent).toEqual(['send despite storage failure'])
-		expect(harness.controller.preview.getText()).toBe('')
+		expect(harness.term.sent).toEqual([])
+		expect(harness.controller.preview.getText()).toBe('send despite storage failure')
 		expect(errorSpy).toHaveBeenCalledTimes(1)
 		harness.controller.dispose()
 	})

@@ -160,6 +160,14 @@ export interface ConnectionStatus {
 	readonly lastFailureReason: ConnectionFailureReason | null
 }
 
+export type InputRejectedReason = 'id-conflict' | 'session-unavailable'
+
+export interface InputActionResult {
+	readonly id: string
+	readonly accepted: boolean
+	readonly reason: InputRejectedReason | null
+}
+
 /** Browser-direct ASR configuration. */
 export interface DoubaoAsrConfig {
 	readonly apiKey: string
@@ -272,6 +280,12 @@ export interface XTerminal {
 	onConnectionStatusChange(handler: (status: ConnectionStatus) => void): { dispose(): void }
 	/** Ask the runtime bridge to attempt a fresh connection immediately. */
 	requestReconnect(): void
+	/** Current epoch snapshot's terminal session ID, or null before sync. */
+	getSessionId(): string | null
+	/** Send one acknowledged composer action when the current connection is fresh. */
+	sendInputAction(id: string, data: string): boolean
+	/** Observe acknowledged or rejected composer actions for the current epoch. */
+	onInputActionResult(handler: (result: InputActionResult) => void): { dispose(): void }
 }
 
 /** ttyd sets window.term — typed globally to avoid unsafe casts */

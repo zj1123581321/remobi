@@ -29,6 +29,15 @@ export function mockTerminal(): XTerminal {
 			return { dispose() {} }
 		},
 		requestReconnect() {},
+		getSessionId() {
+			return 'test-session'
+		},
+		sendInputAction() {
+			return true
+		},
+		onInputActionResult() {
+			return { dispose() {} }
+		},
 	}
 }
 
@@ -66,6 +75,16 @@ export function mockTerminalWithSent(): MockTermWithSent {
 			return { dispose() {} }
 		},
 		requestReconnect() {},
+		getSessionId() {
+			return 'test-session'
+		},
+		sendInputAction(_id: string, data: string) {
+			sent.push(data)
+			return true
+		},
+		onInputActionResult() {
+			return { dispose() {} }
+		},
 	}
 }
 
@@ -94,6 +113,15 @@ export function mockTerminalWithFocus(): XTerminal & { focused: boolean } {
 			return { dispose() {} }
 		},
 		requestReconnect() {},
+		getSessionId() {
+			return 'test-session'
+		},
+		sendInputAction() {
+			return true
+		},
+		onInputActionResult() {
+			return { dispose() {} }
+		},
 		focused: false,
 	}
 }

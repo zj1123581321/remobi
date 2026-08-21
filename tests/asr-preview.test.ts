@@ -91,4 +91,31 @@ describe('voice composer shell', () => {
 
 		expect(states).toEqual([true, false])
 	})
+
+	test('persists pending and exposes live status controls', () => {
+		const composer = createAsrPreview()
+		const message = composer.message
+		const retry = composer.element.querySelector<HTMLButtonElement>('.wt-composer-retry')
+		const abandon = composer.element.querySelector<HTMLButtonElement>('.wt-composer-abandon')
+		const send = composer.element.querySelector<HTMLButtonElement>('.wt-composer-send')
+		if (!retry || !abandon || !send) throw new Error('missing composer action controls')
+
+		composer.setSubmissionControls('unknown')
+		composer.setSubmissionStatus(
+			'unknown',
+			'Result unknown — the terminal may or may not have received it.',
+		)
+		expect(message.getAttribute('aria-live')).toBe('polite')
+		expect(message.dataset.submissionStatus).toBe('unknown')
+		expect(retry.hidden).toBe(false)
+		expect(retry.disabled).toBe(false)
+		expect(abandon.hidden).toBe(false)
+		expect(send.disabled).toBe(true)
+
+		composer.setSubmissionControls('rejected')
+		composer.setSubmissionStatus('rejected', 'Not received: duplicate submission id.')
+		expect(retry.hidden).toBe(true)
+		expect(retry.disabled).toBe(true)
+		expect(abandon.hidden).toBe(false)
+	})
 })
