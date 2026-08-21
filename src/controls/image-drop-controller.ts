@@ -10,7 +10,7 @@ const IMAGE_DROP_ACK_TIMEOUT_MS = 15_000
 
 type ImageDropState = 'idle' | 'uploading' | 'file-ready' | 'inserting' | 'done' | 'error'
 
-export interface ImageDropControllerDeps {
+interface ImageDropControllerDeps {
 	/** Synced/fresh signals — only these four term bridge methods are used. */
 	readonly term: Pick<
 		XTerminal,

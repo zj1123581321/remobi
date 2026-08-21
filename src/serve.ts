@@ -282,7 +282,7 @@ function routeVariants(basePath: string, path: string): readonly string[] {
 
 const IMAGE_DROP_MAX_BYTES = 10 * 1024 * 1024
 
-export type ImageDropFormat = 'png' | 'jpeg' | 'webp' | 'gif'
+type ImageDropFormat = 'png' | 'jpeg' | 'webp' | 'gif'
 const HEIC_MAJOR_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heif', 'mif1', 'msf1'])
 
 function asciiAt(bytes: Uint8Array, offset: number, text: string): boolean {
@@ -291,7 +291,7 @@ function asciiAt(bytes: Uint8Array, offset: number, text: string): boolean {
 }
 
 /** Sniff the image drop format from magic bytes only; client Content-Type and file names are untrusted. */
-export function detectImageDropFormat(bytes: Uint8Array): ImageDropFormat | 'heic' | null {
+function detectImageDropFormat(bytes: Uint8Array): ImageDropFormat | 'heic' | null {
 	if (asciiAt(bytes, 0, '\x89PNG\r\n\x1a\n')) return 'png'
 	if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpeg'
 	if (asciiAt(bytes, 0, 'RIFF') && asciiAt(bytes, 8, 'WEBP')) return 'webp'
