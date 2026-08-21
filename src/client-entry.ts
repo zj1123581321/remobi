@@ -692,7 +692,16 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	function onPageShow(event: Event): void {
 		pageHidden = false
 		const persisted = 'persisted' in event && event.persisted === true
-		if (!persisted && connectionStatus.state === 'synced') return
+		// 首次加载也会派发 pageshow(persisted=false)，此时不该重连。
+		// 判据用新鲜度证明而不是 connectionStatus.state：后者是「没收到坏消息」的
+		// 缺席证据（I3 明令禁止），而 lastProvenFreshAt 只由当前 epoch 的 snapshot
+		// 应用成功与 ID 匹配的 pong 写入，是在场证据。
+		if (
+			!persisted &&
+			socket?.readyState === WebSocket.OPEN &&
+			Date.now() - lastProvenFreshAt <= FRESHNESS_WINDOW_MS
+		)
+			return
 		queueImmediateConnect(true)
 	}
 
