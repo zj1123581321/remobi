@@ -520,13 +520,39 @@ describe('createScrollEngine', () => {
 			...defaultScrollConfig,
 			momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
 		})
+		const cellHeight = 20
 
 		engine.onTouchStart(0)
 		for (let i = 1; i <= 5; i++) {
 			engine.onTouchMove(i * 16, 40)
 		}
+		engine.onTouchEnd(80)
+		expect(engine.isFlinging).toBe(true)
+
+		const pendingBeforeStop = engine.pendingPx
+
 		engine.stopFling()
 		expect(engine.isFlinging).toBe(false)
+
+		engine.tick(96, cellHeight, cell)
+		const pendingAfterStoppedTick = engine.pendingPx
+
+		const flinging = createScrollEngine({
+			...defaultScrollConfig,
+			momentum: { enabled: true, friction: 0.95, minVelocity: 0.02 },
+		})
+		flinging.onTouchStart(0)
+		for (let i = 1; i <= 5; i++) {
+			flinging.onTouchMove(i * 16, 40)
+		}
+		flinging.onTouchEnd(80)
+		expect(flinging.isFlinging).toBe(true)
+		flinging.tick(96, cellHeight, cell)
+		const pendingAfterFlingTick = flinging.pendingPx
+
+		expect(pendingAfterStoppedTick - pendingBeforeStop).toBeLessThan(
+			pendingAfterFlingTick - pendingBeforeStop,
+		)
 	})
 
 	test('touchmove hot path does not call layout APIs in attachScrollGesture', async () => {
@@ -554,23 +580,65 @@ describe('createScrollEngine', () => {
 })
 
 describe('attachScrollGesture', () => {
-	function makeScreen(width: number, height: number): HTMLElement {
-		const el = document.createElement('div')
-		el.className = 'xterm-screen'
-		Object.defineProperty(el, 'getBoundingClientRect', {
-			value: () => ({
+	function makeScreen(getHeight: () => number): {
+		element: HTMLElement
+		measureSpy: ReturnType<typeof vi.fn>
+	} {
+		const measureSpy = vi.fn(() => {
+			const height = getHeight()
+			return {
 				left: 0,
 				top: 0,
-				width,
+				width: 800,
 				height,
-				right: width,
+				right: 800,
 				bottom: height,
 				x: 0,
 				y: 0,
 				toJSON() {},
-			}),
+			}
 		})
-		return el
+		const el = document.createElement('div')
+		el.className = 'xterm-screen'
+		Object.defineProperty(el, 'getBoundingClientRect', { value: measureSpy })
+		return { element: el, measureSpy }
+	}
+
+	function makeTouch(screen: HTMLElement, clientY: number): Touch {
+		return {
+			identifier: 0,
+			target: screen,
+			clientX: 400,
+			clientY,
+			force: 1,
+			radiusX: 1,
+			radiusY: 1,
+			rotationAngle: 0,
+			pageX: 400,
+			pageY: clientY,
+			screenX: 400,
+			screenY: clientY,
+		} as Touch
+	}
+
+	function dispatchGesture(screen: HTMLElement, startY: number, endY: number): void {
+		screen.dispatchEvent(
+			new TouchEvent('touchstart', {
+				bubbles: true,
+				cancelable: true,
+				touches: [makeTouch(screen, startY)],
+			}),
+		)
+		screen.dispatchEvent(
+			new TouchEvent('touchmove', {
+				bubbles: true,
+				cancelable: true,
+				touches: [makeTouch(screen, endY)],
+			}),
+		)
+		screen.dispatchEvent(
+			new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [] }),
+		)
 	}
 
 	test('touchcancel stops fling and cancels scheduled rAF', () => {
@@ -588,32 +656,24 @@ describe('attachScrollGesture', () => {
 		const term = { ...mockTerminal(), cols: 80, rows: 24 }
 		const lock = createGestureLock()
 
-		const screen = makeScreen(800, 480)
+		const { element: screen } = makeScreen(() => 480)
 		document.body.appendChild(screen)
 
 		attachScrollGesture(term, defaultScrollConfig, lock, () => false)
 
-		const makeTouch = (clientY: number): Touch =>
-			({
-				identifier: 0,
-				target: screen,
-				clientX: 400,
-				clientY,
-				force: 1,
-				radiusX: 1,
-				radiusY: 1,
-				rotationAngle: 0,
-				pageX: 400,
-				pageY: clientY,
-				screenX: 400,
-				screenY: clientY,
-			}) as Touch
-
 		screen.dispatchEvent(
-			new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [makeTouch(100)] }),
+			new TouchEvent('touchstart', {
+				bubbles: true,
+				cancelable: true,
+				touches: [makeTouch(screen, 100)],
+			}),
 		)
 		screen.dispatchEvent(
-			new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [makeTouch(200)] }),
+			new TouchEvent('touchmove', {
+				bubbles: true,
+				cancelable: true,
+				touches: [makeTouch(screen, 200)],
+			}),
 		)
 		expect(pendingRafId).not.toBeNull()
 
@@ -628,29 +688,43 @@ describe('attachScrollGesture', () => {
 		vi.unstubAllGlobals()
 	})
 
-	test('touchcancel does not start fling', async () => {
-		const { readFileSync } = await import('node:fs')
-		const { resolve } = await import('node:path')
-		const source = readFileSync(resolve(import.meta.dirname, '../src/gestures/scroll.ts'), 'utf-8')
-		const cancelBlock = source.slice(
-			source.indexOf('function onTouchCancel'),
-			source.indexOf('function attach():'),
-		)
-		expect(cancelBlock).toContain('engine.stopFling()')
-		expect(cancelBlock).toContain('stopRaf()')
-		expect(cancelBlock).not.toContain('onTouchEnd')
-	})
+	test('touchstart remeasures cellHeight on every gesture', () => {
+		let screenHeight = 480
+		const sent: string[] = []
+		const term = {
+			...mockTerminal(),
+			cols: 80,
+			rows: 24,
+			input(data: string) {
+				sent.push(data)
+			},
+		}
+		const lock = createGestureLock()
+		const { element: screen, measureSpy } = makeScreen(() => screenHeight)
 
-	test('touchstart remeasures cellHeight on every gesture', async () => {
-		const { readFileSync } = await import('node:fs')
-		const { resolve } = await import('node:path')
-		const source = readFileSync(resolve(import.meta.dirname, '../src/gestures/scroll.ts'), 'utf-8')
-		const startBlock = source.slice(
-			source.indexOf('function onTouchStart'),
-			source.indexOf('function onTouchMove'),
-		)
-		expect(startBlock).toContain('refreshLayout(t)')
-		expect(source).not.toContain('layoutValid')
-		expect(source).not.toContain('invalidateLayout')
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			cb(16)
+			return 1
+		})
+		vi.stubGlobal('cancelAnimationFrame', vi.fn())
+
+		document.body.appendChild(screen)
+		attachScrollGesture(term, defaultScrollConfig, lock, () => false)
+
+		const callsBeforeFirst = measureSpy.mock.calls.length
+		dispatchGesture(screen, 100, 160)
+		const callsAfterFirst = measureSpy.mock.calls.length
+		expect(callsAfterFirst).toBeGreaterThan(callsBeforeFirst)
+
+		screenHeight = 600
+		sent.length = 0
+		const callsBeforeSecond = measureSpy.mock.calls.length
+		dispatchGesture(screen, 100, 170)
+		const callsAfterSecond = measureSpy.mock.calls.length
+		expect(callsAfterSecond).toBeGreaterThan(callsBeforeSecond)
+		expect(sent.length).toBe(0)
+
+		document.body.removeChild(screen)
+		vi.unstubAllGlobals()
 	})
 })
