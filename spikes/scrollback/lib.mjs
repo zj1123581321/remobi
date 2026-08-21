@@ -109,7 +109,7 @@ export class HerdrCapture {
 		}
 	}
 
-	// herdr 0.7.5's `pane wait-output` mis-parses --match values, so marker
+	// herdr 0.7.5's `pane wait-output` misreads --match values, so marker
 	// synchronisation polls `pane read` instead. The echoed marker is split
 	// with "" in the typed command so pane-read cannot false-match the echo.
 	async runInPane(pane, command, marker, timeoutMs = 180000) {
