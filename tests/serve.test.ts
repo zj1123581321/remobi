@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { open } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import {
 	buildSecurityHeaders,
 	describeCommandForLogs,
@@ -12,6 +13,7 @@ import {
 	parseHostHeader,
 	resolveRequestAuthority,
 	withSecurityHeaders,
+	writeImageDrop,
 } from '../src/serve'
 import { sleep, spawnProcess } from '../src/util/node-compat'
 
@@ -20,6 +22,7 @@ const runningProcesses: ReturnType<typeof spawnProcess>[] = []
 const tempDirs: string[] = []
 
 afterEach(async () => {
+	vi.unstubAllEnvs()
 	while (runningProcesses.length > 0) {
 		const proc = runningProcesses.pop()
 		if (!proc) continue
@@ -93,7 +96,10 @@ function requestResource(
 	})
 }
 
-async function startServe(asrEnabled: boolean): Promise<{ port: number; url: string }> {
+async function startServe(
+	asrEnabled: boolean,
+	options: { extraArgs?: string[]; dropDir?: string } = {},
+): Promise<{ port: number; url: string }> {
 	const port = await reservePort()
 	const configDir = mkdtempSync(join(tmpdir(), 'remobi-serve-test-'))
 	tempDirs.push(configDir)
@@ -104,6 +110,7 @@ async function startServe(asrEnabled: boolean): Promise<{ port: number; url: str
 			asr: { enabled: asrEnabled, doubao: { apiKey: 'serve-test-key' } },
 		})}`,
 	)
+	if (options.dropDir !== undefined) tempDirs.push(options.dropDir)
 	const proc = spawnProcess(
 		[
 			'pnpm',
@@ -115,12 +122,19 @@ async function startServe(asrEnabled: boolean): Promise<{ port: number; url: str
 			configPath,
 			'--port',
 			String(port),
+			...(options.extraArgs ?? []),
 			'--',
 			'bash',
 			'--norc',
 			'--noprofile',
 		],
-		{ cwd: repoRoot, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
+		{
+			cwd: repoRoot,
+			stdin: 'ignore',
+			stdout: 'ignore',
+			stderr: 'ignore',
+			env: { ...process.env, ...(options.dropDir ? { TMPDIR: options.dropDir } : {}) },
+		},
 	)
 	runningProcesses.push(proc)
 	const url = `http://127.0.0.1:${port}`
@@ -296,5 +310,98 @@ describe('describeCommandForLogs', () => {
 
 	test('handles single-word commands', () => {
 		expect(describeCommandForLogs(['tmux'])).toBe('tmux')
+	})
+})
+
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02])
+const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x03, 0x04])
+const WEBP_BYTES = Buffer.from('RIFF\0\0\0\0WEBPvp8-payload')
+const GIF_BYTES = Buffer.from('GIF89a gif payload')
+
+function postImageDrop(
+	url: string,
+	body: Buffer,
+	headers: Record<string, string> = {},
+): Promise<{ statusCode: number; cacheControl?: string; body: string }> {
+	return new Promise((resolve, reject) => {
+		const request = httpRequest(
+			url,
+			{ method: 'POST', headers: { 'content-length': body.length, ...headers } },
+			(response) => {
+				const chunks: Buffer[] = []
+				response.on('data', (chunk: Buffer) => chunks.push(chunk))
+				response.once('end', () =>
+					resolve({
+						statusCode: response.statusCode ?? 0,
+						cacheControl: response.headers['cache-control'],
+						body: Buffer.concat(chunks).toString('utf-8'),
+					}),
+				)
+			},
+		)
+		request.once('error', reject)
+		request.end(body.length > 0 ? body : undefined)
+	})
+}
+describe('image drop upload', () => {
+	test('stores the four formats byte-for-byte (0600, no-store) and rejects bad uploads', async () => {
+		const dropDir = mkdtempSync(join(tmpdir(), 'remobi-drop-test-'))
+		const { url } = await startServe(false, { dropDir })
+		const endpoint = `${url}/api/image-drop`
+		const cases = [
+			['png', PNG_BYTES],
+			['jpeg', JPEG_BYTES],
+			['webp', WEBP_BYTES],
+			['gif', GIF_BYTES],
+		] as const
+		for (const [format, bytes] of cases) {
+			const response = await postImageDrop(endpoint, bytes)
+			expect(response.statusCode).toBe(200)
+			expect(response.cacheControl).toBe('no-store')
+			const result: { path: string; format: string; size: number } = JSON.parse(response.body)
+			expect(result.format).toBe(format)
+			expect(result.size).toBe(bytes.length)
+			expect(result.path.startsWith(`${dropDir}/`)).toBe(true)
+			expect(readFileSync(result.path)).toEqual(bytes)
+			expect(statSync(result.path).mode & 0o777).toBe(0o600)
+		}
+		// Client Content-Type is untrusted: GIF bytes labeled image/png are stored as GIF.
+		const forged = await postImageDrop(endpoint, GIF_BYTES, { 'content-type': 'image/png' })
+		expect(JSON.parse(forged.body)).toMatchObject({ format: 'gif' })
+		expect((await postImageDrop(endpoint, Buffer.alloc(0))).statusCode).toBe(400)
+		const heic = await postImageDrop(endpoint, Buffer.from('\0\0\0\x18ftypheic\0\0\0\0'))
+		expect(heic.statusCode).toBe(415)
+		expect(heic.body).toContain('HEIC')
+		expect((await postImageDrop(endpoint, Buffer.from('not an image'))).statusCode).toBe(415)
+		const crossOrigin = await postImageDrop(endpoint, PNG_BYTES, { origin: 'https://evil.example' })
+		expect(crossOrigin.statusCode).toBe(403)
+		// Only the five accepted uploads landed; rejected uploads left nothing behind. (TMPDIR also
+		// holds the child process's node-compile-cache, so count only remobi-drop-* files.)
+		expect(readdirSync(dropDir).filter((name) => name.startsWith('remobi-drop-'))).toHaveLength(5)
+	})
+
+	test('is reachable under a configured base path', async () => {
+		const dropDir = mkdtempSync(join(tmpdir(), 'remobi-drop-test-'))
+		const { url } = await startServe(false, { dropDir, extraArgs: ['--base-path', '/remobi'] })
+		const response = await postImageDrop(`${url}/remobi/api/image-drop`, PNG_BYTES)
+		expect(response.statusCode).toBe(200)
+		expect(JSON.parse(response.body).format).toBe('png')
+	})
+
+	test('writeImageDrop removes only its own partial file when the write fails', async () => {
+		const dropDir = mkdtempSync(join(tmpdir(), 'remobi-drop-test-'))
+		tempDirs.push(dropDir)
+		vi.stubEnv('TMPDIR', dropDir)
+		const probe = await open(join(dropDir, 'probe'), 'w')
+		const writeFileSpy = vi
+			.spyOn(Object.getPrototypeOf(probe), 'writeFile')
+			.mockRejectedValueOnce(new Error('injected image drop write failure'))
+		await probe.close()
+		await expect(writeImageDrop(PNG_BYTES, 'png')).rejects.toThrow(
+			'injected image drop write failure',
+		)
+		writeFileSpy.mockRestore()
+		rmSync(join(dropDir, 'probe'))
+		expect(readdirSync(dropDir)).toEqual([])
 	})
 })

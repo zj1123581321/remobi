@@ -107,6 +107,8 @@ interface DefaultActionDeps {
 	readonly openHelp?: () => void
 	readonly toggleKeyboard?: () => void
 	readonly toggleDpad?: () => void
+	/** Opens the single-file image picker — T3 wires this to the image-drop controller from src/client-entry.ts */
+	readonly openImageDrop?: () => void
 }
 
 export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): ActionRegistry {
@@ -257,6 +259,21 @@ export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): Actio
 			throw error
 		}
 		toggleDpad()
+	})
+
+	registry.register('image-upload', (_action, _context) => {
+		// App-level dep only (not ActionExecutionContext, no drawer special-case):
+		// T3 replaces this with the real image-drop controller wiring in src/client-entry.ts.
+		const openImageDrop = deps.openImageDrop
+		if (!openImageDrop) {
+			// Fail loud: an image-upload button without an openImageDrop callback is a wiring bug.
+			const error = new Error(
+				'remobi: image-upload action requires an openImageDrop callback (registry deps)',
+			)
+			console.error(error)
+			throw error
+		}
+		openImageDrop()
 	})
 
 	return registry

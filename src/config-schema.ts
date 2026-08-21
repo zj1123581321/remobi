@@ -36,6 +36,7 @@ const helpActionSchema = v.strictObject({ type: v.literal('help') })
 const keyboardToggleActionSchema = v.strictObject({ type: v.literal('keyboard-toggle') })
 const dpadToggleActionSchema = v.strictObject({ type: v.literal('dpad-toggle') })
 const voiceInputActionSchema = v.strictObject({ type: v.literal('voice-input') })
+const imageUploadActionSchema = v.strictObject({ type: v.literal('image-upload') })
 
 const buttonActionSchema = v.variant('type', [
 	sendActionSchema,
@@ -49,6 +50,7 @@ const buttonActionSchema = v.variant('type', [
 	keyboardToggleActionSchema,
 	dpadToggleActionSchema,
 	voiceInputActionSchema,
+	imageUploadActionSchema,
 ])
 
 // --- Control button ---

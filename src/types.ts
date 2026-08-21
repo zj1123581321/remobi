@@ -11,6 +11,7 @@ export type ButtonAction =
 	| { readonly type: 'keyboard-toggle' }
 	| { readonly type: 'dpad-toggle' }
 	| { readonly type: 'voice-input' }
+	| { readonly type: 'image-upload' }
 
 /** A generic control button definition used by toolbar and drawer */
 export interface ControlButton {

@@ -80,6 +80,14 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
 	dpadToggleButton,
 	keyboardToggleButton,
 	{
+		// Image insert is a high-frequency agent action — one tap from row1,
+		// no drawer round trip (success is a transient toast, nothing to close).
+		id: 'image-upload',
+		label: '🖼',
+		description: 'Upload an image and insert its temp path into the agent input',
+		action: { type: 'image-upload' },
+	},
+	{
 		id: 'drawer-toggle',
 		label: '\u2630 More',
 		description: 'Open command drawer',

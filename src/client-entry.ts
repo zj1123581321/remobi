@@ -5,6 +5,7 @@ import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import '../styles/base.css'
 import { joinBasePath } from './base-path'
+import { createImageDropController } from './controls/image-drop-controller'
 import { createHookRegistry, init } from './index'
 import { parseServerMessage, serialiseClientMessage } from './session-protocol'
 import type { ClientMessage } from './session-protocol'
@@ -822,7 +823,14 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	window.visualViewport?.addEventListener('resize', syncSize)
 
 	const hooks = createHookRegistry()
-	init(config, hooks, version)
+	// Image drop: synced/fresh gating reuses the term bridge — isConnected() is the
+	// synced state and sendInputAction() enforces heartbeat freshness internally.
+	const imageDrop = createImageDropController({
+		term: termBridge,
+		basePath: __remobiBasePath ?? '/',
+	})
+	document.body.appendChild(imageDrop.element)
+	init(config, hooks, version, { openImageDrop: imageDrop.open })
 }
 
 main(__remobiConfig, typeof __remobiVersion === 'undefined' ? undefined : __remobiVersion)

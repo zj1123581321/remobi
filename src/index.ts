@@ -126,6 +126,7 @@ export function init(
 	config: RemobiConfig = defaultConfig,
 	hooks: HookRegistry = createHookRegistry(),
 	version?: string,
+	deps?: { openImageDrop?: () => void },
 ): void {
 	void waitForTerm()
 		.then(async (term) => {
@@ -217,6 +218,7 @@ export function init(
 					openHelp,
 					toggleKeyboard: () => keyboardController.toggle(),
 					toggleDpad: dpad.toggle,
+					openImageDrop: deps?.openImageDrop,
 				})
 
 				// Create drawer (needed by toolbar for toggle)

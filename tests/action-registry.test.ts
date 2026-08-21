@@ -687,6 +687,37 @@ describe('font-size action', () => {
 	})
 })
 
+describe('image-upload action', () => {
+	function makeContext() {
+		return {
+			term: mockTerminal(),
+			kbWasOpen: false,
+			focusIfNeeded() {},
+			async sendText(_data: string) {},
+		}
+	}
+
+	test('calls the injected openImageDrop callback (registry deps)', async () => {
+		const openImageDrop = vi.fn()
+		const registry = createDefaultActionRegistry({ openImageDrop })
+
+		const executed = await registry.execute({ type: 'image-upload' }, makeContext())
+
+		expect(executed).toBe(true)
+		expect(openImageDrop).toHaveBeenCalledTimes(1)
+	})
+
+	test('fails loud when no openImageDrop callback is available', async () => {
+		const registry = createDefaultActionRegistry()
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+		await expect(registry.execute({ type: 'image-upload' }, makeContext())).rejects.toThrow(
+			'remobi: image-upload action requires an openImageDrop callback',
+		)
+		expect(errorSpy).toHaveBeenCalled()
+	})
+})
+
 describe('help action', () => {
 	test('calls the injected openHelp callback', async () => {
 		const openHelp = vi.fn()

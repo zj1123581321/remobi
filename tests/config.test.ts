@@ -6,6 +6,7 @@ import {
 	serialiseThemeForTtyd,
 	withVoiceComposerEntry,
 } from '../src/config'
+import { ConfigValidationError, assertValidConfigOverrides } from '../src/config-validate'
 
 describe('defineConfig', () => {
 	test('returns default config when called with no args', () => {
@@ -140,8 +141,8 @@ describe('defaultConfig', () => {
 		expect(defaultConfig.theme.foreground).toBe('#cdd6f4')
 	})
 
-	test('has 7 row1 buttons (moshi-style single row)', () => {
-		expect(defaultConfig.toolbar.row1).toHaveLength(7)
+	test('has 8 row1 buttons (moshi-style single row)', () => {
+		expect(defaultConfig.toolbar.row1).toHaveLength(8)
 	})
 
 	test('row2 defaults to empty — single-row toolbar', () => {
@@ -150,6 +151,13 @@ describe('defaultConfig', () => {
 
 	test('has 30 drawer buttons', () => {
 		expect(defaultConfig.drawer.buttons).toHaveLength(30)
+	})
+
+	test('default row1 contains the image-upload button; the drawer does not', () => {
+		const imageButton = defaultConfig.toolbar.row1.find((button) => button.id === 'image-upload')
+		expect(imageButton).toBeDefined()
+		expect(imageButton?.action).toEqual({ type: 'image-upload' })
+		expect(defaultConfig.drawer.buttons.some((button) => button.id === 'image-upload')).toBe(false)
 	})
 
 	test('default drawer uses stock tmux bindings only', () => {
@@ -166,9 +174,9 @@ describe('defaultConfig', () => {
 		expect(byId.has('tmux-links')).toBe(false)
 	})
 
-	test('row1 is Esc, C-c, ⌫, ⏎, ✥, ⌨, ☰ More', () => {
+	test('row1 is Esc, C-c, ⌫, ⏎, ✥, ⌨, 🖼, ☰ More', () => {
 		const labels = defaultConfig.toolbar.row1.map((b) => b.label)
-		expect(labels).toEqual(['Esc', 'C-c', '⌫', '⏎', '✥', '⌨', '☰ More'])
+		expect(labels).toEqual(['Esc', 'C-c', '⌫', '⏎', '✥', '⌨', '🖼', '☰ More'])
 	})
 
 	test('default mobile font size is 13', () => {
@@ -397,5 +405,41 @@ describe('serialiseThemeForTtyd', () => {
 		const parsed = JSON.parse(json)
 		expect(parsed.background).toBe('#1e1e2e')
 		expect(parsed.foreground).toBe('#cdd6f4')
+	})
+})
+
+describe('image-upload action schema', () => {
+	test('accepts a valid image-upload button in the drawer', () => {
+		expect(() =>
+			assertValidConfigOverrides({
+				drawer: {
+					buttons: [
+						{
+							id: 'image-upload',
+							label: '🖼 Image',
+							description: 'Upload an image',
+							action: { type: 'image-upload' },
+						},
+					],
+				},
+			}),
+		).not.toThrow()
+	})
+
+	test('rejects an image-upload action with unknown fields', () => {
+		expect(() =>
+			assertValidConfigOverrides({
+				drawer: {
+					buttons: [
+						{
+							id: 'image-upload',
+							label: '🖼 Image',
+							description: 'Upload an image',
+							action: { type: 'image-upload', data: 'x' },
+						},
+					],
+				},
+			}),
+		).toThrow(ConfigValidationError)
 	})
 })
