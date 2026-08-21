@@ -54,3 +54,24 @@ const threshold = layout?.lockThresholdPx ?? 40
 `spikes/scrollback/lib.mjs` 里的 `mis-parses` 被 `typos` 判为 `miss`/`mist` 的拼写错误，
 CI 硬闸。本次改写成 `misreads` 绕过。若后续再撞到同类误报，考虑给 `typos` 加配置文件
 而不是继续改措辞。
+
+## 7. `--repeat-each` 并行下的 snapshot marker 串台（P3，测试隔离）
+
+`tests/playwright/weak-network.spec.ts` 的 `offline and online recovery converges to
+the server snapshot` 在 `--repeat-each=10` 并行运行时约 2/10 失败：多个并行实例共享同一
+remobi 服务与终端会话，各自写入的 `fresh-snapshot-*` marker 互相污染，
+断言 `toContainText(keyboardMarker)` 因此落空。
+
+正常 CI 不使用 `--repeat-each`，故不影响门禁。仅在人工做稳定性验证时会撞到。
+根治需要让每个 worker 用独立的服务实例或独立会话名。
+
+发现于 2026-08-21 flaky 修复卡（remobi-20260821-09）的稳定性验证，由执行器主动报告。
+
+## 8. 记分卡必须在派下一张卡之前合并进主干（流程）
+
+派卡闸门 `gated_unaccepted` 读的是**主仓工作区**的 `retro/acceptance-log.jsonl`。
+主脑按「main 不直接写」的规矩把记分卡写在 worktree 分支上时，若不先合并，
+闸门看不到，下一张卡必被拒。
+
+2026-08-21 实测：连续两次派卡被闸，直到账本 PR #28 合并进主干才放行。
+教训：**验收定局 → 记分卡 → 合并进主干 → 再派下一张卡**，不能攒着记。
