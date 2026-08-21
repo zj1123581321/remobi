@@ -64,6 +64,10 @@ async function getSentFrames(page: import('@playwright/test').Page): Promise<str
 	})
 }
 
+async function getNonPingFrames(page: import('@playwright/test').Page): Promise<string[]> {
+	return (await getSentFrames(page)).filter((frame) => JSON.parse(frame).type !== 'ping')
+}
+
 async function getBufferedSamples(page: import('@playwright/test').Page): Promise<number[]> {
 	return page.evaluate(() => {
 		const browserWindow = window as typeof window & { __remobiBufferedSamples?: number[] }
@@ -168,7 +172,7 @@ test('offline event invalidates an OPEN socket before keyboard input is sent', a
 	await page.goto('/')
 	await page.waitForSelector('#terminal .xterm')
 	await waitForSynced(page)
-	const sentBefore = (await getSentFrames(page)).length
+	const sentBefore = await getNonPingFrames(page)
 
 	await context.setOffline(true)
 	await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false)
@@ -179,8 +183,8 @@ test('offline event invalidates an OPEN socket before keyboard input is sent', a
 	const marker = `offline-open-${Date.now()}`
 	await page.keyboard.type(marker)
 	await page.keyboard.press('Enter')
-	const sentAfter = await getSentFrames(page)
-	expect(sentAfter.length).toBe(sentBefore)
+	const sentAfter = await getNonPingFrames(page)
+	expect(sentAfter).toEqual(sentBefore)
 
 	await context.setOffline(false)
 	await waitForSynced(page)

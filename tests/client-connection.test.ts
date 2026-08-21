@@ -466,6 +466,21 @@ describe('client connection state machine', () => {
 		},
 	)
 
+	test('non-persisted pageshow during OPEN syncing handshake preserves sole socket', async () => {
+		const syncingSocket = await freshAttempt()
+		syncingSocket.open()
+		expect(getStatus().state).toBe('syncing')
+		// lastProvenFreshAt stays 0 until snapshot; with real clocks that fails the
+		// freshness-only guard and WebKit would spawn a second socket on pageshow.
+		vi.setSystemTime(30_000)
+		const socketCount = harness.sockets.length
+		window.dispatchEvent(pageshowEvent(false))
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(harness.sockets).toHaveLength(socketCount)
+		expect(currentSocket()).toBe(syncingSocket)
+	})
+
 	test('visibility, online, and pageshow in one turn create one socket', async () => {
 		await freshSynced()
 		setVisibility('hidden')

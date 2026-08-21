@@ -771,12 +771,16 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		// 判据用新鲜度证明而不是 connectionStatus.state：后者是「没收到坏消息」的
 		// 缺席证据（I3 明令禁止），而 lastProvenFreshAt 只由当前 epoch 的 snapshot
 		// 应用成功与 ID 匹配的 pong 写入，是在场证据。
-		if (
-			!persisted &&
-			socket?.readyState === WebSocket.OPEN &&
-			Date.now() - lastProvenFreshAt <= FRESHNESS_WINDOW_MS
-		)
-			return
+		// WebKit 可能在 snapshot 应用前派发 pageshow（socket 已 OPEN 但 lastProvenFreshAt
+		// 仍为 0）；此时用 !snapshotLoaded 作为握手仍在进行中的在场证据。
+		if (!persisted) {
+			if (socket?.readyState === WebSocket.CONNECTING) return
+			if (
+				socket?.readyState === WebSocket.OPEN &&
+				(!snapshotLoaded || Date.now() - lastProvenFreshAt <= FRESHNESS_WINDOW_MS)
+			)
+				return
+		}
 		queueImmediateConnect(true)
 	}
 
