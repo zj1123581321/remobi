@@ -319,7 +319,13 @@ async function readImageDropBody(
 		}
 		chunks.push(value)
 	}
-	return new Uint8Array(await new Blob(chunks as BlobPart[]).arrayBuffer())
+	const merged = new Uint8Array(total)
+	let offset = 0
+	for (const chunk of chunks) {
+		merged.set(chunk, offset)
+		offset += chunk.byteLength
+	}
+	return merged
 }
 
 /** Write an image drop to a fresh 0600 temp file; on failure removes only this call's own partial file. */

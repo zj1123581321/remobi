@@ -123,8 +123,8 @@ export function createImageDropController(deps: ImageDropControllerDeps): ImageD
 			(res) => {
 				if (!res.ok) return failUpload(gen, `Upload failed (HTTP ${res.status}).`)
 				res.json().then(
-					(data) => {
-						const dropped = (data as { path?: unknown }).path
+					(data: { path?: unknown }) => {
+						const dropped = data.path
 						if (typeof dropped !== 'string' || dropped.length === 0) {
 							return failUpload(gen, 'Upload failed — server returned no path.')
 						}
