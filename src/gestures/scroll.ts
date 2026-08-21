@@ -85,8 +85,8 @@ function scrollDirection(pendingPx: number): 'up' | 'down' {
 	return pendingPx > 0 ? 'up' : 'down'
 }
 
-function maxWheelEventsPerFrame(config: ScrollConfig): number {
-	return Math.max(1, Math.floor(config.maxLinesPerFrame / config.linesPerWheel))
+function maxWheelEventsPerSend(config: ScrollConfig): number {
+	return Math.max(1, Math.floor(config.maxLinesPerSend / config.linesPerWheel))
 }
 
 function hasRedeemablePending(
@@ -121,7 +121,7 @@ function redeemPending(
 		return { pendingPx, data: null }
 	}
 
-	const maxEvents = config.strategy === 'keys' ? 1 : maxWheelEventsPerFrame(config)
+	const maxEvents = config.strategy === 'keys' ? 1 : maxWheelEventsPerSend(config)
 	const n = Math.min(Math.abs(wheels), maxEvents)
 	const dir = scrollDirection(pendingPx)
 	const nextPendingPx = pendingPx - Math.sign(wheels) * n * pxPerWheel
@@ -142,6 +142,7 @@ export function createScrollEngine(config: ScrollConfig): ScrollEngine {
 	let isFlinging = false
 	let lastMoveAt = 0
 	let lastTickAt = 0
+	let lastSendAt = Number.NEGATIVE_INFINITY
 
 	function stopFling(): void {
 		isFlinging = false
@@ -198,11 +199,17 @@ export function createScrollEngine(config: ScrollConfig): ScrollEngine {
 
 			lastTickAt = nowMs
 
+			const intervalMs = config.sendIntervalMs
+			if (intervalMs > 0 && nowMs - lastSendAt < intervalMs) {
+				return null
+			}
+
 			const redeemed = redeemPending(pendingPx, cellHeight, config, cell)
 			pendingPx = redeemed.pendingPx
 			if (redeemed.data === null) {
 				return null
 			}
+			lastSendAt = nowMs
 			return { data: redeemed.data }
 		},
 	}

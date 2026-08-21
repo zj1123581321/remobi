@@ -208,6 +208,8 @@ const scrollMomentumFrictionSchema = v.pipe(
 
 const scrollMomentumMinVelocitySchema = v.pipe(finiteNumber, v.minValue(0, 'must be >= 0'))
 
+const scrollSendIntervalMsSchema = v.pipe(finiteNumber, v.minValue(0, 'must be >= 0'))
+
 const scrollMomentumOverridesSchema = v.strictObject({
 	enabled: v.optional(v.boolean()),
 	friction: v.optional(scrollMomentumFrictionSchema),
@@ -226,7 +228,8 @@ const scrollOverridesSchema = v.strictObject({
 	speedMultiplier: v.optional(finiteNumber),
 	linesPerWheel: v.optional(finiteNumber),
 	momentum: v.optional(scrollMomentumOverridesSchema),
-	maxLinesPerFrame: v.optional(finiteNumber),
+	maxLinesPerSend: v.optional(finiteNumber),
+	sendIntervalMs: v.optional(scrollSendIntervalMsSchema),
 })
 
 const scrollResolvedSchema = v.strictObject({
@@ -235,7 +238,8 @@ const scrollResolvedSchema = v.strictObject({
 	speedMultiplier: finiteNumber,
 	linesPerWheel: finiteNumber,
 	momentum: scrollMomentumResolvedSchema,
-	maxLinesPerFrame: finiteNumber,
+	maxLinesPerSend: finiteNumber,
+	sendIntervalMs: scrollSendIntervalMsSchema,
 })
 
 const doubleTapOverridesSchema = v.strictObject({
