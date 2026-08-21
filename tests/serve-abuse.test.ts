@@ -300,16 +300,20 @@ describe('serve websocket hardening', () => {
 })
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+// How the body is transmitted: 'declare-only' sends headers with an over-limit content-length
+// and zero body bytes (the server rejects from headers alone); 'content-length' sends the whole
+// body with one end(); 'chunked' streams 256 KiB blocks without a content-length header.
+type ImageDropPostMode = 'declare-only' | 'content-length' | 'chunked'
 function postRawImageDrop(
 	url: string,
 	body: Buffer,
-	chunked: boolean,
+	mode: ImageDropPostMode,
 ): Promise<{ statusCode: number; path?: string; size?: number }> {
 	return new Promise((resolve, reject) => {
 		let responded = false
 		const request = httpRequest(
 			url,
-			{ method: 'POST', headers: chunked ? {} : { 'content-length': body.length } },
+			{ method: 'POST', headers: mode === 'chunked' ? {} : { 'content-length': body.length } },
 			(response) => {
 				responded = true
 				const chunks: Buffer[] = []
@@ -319,18 +323,36 @@ function postRawImageDrop(
 					const parsed: { path?: string; size?: number } =
 						response.statusCode === 200 ? JSON.parse(text) : {}
 					resolve({ statusCode: response.statusCode ?? 0, ...parsed })
+					// declare-only never sends a body, so the request stays open until torn down here.
+					if (mode === 'declare-only') request.destroy()
 				})
 			},
 		)
-		request.once('error', (error) => {
+		// Once a response arrived it is the source of truth; reject only when none ever did.
+		request.on('error', (error) => {
 			if (!responded) reject(error)
 		})
-		if (chunked) {
-			for (let offset = 0; offset < body.length; offset += 262_144) {
-				request.write(body.subarray(offset, offset + 262_144))
-			}
+		// Writes still in flight when the socket dies surface on the socket itself (WriteWrap
+		// EPIPE), outside the request's error forwarding — swallow them explicitly.
+		request.on('socket', (socket) => socket.on('error', () => {}))
+		if (mode === 'declare-only') {
+			// The server short-circuits on the declared content-length, so not a single body byte
+			// is written — no upload bytes ever race the 413 or the socket reset.
+			request.flushHeaders()
+			return
 		}
-		request.end(chunked ? undefined : body)
+		if (mode === 'content-length') {
+			// The server only responds after reading the full declared body — no early response.
+			request.end(body)
+			return
+		}
+		// Chunked: the server's streaming counter trips the limit only after the final byte
+		// arrives, and by then every block below is already handed to the kernel — the cancel
+		// can never race an in-flight write.
+		for (let offset = 0; offset < body.length; offset += 262_144) {
+			request.write(body.subarray(offset, offset + 262_144))
+		}
+		request.end()
 	})
 }
 
@@ -345,16 +367,16 @@ describe('image drop body limits', () => {
 
 			const tenMiB = Buffer.alloc(10 * 1024 * 1024)
 			PNG_MAGIC.copy(tenMiB)
-			const accepted = await postRawImageDrop(endpoint, tenMiB, false)
+			const accepted = await postRawImageDrop(endpoint, tenMiB, 'content-length')
 			expect(accepted.statusCode).toBe(200)
 			// Boolean comparison: a failing toEqual on 10 MiB buffers would OOM the reporter.
 			expect(readFileSync(accepted.path ?? '').equals(tenMiB)).toBe(true)
 
 			const tooLarge = Buffer.concat([tenMiB, Buffer.from([0])])
-			expect((await postRawImageDrop(endpoint, tooLarge, false)).statusCode).toBe(413)
-			expect((await postRawImageDrop(endpoint, tooLarge, true)).statusCode).toBe(413)
+			expect((await postRawImageDrop(endpoint, tooLarge, 'declare-only')).statusCode).toBe(413)
+			expect((await postRawImageDrop(endpoint, tooLarge, 'chunked')).statusCode).toBe(413)
 
-			const chunkedPng = await postRawImageDrop(endpoint, PNG_MAGIC, true)
+			const chunkedPng = await postRawImageDrop(endpoint, PNG_MAGIC, 'chunked')
 			expect(chunkedPng.statusCode).toBe(200)
 			expect(readFileSync(chunkedPng.path ?? '')).toEqual(PNG_MAGIC)
 		} finally {
