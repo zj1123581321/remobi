@@ -150,7 +150,8 @@ describe('keyboardMode config schema', () => {
 
 	test('default row1 carries the keyboard-toggle button (before ☰ More)', () => {
 		const row1 = defineConfig().toolbar.row1
-		expect(row1[row1.length - 2]).toEqual(keyboardToggleButton)
+		// row1 ends with ⌨, 🖼 image-upload, ☰ More
+		expect(row1[row1.length - 3]).toEqual(keyboardToggleButton)
 	})
 })
 

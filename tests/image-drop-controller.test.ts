@@ -174,3 +174,37 @@ test('gating: session/freshness guard auto-insert; stale ACKs and clipboard feed
 	await flush()
 	expect(statusText(h.controller)).toContain('Copied')
 })
+
+test('done toast: no path/buttons, auto-hides after ~2.5s, newer pick survives the old timer', async () => {
+	const h = setup()
+	vi.useFakeTimers()
+	const pathText = query(h.controller, '.wt-image-drop-path')
+	const actions = query(h.controller, '.wt-image-drop-actions')
+
+	pick(h.controller, png())
+	await vi.advanceTimersByTimeAsync(0) // upload resolves → auto-insert
+	expect(h.sent).toHaveLength(1)
+	h.emit({ id: 'image-drop-a1', accepted: true, reason: null })
+	expect(statusText(h.controller)).toBe('Inserted into agent input.')
+	expect(h.controller.element.style.display).toBe('flex')
+	// the toast is bare: no path text, no action buttons
+	expect(pathText.style.display).toBe('none')
+	expect(actions.style.display).toBe('none')
+	// auto-hide at ~2.5s, not before
+	await vi.advanceTimersByTimeAsync(2_499)
+	expect(h.controller.element.style.display).toBe('flex')
+	await vi.advanceTimersByTimeAsync(1)
+	expect(h.controller.element.style.display).toBe('none')
+
+	// a pick made during the toast must not be hidden by the stale toast timer
+	pick(h.controller, png())
+	await vi.advanceTimersByTimeAsync(0)
+	h.emit({ id: 'image-drop-a2', accepted: true, reason: null })
+	expect(statusText(h.controller)).toContain('Inserted')
+	await vi.advanceTimersByTimeAsync(1_000) // mid-toast
+	pick(h.controller, png())
+	await vi.advanceTimersByTimeAsync(0)
+	expect(statusText(h.controller)).toContain('Inserting')
+	await vi.advanceTimersByTimeAsync(2_000) // the old toast timer would have fired here
+	expect(h.controller.element.style.display).toBe('flex')
+})

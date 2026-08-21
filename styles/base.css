@@ -773,7 +773,9 @@ body.wt-composer-open #wt-toolbar {
 	}
 }
 
-/* Image drop: status panel for the image-upload drawer action */
+/* Image drop: status panel for the image-upload toolbar action.
+   Success is a bare toast (status text only, auto-hides); failure states also
+   show the selectable path and the retry/copy/close buttons. */
 #wt-image-drop {
 	display: none;
 	position: fixed;

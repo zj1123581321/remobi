@@ -7,6 +7,8 @@ import { onTap } from '../util/tap'
 const IMAGE_DROP_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif'
 /** How long to wait for input-accepted before falling back to file-ready. */
 const IMAGE_DROP_ACK_TIMEOUT_MS = 15_000
+/** How long the success toast stays visible before the panel auto-hides. */
+const IMAGE_DROP_DONE_TOAST_MS = 2_500
 
 type ImageDropState = 'idle' | 'uploading' | 'file-ready' | 'inserting' | 'done' | 'error'
 
@@ -34,6 +36,9 @@ export interface ImageDropController {
 /**
  * Image drop flow: POST the picked raw File to {basePath}/api/image-drop, then auto-insert
  * ` ${path} ` (never Enter) only when the start session is non-empty, unchanged and synced.
+ * Success is a transient toast — status text only, auto-hiding after ~2.5s (the inserted
+ * path in the agent input is the success evidence; nothing to close). Only failure states
+ * show the path text and the retry/copy/close actions.
  * Async callbacks re-check generation + actionId so stale ACKs can't clear newer picks.
  */
 export function createImageDropController(deps: ImageDropControllerDeps): ImageDropController {
@@ -64,8 +69,10 @@ export function createImageDropController(deps: ImageDropControllerDeps): ImageD
 		state = next
 		panel.style.display = next === 'idle' ? 'none' : 'flex'
 		status.textContent = message
-		pathText.style.display = path === null ? 'none' : ''
-		actions.style.display = path === null ? 'none' : ''
+		// done is a bare toast: the path text and action buttons belong to failure states.
+		const showDetails = path !== null && next !== 'done'
+		pathText.style.display = showDetails ? '' : 'none'
+		actions.style.display = showDetails ? '' : 'none'
 		if (path !== null) pathText.textContent = path
 		retryBtn.disabled = next !== 'file-ready'
 	}
@@ -144,6 +151,14 @@ export function createImageDropController(deps: ImageDropControllerDeps): ImageD
 		clearAckTimer()
 		if (result.accepted) {
 			setState('done', 'Inserted into agent input.')
+			// Transient toast: auto-hide after ~2.5s, reusing the ACK timer slot. The
+			// generation guard keeps a stale timer from hiding a newer pick or close.
+			const gen = generation
+			ackTimer = setTimeout(() => {
+				ackTimer = undefined
+				if (disposed || gen !== generation || state !== 'done') return
+				setState('idle', '')
+			}, IMAGE_DROP_DONE_TOAST_MS)
 		} else {
 			const reason = result.reason ? ` (${result.reason})` : ''
 			setState('file-ready', `Insert rejected${reason} — tap Retry insert.`)

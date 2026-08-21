@@ -302,7 +302,7 @@ Tell the user:
    - **Floating d-pad**: `✥` button on toolbar row1 pops up a six-key arrow cluster (← ↑ ↓ → ⌫ ⏎) above the toolbar — moshi style. Taps send keys without stealing terminal focus or popping the soft keyboard; in `keyboardMode: 'manual'` the input lock stays untouched. No config needed
    - **Keyboard sovereignty**: `mobile.keyboardMode` — `'auto'` (default): tapping the terminal opens the soft keyboard, ⌨ is momentary focus/blur. `'manual'`: the keyboard never pops up on terminal taps — only the ⌨ button (toolbar row1, next to ☰ More) grants/revokes input permission. If a manual-mode config has no ⌨ button anywhere, remobi injects one into row1 so the keyboard stays reachable
    - **Voice composer**: when configured, the toolbar Voice entry opens a second-layer composer without starting ASR or focusing the input. Tap the composer Mic to start/stop, edit the final text, and Send; × or the backdrop discards it. It requires HTTPS (except localhost/127.0.0.1); iOS backgrounding, locking, calls, Siri, or another app interrupting audio cancels the recording.
-   - **Image upload**: 🖼 Image button in the command drawer — picks a photo and POSTs it raw to the remobi server (`/api/image-drop`, PNG/JPEG/WebP/GIF, 10 MiB max), then inserts the temp file path into the agent input without pressing Enter. Works over plain HTTP — no HTTPS or config needed, the phone only has to reach the server. If the session changed or the insert was not confirmed, the status panel offers Retry insert and Copy path
+   - **Image upload**: 🖼 button on toolbar row 1 (next to ☰ More) — picks a photo and POSTs it raw to the remobi server (`/api/image-drop`, PNG/JPEG/WebP/GIF, 10 MiB max), then inserts the temp file path into the agent input without pressing Enter. Success is a transient toast that auto-hides (the path in the input is the evidence; keep typing or send when ready). Works over plain HTTP — no HTTPS or config needed, the phone only has to reach the server. If the session changed or the insert was not confirmed, the status panel offers Retry insert and Copy path
 6. PWA: enabled by default. On mobile Safari/Chrome, tap Share then "Add to Home Screen" for standalone app experience. Config options:
    - `pwa.enabled` (default `true`) — set `false` to disable manifest + icons
    - `pwa.themeColor` (default `'#1e1e2e'`) — status bar colour on mobile
@@ -336,7 +336,7 @@ name  theme  font  toolbar  drawer  gestures  mobile  floatingButtons  scrollBut
 | `keyboard-toggle` | (none)             | Toggles the soft keyboard. Default on toolbar row1 (next to ☰ More). In `mobile.keyboardMode: 'manual'` it is the only way to summon the keyboard; remobi injects one into row1 if the config has none |
 | `dpad-toggle`    | (none)              | Toggles the floating d-pad (← ↑ ↓ → ⌫ ⏎) above the toolbar. Default on toolbar row1 (between ⏎ and ⌨). D-pad taps never steal terminal focus or pop the soft keyboard |
 | `voice-input`    | (none)              | Toolbar-only voice-composer entry; its internal Mic uses tap-to-toggle. Drawer/floating placement is rejected by validation. Requires `asr.enabled: true` and a secure context |
-| `image-upload`   | (none)              | Uploads an image to the server (`POST /api/image-drop`: raw bytes, PNG/JPEG/WebP/GIF sniffed from magic bytes, exact 10 MiB limit, stored as a `0600` temp file) and inserts the temp path into the agent input — never sends Enter. Default in the drawer. No HTTPS or config prerequisite; the phone just needs to reach the remobi server |
+| `image-upload`   | (none)              | Uploads an image to the server (`POST /api/image-drop`: raw bytes, PNG/JPEG/WebP/GIF sniffed from magic bytes, exact 10 MiB limit, stored as a `0600` temp file) and inserts the temp path into the agent input — never sends Enter. Default on toolbar row1 (🖼, next to ☰ More). No HTTPS or config prerequisite; the phone just needs to reach the remobi server |
 
 Non-`send`/`prefix` actions must NOT have `data` or `keyLabel` — the validator rejects them.
 
@@ -396,7 +396,7 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 
 ### Default button IDs
 
-**Toolbar row 1** (7 buttons — the only row by default; moshi-style single row):
+**Toolbar row 1** (8 buttons — the only row by default; moshi-style single row):
 
 | `id` | `label` | `action` |
 |------|---------|----------|
@@ -406,11 +406,12 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `enter` | enter ⏎ | `send` `\r` |
 | `dpad-toggle` | ✥ | `dpad-toggle` (floating d-pad owns the arrow keys) |
 | `keyboard-toggle` | keyboard ⌨ | `keyboard-toggle` |
+| `image-upload` | 🖼 | `image-upload` (uploads to the server tmp dir, inserts the path into the agent input — no Enter) |
 | `drawer-toggle` | hamburger More | `drawer-toggle` |
 
 **Toolbar row 2**: empty by default (single-row toolbar). Set `toolbar.row2` to opt into a second row.
 
-**Drawer** (31 buttons — includes the keys removed from the toolbar: `shift-tab`, `left`, `right`, `up`, `down`, `ctrl-c`, `ctrl-d`, `q`, `alt-enter`, `space`, `backspace`, `ctrl`, `tmux-prefix`, `paste`):
+**Drawer** (30 buttons — includes the keys removed from the toolbar: `shift-tab`, `left`, `right`, `up`, `down`, `ctrl-c`, `ctrl-d`, `q`, `alt-enter`, `space`, `backspace`, `ctrl`, `tmux-prefix`, `paste`):
 
 | `id` | `label` | `action` |
 |------|---------|----------|
@@ -441,7 +442,6 @@ Valid positions: `top-left | top-right | top-centre | bottom-left | bottom-right
 | `alt-enter` | M-enter | `send` `\x1b\r` |
 | `space` | Space | `send` `' '` |
 | `backspace` | backspace | `send` `\x7f` |
-| `image-upload` | 🖼 Image | `image-upload` (uploads to the server tmp dir, inserts the path into the agent input — no Enter) |
 
 ### Gestures
 

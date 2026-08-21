@@ -4,7 +4,7 @@ import { keyboardToggleButton } from '../src/controls/keyboard-controller'
 import { defaultRow1, defaultRow2 } from '../src/toolbar/buttons'
 
 describe('defaultRow1 (moshi-style single row)', () => {
-	test('is exactly the 7-key high-frequency set in render order', () => {
+	test('is exactly the 8-key high-frequency set in render order', () => {
 		expect(defaultRow1.map((b) => b.id)).toEqual([
 			'esc',
 			'ctrl-c',
@@ -12,6 +12,7 @@ describe('defaultRow1 (moshi-style single row)', () => {
 			'enter',
 			'dpad-toggle',
 			'keyboard-toggle',
+			'image-upload',
 			'drawer-toggle',
 		])
 	})
@@ -47,8 +48,9 @@ describe('defaultRow1 (moshi-style single row)', () => {
 		expect(dpad).toEqual(dpadToggleButton)
 	})
 
-	test('ends with ⌨ then ☰ More', () => {
-		expect(defaultRow1[defaultRow1.length - 2]).toEqual(keyboardToggleButton)
+	test('ends with ⌨ then 🖼 then ☰ More', () => {
+		expect(defaultRow1[defaultRow1.length - 3]).toEqual(keyboardToggleButton)
+		expect(defaultRow1[defaultRow1.length - 2]?.action).toEqual({ type: 'image-upload' })
 		const last = defaultRow1[defaultRow1.length - 1]
 		expect(last?.action).toEqual({ type: 'drawer-toggle' })
 		expect(last?.label).toContain('More')
