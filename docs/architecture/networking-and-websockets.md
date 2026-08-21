@@ -13,10 +13,11 @@ remobi is intentionally simple at the network edge:
 - the recommended deployment model is localhost remobi behind Tailscale Serve, a VPN, or another trusted tunnel
 - using `--host 0.0.0.0` deliberately exposes terminal control beyond loopback
 
-The browser talks to two server entry points:
+The browser talks to three server entry points:
 
 - `GET /` for the HTML document with inline JS, CSS, config, and CSP nonce
 - `GET /ws` for the terminal WebSocket
+- `POST /api/image-drop` for image uploads from the drawer Image button
 
 When `remobi serve --base-path /prefix` is used, remobi also serves the same HTML, WebSocket, manifest, and icon routes under `/prefix/...`. Root routes stay available for direct local access.
 
@@ -76,6 +77,14 @@ Important current limits from `src/session-protocol.ts`:
 - max resize: `500` cols, `200` rows
 
 These message shapes are implementation details, not a supported public API.
+
+## Image drop endpoint
+
+`POST {basePath}/api/image-drop` receives one image for the drawer Image button and stores it for agent-path insertion:
+
+- raw request body, no multipart; Origin checked against Host with the same rule as `/ws`
+- exact 10 MiB limit; PNG/JPEG/WebP/GIF sniffed from magic bytes — client Content-Type and file names are never trusted
+- the file lands in the OS temp dir with mode `0600`; the JSON response is `{ path, format, size }` with `Cache-Control: no-store`
 
 ## Session sync model
 
