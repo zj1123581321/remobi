@@ -1,10 +1,10 @@
-# remobi
+# herdweb
 
-Monitor and control your coding agents from your phone. Touch controls for tmux (or [zellij](https://github.com/zellij-org/zellij), [herdr](https://github.com/ogulcancelik/herdr)) over the web.
+Purpose-built Web UI for [herdr](https://github.com/ogulcancelik/herdr) — monitor and drive your coding agents from your phone.
 
 risk-tier: personal
 
-Fork status: independent fork as of 2026-08-20 — not tracking upstream, not published to npm. Focus: optimizing the herdr mobile WebUI experience. See `docs/decisions/2026-08-20-fork-herdr-focus.md`.
+Fork status: this project is forked from upstream [connorads/remobi](https://github.com/connorads/remobi) (independent since 2026-08-20) — not tracking upstream, not published to npm. Focus: optimizing the herdr mobile WebUI experience. See `docs/decisions/2026-08-20-fork-herdr-focus.md`.
 
 ## Architecture
 
@@ -20,8 +20,8 @@ Pure TypeScript + DOM API — no framework. Transpiles to JS via tsdown. Bundles
 - **TypeScript (strict)** — no `any`, discriminated unions for actions
 - **Biome** — lint + format
 - **happy-dom** — DOM testing
-- **Hono** — HTTP + WebSocket server (`remobi serve`)
-- **node-pty** — PTY bridge for `remobi serve`
+- **Hono** — HTTP + WebSocket server (`herdweb serve`)
+- **node-pty** — PTY bridge for `herdweb serve`
 - **xterm.js** — browser terminal rendering
 
 ## Key Commands
@@ -41,8 +41,8 @@ pnpm run build:dist    # Transpile for publishing (tsdown)
 From source (bundles overlay on the fly, no build step):
 
 ```bash
-tsx cli.ts serve                                # localhost:7681, default tmux session
-tsx cli.ts serve --port 8080 -- bash --norc     # custom port, bash instead of tmux
+pnpm exec tsx cli.ts serve                                # localhost:7681, default herdr session
+pnpm exec tsx cli.ts serve --port 8080 -- bash --norc     # custom port, escape hatch without herdr
 ```
 
 From a local build:
@@ -53,12 +53,7 @@ pnpm run build:dist && node dist/cli.mjs serve
 
 ### Production / Debug
 
-```bash
-scripts/install-prod.sh --enable  # 127.0.0.1:7681
-scripts/install-debug.sh          # 127.0.0.1:7691/remobi
-systemctl --user start remobi-debug.service
-systemctl --user stop remobi-debug.service
-```
+See [docs/deploy-herdr.md](docs/deploy-herdr.md) for systemd unit setup, install scripts, and production/debug deployment.
 
 ## Conventional Commits
 
@@ -117,7 +112,7 @@ Browser overlay (bundled to the client via esbuild):
 - `src/asr/` — provider-independent ASR contract, PCM pipeline, AudioWorklet, and Doubao SAUC engine
 - `src/pwa/` — PWA manifest, meta-tags, icons
 
-Server runtime (`remobi serve`, Node):
+Server runtime (`herdweb serve`, Node):
 
 - `src/serve.ts` — Hono HTTP + WS server: routes, CSP/origin/host-header checks, icon serving, caffeinate, shutdown
 - `src/session.ts` — SharedTerminalSession: node-pty spawn, xterm headless mirror, multi-client broadcast + snapshot
@@ -137,7 +132,7 @@ CLI + build:
 
 ## Publishing
 
-- Post-fork (2026-08-20): **no npm publishing** — the `remobi` name belongs to upstream. The semantic-release `release` job still maintains version/changelog/GitHub Releases, but npm publish is expected to no-op/fail harmlessly until a new package name is chosen (if ever). Distribution for now = run from source.
+- Post-fork (2026-08-20): **no npm publishing**. The semantic-release `release` job still maintains version/changelog/GitHub Releases, but npm publish is expected to no-op/fail harmlessly until a new package name is chosen (if ever). Distribution for now = run from source.
 - Transpiles to JS via tsdown: `bin` → `dist/cli.mjs`, `exports` → `dist/*.mjs` + `dist/*.d.mts`
 - `files` array controls what would be published: `dist/`, `styles/`, `src/pwa/icons/`, `README.md`, `CHANGELOG.md`, `LICENSE`
 - CI: `.github/workflows/ci.yml` — pnpm test + biome check
@@ -157,7 +152,7 @@ CLI + build:
 - Unified control schema: use `ControlButton` for both toolbar and drawer items
 - Config shape: `drawer.buttons` (not `drawer.commands`)
 - Config via `defineConfig()` — typed, with sensible defaults
-- Config resolution: `--config` flag → cwd → `~/.config/remobi/` (XDG fallback)
+- Config resolution: `--config` flag → cwd → `~/.config/herdweb/` (XDG fallback; legacy upstream config paths auto-fallback)
 - Drawer takes a flat `readonly ControlButton[]` — rendered as a single grid
 - Help overlay is config-driven and must be fail-safe (never break core controls if help fails)
 - Mobile viewport handling: lock document scroll and compute height from visual viewport (keyboard-aware)
@@ -165,6 +160,6 @@ CLI + build:
 - All DOM creation in `util/dom.ts` helpers
 - Keyboard state preserved: capture `isKeyboardOpen()` before action, use `conditionalFocus()` after
 - Tests use happy-dom for DOM environment (e2e/CLI tests use node environment)
-- Agent skill: `.agents/skills/remobi-setup/SKILL.md` provides AI agents with onboarding and config guidance. When config shape, CLI commands, action types, or validation rules change, update the skill to stay in sync.
-- Agent onboarding: when helping a user set up remobi (not develop it), read `.agents/skills/remobi-setup/SKILL.md` and follow its workflow. Critical: `set -g mouse on` must be enabled in the user's tmux config for touch scroll to work — the skill covers this but agents skipping it is the most common setup failure.
+- Agent skill: `.agents/skills/herdweb-setup/SKILL.md` provides AI agents with onboarding and config guidance. When config shape, CLI commands, action types, or validation rules change, update the skill to stay in sync.
+- Agent onboarding: when helping a user set up herdweb (not develop it), read `.agents/skills/herdweb-setup/SKILL.md` and follow its workflow.
 - Voice input: `{ type: 'voice-input' }` is a toolbar-only voice-composer entry; it opens the second-layer composer, whose internal Mic uses tap-to-toggle. It requires `asr.enabled`, HTTPS (except localhost), and a private `.local` provider key. Drawer/floating placement is invalid.

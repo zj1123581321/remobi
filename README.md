@@ -104,7 +104,7 @@ When `--config` is not specified, herdweb searches:
 
 1. `herdweb.config.ts` / `.js` in the current directory
 2. `~/.config/herdweb/herdweb.config.ts` / `.js` (XDG fallback)
-3. Legacy `remobi.config.ts` paths (automatic fallback for migration)
+3. Legacy upstream config paths (automatic fallback for migration)
 
 ## Configuration
 
