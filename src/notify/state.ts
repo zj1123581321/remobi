@@ -73,3 +73,32 @@ export function appendEventLine(stateDir: string, event: NotifyEvent, limit: num
 	appendFileSync(path, `${JSON.stringify(event)}\n`, { encoding: 'utf-8', mode: 0o644 })
 	trimEventsFile(stateDir, limit)
 }
+
+const LAST_SESSION_FILE = 'last-session.json'
+
+export interface LastSessionEntry {
+	readonly sessionId: string
+	readonly exitedAt: number
+	readonly exitCode: number
+	readonly signal: number | null
+}
+
+export type LastSessionStore = Record<string, LastSessionEntry>
+
+export function readLastSessionStore(stateDir: string): LastSessionStore {
+	return readJsonFile<LastSessionStore>(join(stateDir, LAST_SESSION_FILE)) ?? {}
+}
+
+export function writeLastSessionStore(stateDir: string, store: LastSessionStore): void {
+	writeJsonFileAtomic(join(stateDir, LAST_SESSION_FILE), store)
+}
+
+export function updateLastSessionEntry(
+	stateDir: string,
+	sessionKey: string,
+	entry: LastSessionEntry,
+): void {
+	const store = readLastSessionStore(stateDir)
+	store[sessionKey] = entry
+	writeLastSessionStore(stateDir, store)
+}

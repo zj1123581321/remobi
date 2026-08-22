@@ -10,10 +10,17 @@ import type { WSContext } from 'hono/ws'
 import type WebSocket from 'ws'
 import { bundleClientAssets, bundleSwAsset, bundleWorkletAsset, renderClientHtml } from '../build'
 import { bareDocumentRoute, documentRoute, joinBasePath } from './base-path'
+import {
+	buildRestartEvent,
+	buildSessionEndEvent,
+	extractSessionKey,
+	shouldAnnounceRestart,
+} from './notify/health'
 import { ensureVapidKeys } from './notify/push'
 import { registerNotifyRoutes } from './notify/routes'
-import { createNotifyService, notifyDrain } from './notify/service'
-import { resolveNotifyStateDir } from './notify/state'
+import { type NotifyService, createNotifyService, notifyDrain } from './notify/service'
+import { type SilenceDetector, createSilenceDetector } from './notify/silence'
+import { readLastSessionStore, resolveNotifyStateDir, updateLastSessionEntry } from './notify/state'
 import { manifestToJson } from './pwa/manifest'
 import type { SessionClient, SharedTerminalSession } from './session'
 import {
@@ -451,7 +458,37 @@ function mountNotifyStack(
 	return notifyService
 }
 
+export { extractSessionKey } from './notify/health'
+
+async function handleSessionExit(deps: {
+	readonly notifyService: NotifyService
+	readonly stateDir: string
+	readonly sessionKey: string
+	readonly sessionId: string
+	readonly startTime: number
+	readonly exitCode: number
+	readonly signal: number | null
+}): Promise<void> {
+	const ts = Date.now()
+	deps.notifyService.dispatchEvent(
+		buildSessionEndEvent({
+			sessionKey: deps.sessionKey,
+			startTime: deps.startTime,
+			exitCode: deps.exitCode,
+			signal: deps.signal,
+			ts,
+		}),
+	)
+	updateLastSessionEntry(deps.stateDir, deps.sessionKey, {
+		sessionId: deps.sessionId,
+		exitedAt: ts,
+		exitCode: deps.exitCode,
+		signal: deps.signal,
+	})
+}
+
 /** Start herdweb serve: build client assets, spawn the PTY, and serve HTTP + WS */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serve bootstraps HTTP, WS, notify, and PTY lifecycle
 export async function serve(
 	config: HerdwebConfig,
 	port: number = DEFAULT_PORT,
@@ -682,16 +719,42 @@ export async function serve(
 		swJs,
 		securityHeadersForRequest,
 	)
+	const notifyStateDir = resolveNotifyStateDir(port)
+	const sessionKey = extractSessionKey(command)
+	const prevSession = readLastSessionStore(notifyStateDir)[sessionKey]
 
 	const server = honoServe({ fetch: app.fetch, port, hostname: host })
 	injectWebSocket(server)
 	await waitForServerListening(server, port, host)
 
+	let silenceDetector: SilenceDetector | undefined
+
 	try {
 		console.log(`herdweb: starting command ${describeCommandForLogs(command)}...`)
 		session = new SharedTerminalSession(command)
+		const activeSession = session
+		if (shouldAnnounceRestart(prevSession, activeSession.id, Date.now())) {
+			notifyService.dispatchEvent(
+				buildRestartEvent({
+					sessionKey,
+					startTime: activeSession.startTime,
+					ts: Date.now(),
+				}),
+			)
+		}
+		silenceDetector = createSilenceDetector({
+			sessionKey,
+			config: config.notify.silence,
+			bytesInWindow: (windowMs) => activeSession.bytesInWindow(windowMs),
+			lastOutputAt: () => activeSession.lastOutputAt(),
+			dispatch: (event) => {
+				notifyService.dispatchEvent(event)
+			},
+			lastEventAt: (key) => notifyService.lastEventAt(key),
+		})
 		caffeinateProc = noSleep ? spawnCaffeinate(session.pid) : null
 	} catch (error) {
+		silenceDetector?.dispose()
 		server.close()
 		throw error
 	}
@@ -706,6 +769,7 @@ export async function serve(
 		if (shuttingDown) return
 		shuttingDown = true
 		console.log('\nherdweb: shutting down...')
+		silenceDetector?.dispose()
 		await notifyDrain(notifyService)
 		notifyService.dispose()
 		server.close()
@@ -721,7 +785,17 @@ export async function serve(
 		void cleanup()
 	})
 
-	await session.onExit
+	const exit = await session.onExit
+	await handleSessionExit({
+		notifyService,
+		stateDir: notifyStateDir,
+		sessionKey,
+		sessionId: session.id,
+		startTime: session.startTime,
+		exitCode: exit.exitCode,
+		signal: exit.signal,
+	})
+	silenceDetector.dispose()
 	await notifyDrain(notifyService)
 	notifyService.dispose()
 	server.close()

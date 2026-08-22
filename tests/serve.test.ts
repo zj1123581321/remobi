@@ -5,9 +5,13 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
+import { writeSubscriptions } from '../src/notify/push'
+import { createNotifyService, notifyDrain } from '../src/notify/service'
+import { readLastSessionStore } from '../src/notify/state'
 import {
 	buildSecurityHeaders,
 	describeCommandForLogs,
+	extractSessionKey,
 	isAllowedOrigin,
 	isLoopbackHost,
 	parseHostHeader,
@@ -310,6 +314,114 @@ describe('describeCommandForLogs', () => {
 
 	test('handles single-word commands', () => {
 		expect(describeCommandForLogs(['tmux'])).toBe('tmux')
+	})
+})
+
+describe('extractSessionKey (serve re-export)', () => {
+	test('delegates to health helper', () => {
+		expect(extractSessionKey(['herdr', '--session', 'dev'])).toBe('dev')
+	})
+})
+
+describe('notifyDrain shutdown', () => {
+	let stateDir: string | undefined
+
+	afterEach(() => {
+		if (stateDir) rmSync(stateDir, { recursive: true, force: true })
+		stateDir = undefined
+		vi.useRealTimers()
+	})
+
+	test('waits for in-flight push before returning', async () => {
+		stateDir = mkdtempSync(join(tmpdir(), 'herdweb-drain-'))
+		writeSubscriptions(stateDir, [
+			{
+				endpoint: 'https://push.example/ok',
+				keys: { p256dh: 'k', auth: 'a' },
+				lastSuccessAt: 0,
+			},
+		])
+		let resolvePush!: () => void
+		const sendPush = vi.fn().mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					resolvePush = resolve
+				}),
+		)
+		const notifyService = createNotifyService({ stateDir, historyLimit: 200, sendPush })
+		notifyService.dispatchEvent({
+			v: 1,
+			id: 'drain-1',
+			kind: 'done',
+			title: 'T',
+			ts: 1,
+		})
+		const drainPromise = notifyDrain(notifyService)
+		await sleep(50)
+		expect(sendPush).toHaveBeenCalled()
+		resolvePush()
+		await drainPromise
+		notifyService.dispose()
+	})
+
+	test('returns after 10s when push hangs', async () => {
+		vi.useFakeTimers()
+		stateDir = mkdtempSync(join(tmpdir(), 'herdweb-drain-'))
+		writeSubscriptions(stateDir, [
+			{
+				endpoint: 'https://push.example/ok',
+				keys: { p256dh: 'k', auth: 'a' },
+				lastSuccessAt: 0,
+			},
+		])
+		const sendPush = vi.fn().mockImplementation(() => new Promise<void>(() => {}))
+		const notifyService = createNotifyService({ stateDir, historyLimit: 200, sendPush })
+		notifyService.dispatchEvent({
+			v: 1,
+			id: 'drain-2',
+			kind: 'done',
+			title: 'T',
+			ts: 1,
+		})
+		const drainPromise = notifyDrain(notifyService)
+		await vi.advanceTimersByTimeAsync(10_000)
+		await drainPromise
+		notifyService.dispose()
+	})
+})
+
+describe('serve health on PTY exit', () => {
+	test('writes last-session.json after short-lived bash session', async () => {
+		const port = await reservePort()
+		const stateDir = mkdtempSync(join(tmpdir(), 'herdweb-health-serve-'))
+		tempDirs.push(stateDir)
+		const configDir = mkdtempSync(join(tmpdir(), 'herdweb-serve-health-cfg-'))
+		tempDirs.push(configDir)
+		const configPath = join(configDir, 'herdweb.config.ts')
+		writeFileSync(configPath, 'export default { asr: { enabled: false } }')
+		vi.stubEnv('XDG_STATE_HOME', join(stateDir, 'state-root'))
+		const proc = spawnProcess(
+			[
+				'pnpm',
+				'exec',
+				'tsx',
+				'cli.ts',
+				'serve',
+				'--config',
+				configPath,
+				'--port',
+				String(port),
+				'--',
+				'bash',
+				'--norc',
+				'-c',
+				'exit 0',
+			],
+			{ cwd: repoRoot, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
+		)
+		await proc.exited
+		const store = readLastSessionStore(join(stateDir, 'state-root', 'herdweb', String(port)))
+		expect(store.default?.exitCode).toBe(0)
 	})
 })
 
