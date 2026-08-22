@@ -9,14 +9,14 @@ Cloudflare Access、Cloudflare Tunnel、Tailscale 配置负责。
 | 用途 | 外部入口 | 本机监听 | herdr 会话 |
 | --- | --- | --- | --- |
 | 生产 | `https://herdr.zlxlabs.com` | `127.0.0.1:7681` | `default` |
-| Tailscale 调试 | `https://<tailnet>/remobi/` | `127.0.0.1:7691` | `herdweb-dev` |
+| Tailscale 调试 | `https://<tailnet>/herdweb/` | `127.0.0.1:7691` | `herdweb-dev` |
 
-调试入口的 `/remobi/` 前缀对应 herdweb 的 `--base-path /remobi`，反向代理目标是
+调试入口的 `/herdweb/` 前缀对应 herdweb 的 `--base-path /herdweb`，反向代理目标是
 `127.0.0.1:7691`。调试服务禁止占用生产的 `7681` 端口。
 
 ## 生产
 
-生产 unit 的持久路径固定为 `/home/zlx/projects/oss/remobi`，并由
+生产 unit 的持久路径固定为 `/home/zlx/projects/oss/herdweb`，并由
 `scripts/serve-prod.sh` 启动。启动脚本用 `git symbolic-ref` 检查当前分支必须是
 `main`；detached HEAD 或其他分支会直接失败。unit 使用 fnm 的
 `aliases/default/bin` 和 `~/.local/bin`，不绑定 `node-versions/`。
@@ -24,7 +24,7 @@ Cloudflare Access、Cloudflare Tunnel、Tailscale 配置负责。
 安装并启用生产 unit：
 
 ```bash
-cd /home/zlx/projects/oss/remobi
+cd /home/zlx/projects/oss/herdweb
 scripts/install-prod.sh --enable
 systemctl --user status herdweb.service
 ```
@@ -49,7 +49,7 @@ scripts/check-exposure.sh https://herdr.zlxlabs.com
 `serve-prod.sh`。安装只执行复制和 daemon-reload，不 enable、不 start：
 
 ```bash
-cd /home/zlx/projects/oss/remobi
+cd /home/zlx/projects/oss/herdweb
 scripts/install-debug.sh
 systemctl --user start herdweb-debug.service
 systemctl --user status herdweb-debug.service
@@ -62,7 +62,7 @@ systemctl --user stop herdweb-debug.service
 ```
 
 调试 unit 使用本机配置文件
-`/home/zlx/projects/oss/remobi/.omo/herdweb-debug.config.ts`。密钥只放在该本地配置或
+`/home/zlx/projects/oss/herdweb/.omo/herdweb-debug.config.ts`。密钥只放在该本地配置或
 本机环境中，不写入 git。
 
 ## 重启后检查
@@ -78,9 +78,9 @@ ss -ltn | grep -E '127\.0\.0\.1:(7681|7691)'
 
 ## 从 remobi 迁移到 herdweb
 
-本节描述将已运行的 `remobi.service` 切换到 `herdweb.service` 的操作步骤。
-本地目录路径 `/home/zlx/projects/oss/remobi` 保持不变；外部 Tailscale 入口
-`/remobi/` 前缀亦保持不变（见文末可选后续步骤）。
+本节描述将已运行的 `remobi.service` 切换到 `herdweb.service` 的操作步骤，
+同时完成本地目录改名（`~/projects/oss/remobi` → `~/projects/oss/herdweb`）与
+Tailscale 调试入口前缀切换（`/remobi/` → `/herdweb/`）。
 
 ### 前置检查
 
@@ -110,8 +110,10 @@ systemctl --user daemon-reload
 ### 迁移本地调试配置（如存在）
 
 ```bash
-cd /home/zlx/projects/oss/remobi
+cd /home/zlx/projects/oss/remobi   # 切换前仍在旧目录
 mv .omo/remobi-debug.config.ts .omo/herdweb-debug.config.ts
+mv .omo/remobi-debug.config.local.ts .omo/herdweb-debug.config.local.ts 2>/dev/null || true
+cd ~ && mv projects/oss/remobi projects/oss/herdweb
 ```
 
 若文件不存在可跳过；新调试 unit 引用 `herdweb-debug.config.ts`。
@@ -121,7 +123,7 @@ mv .omo/remobi-debug.config.ts .omo/herdweb-debug.config.ts
 拉取包含 herdweb unit 的 `main` 后：
 
 ```bash
-cd /home/zlx/projects/oss/remobi
+cd /home/zlx/projects/oss/herdweb
 git pull origin main
 scripts/install-prod.sh --enable
 ```
@@ -145,7 +147,7 @@ scripts/check-exposure.sh https://herdr.zlxlabs.com
 若迁移后生产不可用，从 git 历史恢复旧 unit 并重新启用：
 
 ```bash
-cd /home/zlx/projects/oss/remobi
+cd /home/zlx/projects/oss/herdweb   # 回滚时如已改名目录，先 mv 回 projects/oss/remobi
 git show bc7b8ce:systemd/remobi.service > ~/.config/systemd/user/remobi.service
 systemctl --user daemon-reload
 systemctl --user stop herdweb.service
@@ -176,7 +178,7 @@ gh repo rename herdweb
 
 同步更新 `package.json` 中的 `repository` URL 及其他文档中的 GitHub 链接。
 
-**本地目录改名**（`/home/zlx/projects/oss/remobi` → `herdweb`）
+**本地目录改名**（`/home/zlx/projects/oss/herdweb` → `herdweb`）
 
 需全链条同步：
 
