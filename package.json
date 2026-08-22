@@ -1,10 +1,10 @@
 {
-	"name": "remobi",
+	"name": "herdweb",
 	"version": "1.2.1",
-	"description": "Monitor and control your coding agents from your phone. Touch controls for tmux over the web.",
+	"description": "Web UI for herdr — monitor and drive your coding agents from your phone.",
 	"type": "module",
 	"bin": {
-		"remobi": "dist/cli.mjs"
+		"herdweb": "dist/cli.mjs"
 	},
 	"exports": {
 		".": {
@@ -35,10 +35,10 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/connorads/remobi.git"
+		"url": "git+https://github.com/zj1123581321/remobi.git"
 	},
-	"homepage": "https://github.com/connorads/remobi",
-	"bugs": "https://github.com/connorads/remobi/issues",
+	"homepage": "https://github.com/zj1123581321/remobi",
+	"bugs": "https://github.com/zj1123581321/remobi/issues",
 	"scripts": {
 		"build:overlay": "tsx scripts/build-overlay.ts",
 		"build:dist": "tsdown && pnpm run build:overlay",
