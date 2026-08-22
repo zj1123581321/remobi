@@ -58,7 +58,7 @@ export interface PongMessage {
 }
 
 /**
- * remobi 已把 data 交给当前 PTY 的写入队列，并已记入 session 内去重账本。
+ * herdweb 已把 data 交给当前 PTY 的写入队列，并已记入 session 内去重账本。
  *
  * 不保证操作系统层面写入成功：node-pty@1.1.0 的写入走 fs.write 异步回调，
  * 失败时只 console.error 并清空整个写队列（lib/unixTerminal.js:314-327），

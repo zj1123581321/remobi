@@ -205,8 +205,8 @@ export interface PwaConfig {
 	readonly themeColor: string
 }
 
-/** Full remobi configuration */
-export interface RemobiConfig {
+/** Full herdweb configuration */
+export interface HerdwebConfig {
 	readonly name: string
 	readonly theme: TermTheme
 	readonly font: FontConfig
@@ -241,8 +241,8 @@ export type ButtonArrayInput<T extends { readonly id: string }> =
 	| ((defaults: readonly T[]) => readonly T[])
 
 /** Config overrides shape that supports ButtonArrayInput for button arrays */
-export type RemobiConfigOverrides = Omit<
-	DeepPartial<RemobiConfig>,
+export type HerdwebConfigOverrides = Omit<
+	DeepPartial<HerdwebConfig>,
 	'toolbar' | 'drawer' | 'floatingButtons'
 > & {
 	readonly toolbar?: {
@@ -256,7 +256,7 @@ export type RemobiConfigOverrides = Omit<
 }
 
 /**
- * Minimal xterm.js Terminal interface — only what remobi needs.
+ * Minimal xterm.js Terminal interface — only what herdweb needs.
  * Avoids importing the full xterm package.
  */
 export interface XTerminal {
@@ -310,8 +310,8 @@ declare global {
 	interface Window {
 		term?: XTerminal
 		/** WebSocket instances captured by the reconnect interceptor script */
-		__remobiSockets?: WebSocket[]
+		__herdwebSockets?: WebSocket[]
 		/** Trigger a terminal fit + resize cycle after layout changes */
-		__remobiResize?: () => void
+		__herdwebResize?: () => void
 	}
 }

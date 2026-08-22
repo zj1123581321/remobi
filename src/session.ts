@@ -7,7 +7,7 @@ import type { ClientMessage, InputRejectedReason, ServerMessage } from './sessio
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
-const TERMINAL_ERROR = 'Terminal failed; restart remobi.'
+const TERMINAL_ERROR = 'Terminal failed; restart herdweb.'
 
 const HeadlessTerminal = XtermHeadless.Terminal
 type HeadlessTerminalInstance = InstanceType<typeof HeadlessTerminal>
@@ -37,7 +37,7 @@ interface SessionExit {
 function normaliseCommand(command: readonly string[]): { file: string; args: string[] } {
 	const [file, ...args] = command
 	if (!file) {
-		throw new Error('remobi serve requires a command to start')
+		throw new Error('herdweb serve requires a command to start')
 	}
 	return { file, args: [...args] }
 }
@@ -46,28 +46,17 @@ function toSignalValue(signal: number | undefined): number | null {
 	return typeof signal === 'number' ? signal : null
 }
 
-// Multiplexer client markers: when present, attach-or-create commands
-// (`tmux new-session -A`, `zellij attach --create`, `herdr --session`)
-// may treat the launch as nested inside an existing client instead of
-// attaching to the real session.
-const NESTED_MUX_ENV_VARS: ReadonlySet<string> = new Set([
-	'TMUX',
-	'TMUX_PANE',
-	'ZELLIJ',
-	'ZELLIJ_PANE_ID',
-	'ZELLIJ_SESSION_NAME',
-	'HERDR_SESSION',
-	'HERDR_SOCKET_PATH',
-	'HERDR_PANE_ID',
-	'HERDR_TAB_ID',
-	'HERDR_WORKSPACE_ID',
-])
+// Nested herdr client markers: when present, attach commands may treat the
+// launch as nested inside an existing client instead of attaching to the real session.
+function isNestedHerdrEnvVar(key: string): boolean {
+	return key.startsWith('HERDR')
+}
 
 export function buildSessionEnv(sourceEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-	// Rebuild without the markers — `delete` triggers biome noDelete,
+	// Rebuild without HERDR_* markers — `delete` triggers biome noDelete,
 	// and `env.X = undefined` coerces to the string "undefined" on process.env
 	const rest = Object.fromEntries(
-		Object.entries(sourceEnv).filter(([key]) => !NESTED_MUX_ENV_VARS.has(key)),
+		Object.entries(sourceEnv).filter(([key]) => !isNestedHerdrEnvVar(key)),
 	)
 	return { ...rest, TERM: 'xterm-256color' }
 }

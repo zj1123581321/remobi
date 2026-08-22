@@ -1,9 +1,9 @@
 import { createHookRegistry, init } from './index'
-import type { RemobiConfig } from './types'
+import type { HerdwebConfig } from './types'
 
-declare const __remobiConfig: RemobiConfig
-declare const __remobiVersion: string | undefined
-const config = __remobiConfig
-const version = typeof __remobiVersion !== 'undefined' ? __remobiVersion : undefined
+declare const __herdwebConfig: HerdwebConfig
+declare const __herdwebVersion: string | undefined
+const config = __herdwebConfig
+const version = typeof __herdwebVersion !== 'undefined' ? __herdwebVersion : undefined
 const hooks = createHookRegistry()
 init(config, hooks, version)

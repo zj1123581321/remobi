@@ -5,13 +5,13 @@ import { catppuccinMocha } from './theme/catppuccin-mocha'
 import type {
 	ControlButton,
 	DeepPartial,
+	HerdwebConfig,
+	HerdwebConfigOverrides,
 	PwaConfig,
-	RemobiConfig,
-	RemobiConfigOverrides,
 } from './types'
 
 /** Default font configuration */
-const defaultFont: RemobiConfig['font'] = {
+const defaultFont: HerdwebConfig['font'] = {
 	family: 'JetBrainsMono NFM, monospace',
 	cdnUrl:
 		'https://cdn.jsdelivr.net/gh/mshaugh/nerdfont-webfonts@latest/build/jetbrainsmono-nfm.css',
@@ -20,7 +20,7 @@ const defaultFont: RemobiConfig['font'] = {
 }
 
 /** Default gesture configuration */
-const defaultGestures: RemobiConfig['gestures'] = {
+const defaultGestures: HerdwebConfig['gestures'] = {
 	swipe: {
 		// Default off: horizontal swipes at the screen bottom now belong to the
 		// single-row toolbar scroll — a swipe starting just above it would fire
@@ -30,8 +30,8 @@ const defaultGestures: RemobiConfig['gestures'] = {
 		maxDuration: 400,
 		left: '\x02n',
 		right: '\x02p',
-		leftLabel: 'Next tmux window',
-		rightLabel: 'Previous tmux window',
+		leftLabel: 'Next herdr tab',
+		rightLabel: 'Previous herdr tab',
 	},
 	pinch: { enabled: false },
 	scroll: {
@@ -61,7 +61,7 @@ const voiceComposerButton: ControlButton = {
  * and the drawer keeps a fallback. The voice entry stays on the row even
  * when ASR is disabled; the toolbar hides it until a mic controller exists.
  */
-const defaultRow1: RemobiConfig['toolbar']['row1'] = [
+const defaultRow1: HerdwebConfig['toolbar']['row1'] = [
 	{
 		id: 'esc',
 		label: 'Esc',
@@ -111,14 +111,14 @@ const defaultRow1: RemobiConfig['toolbar']['row1'] = [
  * (moshi style). The removed keys live in the drawer defaults below; set
  * `toolbar.row2` to opt back into a second row.
  */
-const defaultRow2: RemobiConfig['toolbar']['row2'] = []
+const defaultRow2: HerdwebConfig['toolbar']['row2'] = []
 
 /**
  * Inject the voice entry into the reachable toolbar when ASR is enabled.
  * The default row1 already carries voice-input, so this is a no-op for
  * default configs; it only patches custom rows that lack a voice entry.
  */
-export function withVoiceComposerEntry(config: RemobiConfig): RemobiConfig {
+export function withVoiceComposerEntry(config: HerdwebConfig): HerdwebConfig {
 	if (!config.asr.enabled) return config
 
 	const rows = [config.toolbar.row1, config.toolbar.row2]
@@ -149,43 +149,43 @@ export function withVoiceComposerEntry(config: RemobiConfig): RemobiConfig {
 	}
 }
 
-/** Default drawer commands */
+/** Default drawer commands — herdr key bindings (Ctrl-B prefix, same as tmux) */
 export const defaultDrawerButtons: readonly ControlButton[] = [
 	{
-		id: 'tmux-new-window',
+		id: 'herdr-new-window',
 		label: '+ Win',
-		description: 'Create tmux window',
+		description: 'Create herdr window',
 		action: { type: 'send', data: '\x02c' },
 	},
 	{
-		id: 'tmux-split-vertical',
+		id: 'herdr-split-v',
 		label: 'Split |',
 		description: 'Split pane vertically',
-		action: { type: 'send', data: '\x02%' },
+		action: { type: 'send', data: '\x02v' },
 	},
 	{
-		id: 'tmux-split-horizontal',
+		id: 'herdr-split-h',
 		label: 'Split \u2014',
 		description: 'Split pane horizontally',
-		action: { type: 'send', data: '\x02"' },
+		action: { type: 'send', data: '\x02-' },
 	},
 	{
-		id: 'tmux-zoom',
+		id: 'herdr-zoom',
 		label: 'Zoom',
 		description: 'Toggle pane zoom',
 		action: { type: 'send', data: '\x02z' },
 	},
 	{
-		id: 'tmux-sessions',
-		label: 'Sessions',
-		description: 'Choose tmux session',
-		action: { type: 'send', data: '\x02s' },
+		id: 'herdr-workspaces',
+		label: 'Spaces',
+		description: 'Choose herdr workspace',
+		action: { type: 'send', data: '\x02w' },
 	},
 	{
-		id: 'tmux-windows',
-		label: 'Windows',
-		description: 'Choose tmux window',
-		action: { type: 'send', data: '\x02w' },
+		id: 'herdr-sidebar',
+		label: 'Sidebar',
+		description: 'Toggle herdr sidebar',
+		action: { type: 'send', data: '\x02b' },
 	},
 	{
 		id: 'page-up',
@@ -200,19 +200,19 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 		action: { type: 'send', data: '\x1b[6~', keyLabel: 'Page Down' },
 	},
 	{
-		id: 'tmux-copy',
-		label: 'Copy',
-		description: 'Enter tmux copy mode',
-		action: { type: 'send', data: '\x02[' },
+		id: 'herdr-scrollback',
+		label: 'Scroll',
+		description: 'Enter herdr scrollback editor',
+		action: { type: 'send', data: '\x02e' },
 	},
 	{
-		id: 'tmux-help',
+		id: 'herdr-help',
 		label: 'Help',
-		description: 'List tmux key bindings',
+		description: 'List herdr key bindings',
 		action: { type: 'send', data: '\x02?' },
 	},
 	{
-		id: 'tmux-kill-pane',
+		id: 'herdr-kill-pane',
 		label: 'Kill',
 		description: 'Kill current pane (with confirm)',
 		action: { type: 'send', data: '\x02x' },
@@ -238,7 +238,7 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 	{
 		id: 'guide',
 		label: 'Guide',
-		description: 'Open the remobi help guide',
+		description: 'Open the herdweb help guide',
 		action: { type: 'help' },
 	},
 	// Keys removed from the toolbar when it went single-row stay reachable here
@@ -325,16 +325,16 @@ export const defaultDrawerButtons: readonly ControlButton[] = [
 		action: { type: 'ctrl-modifier' },
 	},
 	{
-		id: 'tmux-prefix',
+		id: 'prefix',
 		label: 'Prefix',
-		description: 'Send tmux prefix key (Ctrl-B)',
+		description: 'Send herdr prefix key (Ctrl-B)',
 		action: { type: 'prefix', data: '\x02' },
 	},
 	{ id: 'paste', label: 'Paste', description: 'Paste from clipboard', action: { type: 'paste' } },
 ]
 
 /** Default mobile configuration */
-const defaultMobile: RemobiConfig['mobile'] = {
+const defaultMobile: HerdwebConfig['mobile'] = {
 	initData: null,
 	widthThreshold: 768,
 	keyboardMode: 'auto',
@@ -346,7 +346,7 @@ const defaultPwa: PwaConfig = {
 	themeColor: '#1e1e2e',
 }
 
-const defaultAsr: RemobiConfig['asr'] = {
+const defaultAsr: HerdwebConfig['asr'] = {
 	enabled: false,
 	provider: 'doubao',
 	doubao: {
@@ -357,8 +357,8 @@ const defaultAsr: RemobiConfig['asr'] = {
 }
 
 /** Complete default configuration */
-export const defaultConfig: RemobiConfig = {
-	name: 'remobi',
+export const defaultConfig: HerdwebConfig = {
+	name: 'herdweb',
 	theme: catppuccinMocha,
 	font: defaultFont,
 	toolbar: { row1: defaultRow1, row2: defaultRow2 },
@@ -407,7 +407,7 @@ function deepMerge(
  * Merge a config overrides object against a base config.
  * Button arrays support array or function form via `ButtonArrayInput`.
  */
-export function mergeConfig(base: RemobiConfig, overrides: RemobiConfigOverrides): RemobiConfig {
+export function mergeConfig(base: HerdwebConfig, overrides: HerdwebConfigOverrides): HerdwebConfig {
 	// Extract button array inputs before deep-merging (they are not plain arrays)
 	const row1Input = overrides.toolbar?.row1
 	const row2Input = overrides.toolbar?.row2
@@ -415,13 +415,13 @@ export function mergeConfig(base: RemobiConfig, overrides: RemobiConfigOverrides
 
 	// Strip button array inputs from overrides before deep-merge so deepMerge
 	// doesn't try to replace them (they may be functions, not arrays)
-	const strippedOverrides: DeepPartial<RemobiConfig> = {
+	const strippedOverrides: DeepPartial<HerdwebConfig> = {
 		...overrides,
 		toolbar:
 			overrides.toolbar !== undefined
 				? {
 						// oxlint-disable-next-line typescript/consistent-type-assertions -- bridge typed overrides to untyped merge
-						...(overrides.toolbar as DeepPartial<RemobiConfig['toolbar']>),
+						...(overrides.toolbar as DeepPartial<HerdwebConfig['toolbar']>),
 						row1: undefined,
 						row2: undefined,
 					}
@@ -430,7 +430,7 @@ export function mergeConfig(base: RemobiConfig, overrides: RemobiConfigOverrides
 			overrides.drawer !== undefined
 				? {
 						// oxlint-disable-next-line typescript/consistent-type-assertions -- bridge typed overrides to untyped merge
-						...(overrides.drawer as DeepPartial<RemobiConfig['drawer']>),
+						...(overrides.drawer as DeepPartial<HerdwebConfig['drawer']>),
 						buttons: undefined,
 					}
 				: undefined,
@@ -440,7 +440,7 @@ export function mergeConfig(base: RemobiConfig, overrides: RemobiConfigOverrides
 	const merged = deepMerge(
 		base as unknown as Record<string, unknown>,
 		strippedOverrides as unknown as Record<string, unknown>,
-	) as unknown as RemobiConfig
+	) as unknown as HerdwebConfig
 	/* oxlint-enable typescript/consistent-type-assertions */
 
 	// Resolve button arrays
@@ -455,8 +455,8 @@ export function mergeConfig(base: RemobiConfig, overrides: RemobiConfigOverrides
 	}
 }
 
-/** Define a remobi configuration with defaults filled in */
-export function defineConfig(overrides: RemobiConfigOverrides = {}): RemobiConfig {
+/** Define a herdweb configuration with defaults filled in */
+export function defineConfig(overrides: HerdwebConfigOverrides = {}): HerdwebConfig {
 	return mergeConfig(defaultConfig, overrides)
 }
 
@@ -464,6 +464,6 @@ export function defineConfig(overrides: RemobiConfigOverrides = {}): RemobiConfi
  * Serialise theme to ttyd `-t theme=...` JSON string.
  * Used by the shell wrapper to pass theme via CLI flags.
  */
-export function serialiseThemeForTtyd(config: RemobiConfig): string {
+export function serialiseThemeForTtyd(config: HerdwebConfig): string {
 	return JSON.stringify(config.theme)
 }

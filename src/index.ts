@@ -1,4 +1,4 @@
-import { FONT_SIZE_STORAGE_KEY, createDefaultActionRegistry } from './actions/registry'
+import { createDefaultActionRegistry, readFontSizeFromStorage } from './actions/registry'
 import { defaultConfig, withVoiceComposerEntry } from './config'
 import { createComboPicker } from './controls/combo-picker'
 import { createDpad } from './controls/dpad'
@@ -26,7 +26,7 @@ import { setupReconnect } from './reconnect'
 import { createStartupResizeScheduler } from './startup-resize'
 import { applyTheme } from './theme/apply'
 import { createToolbar } from './toolbar/toolbar'
-import type { RemobiConfig, XTerminal } from './types'
+import type { HerdwebConfig, XTerminal } from './types'
 import { resizeTerm, sendData, waitForTerm } from './util/terminal'
 import { initHeightManager } from './viewport/height'
 
@@ -34,8 +34,8 @@ import { initHeightManager } from './viewport/height'
 export { defineConfig } from './config'
 export { createHookRegistry }
 export type {
-	RemobiConfig,
-	RemobiConfigOverrides,
+	HerdwebConfig,
+	HerdwebConfigOverrides,
 	ButtonAction,
 	ButtonArrayInput,
 	ControlButton,
@@ -49,21 +49,21 @@ export type {
 export type { HookRegistry, SendSource } from './hooks/registry'
 
 /**
- * Read the persisted font size (localStorage `remobi:fontSize`), falling back
+ * Read the persisted font size (localStorage `herdweb:fontSize`), falling back
  * to the config default when absent or unreadable (iOS private mode throws).
  * A usable value is clamped to the current `font.sizeRange` — the persisted
  * range may be wider than today's config. An empty string is treated as
  * absent (`Number('') === 0` would otherwise parse as a valid size).
  */
-function readPersistedFontSize(font: RemobiConfig['font']): number {
+function readPersistedFontSize(font: HerdwebConfig['font']): number {
 	try {
-		const raw = localStorage.getItem(FONT_SIZE_STORAGE_KEY)
+		const raw = readFontSizeFromStorage()
 		if (raw !== null && raw !== '') {
 			const size = Number(raw)
 			if (Number.isFinite(size)) return clampFontSize(size, font.sizeRange)
 		}
 	} catch (error) {
-		console.error('remobi: failed to read persisted font size', error)
+		console.error('herdweb: failed to read persisted font size', error)
 	}
 	return font.mobileSizeDefault
 }
@@ -79,7 +79,7 @@ function isMobile(): boolean {
  */
 function setupHelpOverlay(
 	term: XTerminal,
-	config: RemobiConfig,
+	config: HerdwebConfig,
 	version?: string,
 ): (() => void) | undefined {
 	try {
@@ -87,7 +87,7 @@ function setupHelpOverlay(
 		document.body.appendChild(helpOverlay.element)
 		return helpOverlay.open
 	} catch (error) {
-		console.error('remobi: failed to initialise help overlay', error)
+		console.error('herdweb: failed to initialise help overlay', error)
 		return undefined
 	}
 }
@@ -99,8 +99,8 @@ function setupHelpOverlay(
  */
 function setupKeyboard(
 	term: XTerminal,
-	config: RemobiConfig,
-): { readonly effectiveConfig: RemobiConfig; readonly keyboard: KeyboardController } {
+	config: HerdwebConfig,
+): { readonly effectiveConfig: HerdwebConfig; readonly keyboard: KeyboardController } {
 	const effectiveConfig = withKeyboardEscapeHatch(config)
 	const keyboard = createKeyboardController(term, effectiveConfig.mobile.keyboardMode)
 	return { effectiveConfig, keyboard }
@@ -110,20 +110,20 @@ function setupKeyboard(
 function attachVoiceComposerMic(controller: MicController | undefined): void {
 	if (!controller) return
 	const micButton = controller.preview.element.querySelector<HTMLButtonElement>(
-		'[data-remobi-control="composer-mic"]',
+		'[data-herdweb-control="composer-mic"]',
 	)
-	if (!micButton) throw new Error('remobi: voice composer is missing its microphone button')
+	if (!micButton) throw new Error('herdweb: voice composer is missing its microphone button')
 	document.body.appendChild(controller.preview.element)
 	controller.attachMicButton(micButton)
 }
 
 /**
- * Initialise the remobi overlay.
+ * Initialise the herdweb overlay.
  * Called automatically when loaded in a browser (via the IIFE in build output).
  * Config is embedded at build time.
  */
 export function init(
-	config: RemobiConfig = defaultConfig,
+	config: HerdwebConfig = defaultConfig,
 	hooks: HookRegistry = createHookRegistry(),
 	version?: string,
 	deps?: { openImageDrop?: () => void },
@@ -347,6 +347,6 @@ export function init(
 			}
 		})
 		.catch((error) => {
-			console.error('remobi: failed to initialise overlay', error)
+			console.error('herdweb: failed to initialise overlay', error)
 		})
 }

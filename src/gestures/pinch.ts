@@ -69,7 +69,7 @@ export function attachPinchGestures(term: XTerminal, font: FontConfig, lock: Ges
 				localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(term.options.fontSize))
 			} catch (error) {
 				// iOS private mode throws on localStorage writes — keep going without a cache
-				console.error('remobi: failed to persist font size', error)
+				console.error('herdweb: failed to persist font size', error)
 			}
 		}
 		resetLock(lock)

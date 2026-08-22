@@ -1,6 +1,6 @@
 import type { ActionRegistry } from '../actions/registry'
 import type { HookRegistry } from '../hooks/registry'
-import type { ControlButton, FloatingButtonGroup, RemobiConfig, XTerminal } from '../types'
+import type { ControlButton, FloatingButtonGroup, HerdwebConfig, XTerminal } from '../types'
 import { el } from '../util/dom'
 import { haptic } from '../util/haptic'
 import { conditionalFocus, isKeyboardOpen } from '../util/keyboard'
@@ -11,7 +11,7 @@ import { decorateKeyboardToggleButton } from './keyboard-controller'
 function createGroupButton(
 	term: XTerminal,
 	def: ControlButton,
-	config: RemobiConfig,
+	config: HerdwebConfig,
 	hooks: HookRegistry,
 	actions: ActionRegistry,
 	openDrawer: (() => void) | undefined,
@@ -66,7 +66,7 @@ function createGroupButton(
 				openComboPicker,
 			})
 			.catch((error) => {
-				console.error('remobi: floating button action failed', error)
+				console.error('herdweb: floating button action failed', error)
 				button.classList.add('wt-action-error')
 				conditionalFocus(term, kbWasOpen)
 			})
@@ -83,7 +83,7 @@ function createGroupButton(
 export function createFloatingButtons(
 	term: XTerminal,
 	groups: readonly FloatingButtonGroup[],
-	config: RemobiConfig,
+	config: HerdwebConfig,
 	hooks: HookRegistry,
 	actions: ActionRegistry,
 	openDrawer?: () => void,

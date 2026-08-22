@@ -11,7 +11,7 @@ interface ReconnectOverlay {
 
 function createOverlay(onReconnect: () => void, onReload: () => void): ReconnectOverlay {
 	const overlay = el('div', {
-		id: 'remobi-reconnect-overlay',
+		id: 'herdweb-reconnect-overlay',
 		style: [
 			'display:none',
 			'position:fixed',
@@ -115,7 +115,7 @@ export function setupReconnect(term: XTerminal, config: ReconnectConfig): () => 
 		overlay.dataset.connectionState = status.state
 		authButton.style.display =
 			status.consecutivePreSyncFailures >= 3 &&
-			notice !== 'Session ended — restart remobi to start a new one.'
+			notice !== 'Session ended — restart herdweb to start a new one.'
 				? 'block'
 				: 'none'
 		overlay.style.display = status.state === 'synced' ? 'none' : 'flex'
@@ -128,16 +128,16 @@ export function setupReconnect(term: XTerminal, config: ReconnectConfig): () => 
 		if (typeof detail !== 'string') return
 		notice = detail
 		message.textContent = detail
-		if (detail === 'Session ended — restart remobi to start a new one.') {
+		if (detail === 'Session ended — restart herdweb to start a new one.') {
 			authButton.style.display = 'none'
 		}
 		overlay.style.display = 'flex'
 	}
-	window.addEventListener('remobi-connection-notice', onNotice)
+	window.addEventListener('herdweb-connection-notice', onNotice)
 
 	return () => {
 		statusSubscription.dispose()
-		window.removeEventListener('remobi-connection-notice', onNotice)
+		window.removeEventListener('herdweb-connection-notice', onNotice)
 		overlay.remove()
 	}
 }

@@ -1,5 +1,5 @@
 /**
- * SVG icon for remobi PWA.
+ * SVG icon for herdweb PWA.
  * Pixel-art R> on catppuccin mocha base (#1e1e2e).
  * Green R (#a6e3a1), blue chevron (#89b4fa).
  * Uses <rect> elements — renders identically on all platforms.

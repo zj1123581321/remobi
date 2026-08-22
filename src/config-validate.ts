@@ -1,6 +1,6 @@
 import * as v from 'valibot'
-import { remobiConfigOverridesSchema, remobiConfigResolvedSchema } from './config-schema'
-import type { RemobiConfig, RemobiConfigOverrides } from './types'
+import { herdwebConfigOverridesSchema, herdwebConfigResolvedSchema } from './config-schema'
+import type { HerdwebConfig, HerdwebConfigOverrides } from './types'
 
 interface ValidationIssue {
 	readonly path: string
@@ -19,7 +19,7 @@ export class ConfigValidationError extends Error {
 }
 
 function formatIssues(issues: readonly ValidationIssue[]): string {
-	const lines = ['Invalid remobi config:']
+	const lines = ['Invalid herdweb config:']
 	for (const issue of issues) {
 		lines.push(`- ${issue.path}: expected ${issue.expected}, received ${issue.received}`)
 	}
@@ -99,15 +99,17 @@ function toValidationIssues(issues: readonly v.BaseIssue<unknown>[]): Validation
 	return result
 }
 
-export function assertValidConfigOverrides(value: unknown): asserts value is RemobiConfigOverrides {
-	const result = v.safeParse(remobiConfigOverridesSchema, value)
+export function assertValidConfigOverrides(
+	value: unknown,
+): asserts value is HerdwebConfigOverrides {
+	const result = v.safeParse(herdwebConfigOverridesSchema, value)
 	if (!result.success) {
 		throw new ConfigValidationError(toValidationIssues(result.issues))
 	}
 }
 
-export function assertValidResolvedConfig(value: unknown): asserts value is RemobiConfig {
-	const result = v.safeParse(remobiConfigResolvedSchema, value)
+export function assertValidResolvedConfig(value: unknown): asserts value is HerdwebConfig {
+	const result = v.safeParse(herdwebConfigResolvedSchema, value)
 	if (!result.success) {
 		throw new ConfigValidationError(toValidationIssues(result.issues))
 	}

@@ -3,7 +3,7 @@ import type { ActionRegistry } from '../actions/registry'
 import { decorateKeyboardToggleButton } from '../controls/keyboard-controller'
 import type { MicController } from '../controls/mic-controller'
 import type { HookRegistry } from '../hooks/registry'
-import type { ControlButton, RemobiConfig, XTerminal } from '../types'
+import type { ControlButton, HerdwebConfig, XTerminal } from '../types'
 import { el, svg } from '../util/dom'
 import { haptic } from '../util/haptic'
 import { conditionalFocus, isKeyboardOpen } from '../util/keyboard'
@@ -45,7 +45,7 @@ function createComposerIcon(): SVGSVGElement {
 }
 
 /** Activate ctrl sticky modifier */
-function activateCtrl(state: CtrlState, term: XTerminal, theme: RemobiConfig['theme']): void {
+function activateCtrl(state: CtrlState, term: XTerminal, theme: HerdwebConfig['theme']): void {
 	if (!state.buttonEl) return
 	state.active = true
 	state.buttonEl.style.background = theme.blue
@@ -65,7 +65,7 @@ function activateCtrl(state: CtrlState, term: XTerminal, theme: RemobiConfig['th
 }
 
 /** Deactivate ctrl sticky modifier */
-function deactivateCtrl(state: CtrlState, theme: RemobiConfig['theme']): void {
+function deactivateCtrl(state: CtrlState, theme: HerdwebConfig['theme']): void {
 	if (!state.buttonEl) return
 	state.active = false
 	state.buttonEl.style.background = theme.black
@@ -83,7 +83,7 @@ function wireButton(
 	def: ControlButton,
 	term: XTerminal,
 	ctrlState: CtrlState,
-	config: RemobiConfig,
+	config: HerdwebConfig,
 	registry: ActionRegistry,
 	hooks: HookRegistry,
 	openDrawer: () => void,
@@ -94,7 +94,7 @@ function wireButton(
 	}) => void,
 ): void {
 	if (def.action.type === 'voice-input') {
-		if (!micController) throw new Error('remobi: voice-input action requires a mic controller')
+		if (!micController) throw new Error('herdweb: voice-input action requires a mic controller')
 		micController.attachComposerToggle(button)
 		return
 	}
@@ -177,7 +177,7 @@ function wireButton(
 				},
 			})
 			.catch((error) => {
-				console.error('remobi: toolbar action execution failed', error)
+				console.error('herdweb: toolbar action execution failed', error)
 				button.classList.add('wt-action-error')
 				conditionalFocus(term, kbWasOpen)
 			})
@@ -189,7 +189,7 @@ function buildRow(
 	buttons: readonly ControlButton[],
 	term: XTerminal,
 	ctrlState: CtrlState,
-	config: RemobiConfig,
+	config: HerdwebConfig,
 	registry: ActionRegistry,
 	hooks: HookRegistry,
 	openDrawer: () => void,
@@ -204,8 +204,8 @@ function buildRow(
 	for (const def of buttons) {
 		if (def.action.type === 'voice-input' && !micController) continue
 		const button = el('button')
-		button.dataset.remobiAction = def.action.type
-		button.dataset.remobiButtonId = def.id
+		button.dataset.herdwebAction = def.action.type
+		button.dataset.herdwebButtonId = def.id
 		if (def.action.type === 'voice-input') {
 			button.classList.add('wt-mic')
 			button.appendChild(createComposerIcon())
@@ -244,7 +244,7 @@ interface ToolbarResult {
 /** Create the toolbar; empty rows are skipped (single-row by default) */
 export function createToolbar(
 	term: XTerminal,
-	config: RemobiConfig,
+	config: HerdwebConfig,
 	openDrawer: () => void,
 	hooks: HookRegistry,
 	actions: ActionRegistry = createDefaultActionRegistry(),

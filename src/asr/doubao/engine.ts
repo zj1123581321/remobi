@@ -11,7 +11,7 @@ import { createFullRequest, decodeFrame, encodeAudioFrame, encodeEndFrame } from
 
 const DEFAULT_ENDPOINT = 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async'
 const DEFAULT_WORKLET_URL = 'asr-worklet.js'
-const WORKLET_PROCESSOR_NAME = 'remobi-pcm-processor'
+const WORKLET_PROCESSOR_NAME = 'herdweb-pcm-processor'
 const OPEN = 1
 const CLOSING = 2
 const CLOSED = 3
