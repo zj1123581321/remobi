@@ -33,7 +33,7 @@
   3. 修复后须补/改测试锁死：F-P1-1（dispatchEvent 在 sendPush 抛错时不产生 unhandledRejection 且进程不退——可用 process 'unhandledRejection' 监听断言）、F-P2-2（POST reject → unsubscribe 被调）、F-P2-3（ready 永不 resolve → 面板超时降级）、F-P2-4（POST 500 → 新订阅 unsubscribe + waitUntil reject）。F-P2-1/5/6/7 至少各一条回归断言（行为级）。
 - **任务类型**：backend-logic
 - **复杂度**：M
-- **Base commit**：（主脑派发时填：t2/t3 合入 feat/notify-attention 后的 sha）
+- **Base commit**：285f356092bd5af13f1f80deef85b8dbc4ee5a68（t1+t2+t3 已合入 feat/notify-attention）
 - **Branch**：由 delegate 分配（card/<worktree 名>），执行器不得另建分支
 - **Worktree**：是，delegate 创建
 - **当前唯一写入者**：delegate 派发的执行器
