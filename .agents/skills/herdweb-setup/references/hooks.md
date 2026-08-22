@@ -1,10 +1,10 @@
 # Hooks
 
-Lifecycle hooks for remobi. Only reference this if the user asks about analytics, action filtering, custom DOM, or conditional behaviour.
+Lifecycle hooks for herdweb. Only reference this if the user asks about analytics, action filtering, custom DOM, or conditional behaviour.
 
 ## Overview
 
-Hooks are registered programmatically — they are not part of `defineConfig()`. Import `createHookRegistry` from `'remobi'` and register handlers. Each hook receives typed context and runs asynchronously. Errors are caught and logged without stopping other hooks.
+Hooks are registered programmatically — they are not part of `defineConfig()`. Import `createHookRegistry` from the public API and register handlers. Each hook receives typed context and runs asynchronously. Errors are caught and logged without stopping other hooks.
 
 ## SendSource type
 
@@ -23,43 +23,6 @@ type SendSource = 'toolbar' | 'drawer' | 'floating-buttons' | 'mobile-init'
 | `toolbarCreated` | Toolbar DOM mounted | No (but can modify DOM) |
 | `drawerCreated` | Drawer DOM mounted | No (but can modify DOM) |
 
-## Context interfaces
-
-**BeforeSendDataContext / AfterSendDataContext:**
-
-```typescript
-{
-  term: XTerminal
-  config: RemobiConfig
-  source: SendSource
-  actionType: ButtonAction['type']
-  kbWasOpen: boolean
-  data: string
-}
-```
-
-**OverlayInitContext (overlayInitStart, overlayReady):**
-
-```typescript
-{
-  term: XTerminal
-  config: RemobiConfig
-  mobile: boolean
-}
-```
-
-**ToolbarCreatedContext:**
-
-```typescript
-{ term: XTerminal, config: RemobiConfig, toolbar: HTMLDivElement }
-```
-
-**DrawerCreatedContext:**
-
-```typescript
-{ term: XTerminal, config: RemobiConfig, drawer: HTMLDivElement, backdrop: HTMLDivElement }
-```
-
 ## Registration API
 
 ```typescript
@@ -73,14 +36,6 @@ const { dispose } = hooks.on('beforeSendData', async (ctx) => {
 `dispose()` removes the handler.
 
 ## Examples
-
-**Log all sent data:**
-
-```typescript
-hooks.on('afterSendData', async (ctx) => {
-  console.log(`[${ctx.source}] sent: ${JSON.stringify(ctx.data)}`)
-})
-```
 
 **Block dangerous commands:**
 
