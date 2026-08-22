@@ -2,7 +2,7 @@
 
 ## 项目目标
 
-- **目标**：在 Android 和 iOS 手机上，经 Cloudflare Tunnel + Access 使用 remobi/Herdr 时，
+- **目标**：在 Android 和 iOS 手机上，经 Cloudflare Tunnel + Access 使用 herdweb/herdr 时，
   离开几十分钟、切网或锁屏回来后，用户能同时确认三件事——**看到的画面是新鲜的**、
   **写了一半的长语音草稿还在**、**刚提交的整条指令到底收没收到**。
 - **完成定义**：三条不变式全部在 Android 与 iOS 的**真实生产入口**上各验证过一次，
