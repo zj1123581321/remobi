@@ -1,7 +1,7 @@
 # 里程碑进度：M3 — 提交不重不漏
 
 - **负责主脑**：claude-opus5（herdr tab `w15:t1`）
-- **状态**：进行中（代码已合并进 main，只等真机入口层证据）
+- **状态**：已完成（2026-08-22 五条证据全部收口，真机走 tailnet dev 入口）
 - **预期产出**：合并后主干上，提交一整条长语音指令会得到诚实的状态——
   「未发送 / 待确认 / 已接收 / 结果未知 / 未接收+原因」；确认帧丢失后用同一 ID 重送，
   **PTY 不会被写第二次**；`autoEnter` 的回车与正文是同一次写入。
@@ -23,7 +23,7 @@
      盲目重送等于重复执行一条命令。
   5. 自动重送**每个 epoch 至多一次**，且**不跑** before/after hook——
      传输层重试不是一次新的业务动作。
-- **已知阻塞**：只剩真机入口层证据（依赖用户本人跑 T0 场景）。
+- **已知阻塞**：无（2026-08-22 已解除）。
 - **进度**：**T4 已合并**（PR #18 → `f40fd6a`），首轮即过。
   核心 e2e `lost accepted retries the same action once and writes PTY once` 通过——
   确认帧丢失后同 ID 重送，PTY 只被写一次，即设计成功判据 #4。
@@ -48,15 +48,18 @@
   - [x] **弱网 e2e**：发送成功后立刻离线（模拟 accepted 丢失）→ 恢复 → 同 ID 重送 →
         服务端去重 → 终端里**仍然只有一次**；环境：本地 Playwright（`context.setOffline`）
         （T4 e2e 主判据：marker 在终端文本中出现次数恰为 1；2026-08-22 全量 + 5 连跑绿）
-  - [ ] **用户真实入口层证据**：Android + iOS 各跑一次——
+  - [x] **用户真实入口层证据**（2026-08-22 用户确认双平台通过）：Android + iOS 各跑一次——
         ①提交长指令后断网再恢复，终端里那条命令**只出现一次**；
         ②等待期间改草稿，accepted 到达后 pending 清了而**新草稿还在**；
-        ③重启 herdweb 服务后旧 pending 变「结果未知」且**不会**被自动重送；
+        ③重启 herdweb 服务后旧 pending 变「结果未知」且**不会**被自动重送
+        （2026-08-22 主脑执行 `systemctl --user restart herdweb-debug.service`，双 active +
+        7691 监听 + HTTP 200 复核后用户恢复网络验证）；
         ④`autoEnter` 开启时终端里只多出一次回车。
         入口（2026-08-22 用户指定，与 M1/M2 同）：Tailscale tailnet
         `https://zlx-vm-work-i5-ubuntu2404-devcontainer.taile9071.ts.net/herdweb/`
-        （herdweb-debug 7691，`herdweb-dev` 会话；③的服务重启由主脑配合执行
-        `systemctl --user restart herdweb-debug.service`）。
-- **完成条件**：上面五条证据全部拿到，T4 卡走完 PR 漏斗合并进 `main`；
-  设计文档 Success Criteria 的 8 条逐条对照过一遍，尤其第 4 条（ack 丢失后同 ID 重送不产生
-  第二次 PTY 输入）与第 5 条（不声称 Herdr 已执行）。
+        （herdweb-debug 7691，`herdweb-dev` 会话）。
+- **完成条件**：五条证据全部拿到（2026-08-22），T4 卡已合并进 `main`（PR #18）；
+  设计文档 Success Criteria 的 8 条逐条对照过一遍（2026-08-22）：#1=M1 真机；
+  #2=M2 真机①；#3=M2 真机④；#4=M3 真机①③+T4 e2e；#5=提交状态机五态+真机③「结果未知」；
+  #6=Playwright 全量（asr/touch/smoke/keyboard 套件）；#7=T3 已删 queuedMessages 重放；
+  #8=T4 e2e 恰好一帧 `\r` 结尾+真机④。**里程碑完成。**
