@@ -1,5 +1,5 @@
 import { joinBasePath } from '../base-path'
-import type { NotifyEvent, NotifyKind } from '../notify/events'
+import { type NotifyEvent, type NotifyKind, isRecord } from '../notify/events'
 import { el } from '../util/dom'
 import { onTap } from '../util/tap'
 
@@ -51,8 +51,24 @@ function arrayBufferToBase64(buffer: ArrayBuffer | null): string {
 	return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
 
+function isHistoryResponse(value: unknown): value is { events?: NotifyEvent[] } {
+	return isRecord(value) && (value.events === undefined || Array.isArray(value.events))
+}
+
+function readPublicKey(value: unknown): string | undefined {
+	if (!isRecord(value) || typeof value.publicKey !== 'string') return undefined
+	return value.publicKey
+}
+
 function isStandaloneDisplay(): boolean {
 	return window.matchMedia('(display-mode: standalone)').matches
+}
+
+function vapidApplicationServerKey(base64: string): ArrayBuffer {
+	const bytes = urlBase64ToUint8Array(base64)
+	const buffer = new ArrayBuffer(bytes.length)
+	new Uint8Array(buffer).set(bytes)
+	return buffer
 }
 
 function formatAbsoluteTime(ts: number): string {
@@ -121,7 +137,7 @@ export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
 		'On iPhone, add herdweb to your Home Screen to receive push notifications. Safari tabs cannot subscribe.'
 	const toggleRow = el('div', { class: 'wt-notify-row' })
 	const toggleLabel = el('label', { class: 'wt-notify-toggle-label' }, 'Push notifications')
-	const toggle = el('input', { type: 'checkbox', class: 'wt-notify-toggle' }) as HTMLInputElement
+	const toggle = el('input', { type: 'checkbox', class: 'wt-notify-toggle' })
 	toggleRow.append(toggleLabel, toggle)
 	const testBtn = el(
 		'button',
@@ -163,8 +179,8 @@ export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
 				)
 				return
 			}
-			const body = (await response.json()) as { events?: NotifyEvent[] }
-			const events = Array.isArray(body.events) ? body.events : []
+			const body: unknown = await response.json()
+			const events = isHistoryResponse(body) && Array.isArray(body.events) ? body.events : []
 			if (events.length === 0) {
 				historyList.append(el('p', { class: 'wt-notify-history-empty' }, '暂无事件'))
 				return
@@ -224,15 +240,16 @@ export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
 			toggle.checked = false
 			return
 		}
-		const { publicKey } = (await keyResponse.json()) as { publicKey?: string }
-		if (typeof publicKey !== 'string') {
+		const keyBody: unknown = await keyResponse.json()
+		const publicKey = readPublicKey(keyBody)
+		if (publicKey === undefined) {
 			setStatus('Invalid VAPID key response')
 			toggle.checked = false
 			return
 		}
 		const subscription = await registration.pushManager.subscribe({
 			userVisibleOnly: true,
-			applicationServerKey: new Uint8Array(urlBase64ToUint8Array(publicKey)) as BufferSource,
+			applicationServerKey: vapidApplicationServerKey(publicKey),
 		})
 		let response: Response
 		try {

@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import type { NotifyEvent } from './notify/events'
+import { type NotifyEvent, isRecord } from './notify/events'
 
 /** Build an absolute URL from the service worker scope. */
 export function resolveScopeUrl(scope: string, path: string): string {
@@ -48,13 +48,14 @@ export async function handlePushSubscriptionChange(
 
 	const keyResponse = await fetchFn(resolveScopeUrl(scope, 'api/push/vapid-key'))
 	if (!keyResponse.ok) return
-	const { publicKey } = (await keyResponse.json()) as { publicKey?: string }
-	if (typeof publicKey !== 'string') return
+	const keyBody: unknown = await keyResponse.json()
+	const publicKey = readPublicKey(keyBody)
+	if (publicKey === undefined) return
 
-	const applicationServerKey = urlBase64ToUint8Array(publicKey)
+	const applicationServerKey = vapidApplicationServerKey(publicKey)
 	const subscription = await registration.pushManager.subscribe({
 		userVisibleOnly: true,
-		applicationServerKey: applicationServerKey.buffer as ArrayBuffer,
+		applicationServerKey,
 	})
 
 	if (previousEndpoint) {
@@ -82,6 +83,23 @@ export async function handlePushSubscriptionChange(
 	}
 }
 
+function readPublicKey(value: unknown): string | undefined {
+	if (!isRecord(value) || typeof value.publicKey !== 'string') return undefined
+	return value.publicKey
+}
+
+function isNotifyEventPayload(value: unknown): value is NotifyEvent {
+	if (!isRecord(value)) return false
+	return (
+		value.v === 1 &&
+		typeof value.id === 'string' &&
+		typeof value.kind === 'string' &&
+		typeof value.title === 'string' &&
+		typeof value.ts === 'number' &&
+		Number.isFinite(value.ts)
+	)
+}
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
 	const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
 	const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
@@ -91,6 +109,13 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 		output[i] = raw.charCodeAt(i)
 	}
 	return output
+}
+
+function vapidApplicationServerKey(base64: string): ArrayBuffer {
+	const bytes = urlBase64ToUint8Array(base64)
+	const buffer = new ArrayBuffer(bytes.length)
+	new Uint8Array(buffer).set(bytes)
+	return buffer
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer | null): string {
@@ -112,32 +137,28 @@ function installHandlers(self: ServiceWorkerGlobalScope): void {
 		// no-op
 	})
 
-	self.addEventListener('push', (event: Event) => {
-		const pushEvent = event as PushEvent
-		const data = pushEvent.data?.text()
+	self.addEventListener('push', (event: PushEvent) => {
+		const data = event.data?.text()
 		if (!data) return
-		let parsed: NotifyEvent
+		let parsed: unknown
 		try {
-			parsed = JSON.parse(data) as NotifyEvent
+			parsed = JSON.parse(data)
 		} catch {
 			return
 		}
-		pushEvent.waitUntil(showPushNotification(self.registration, parsed))
+		if (!isNotifyEventPayload(parsed)) return
+		event.waitUntil(showPushNotification(self.registration, parsed))
 	})
 
-	self.addEventListener('notificationclick', (event: Event) => {
-		const clickEvent = event as NotificationEvent
-		clickEvent.notification.close()
+	self.addEventListener('notificationclick', (event: NotificationEvent) => {
+		event.notification.close()
 		const scope = self.registration.scope
-		clickEvent.waitUntil(handleNotificationClick(self.clients, scope))
+		event.waitUntil(handleNotificationClick(self.clients, scope))
 	})
 
-	self.addEventListener('pushsubscriptionchange', (event: Event) => {
-		const changeEvent = event as ExtendableEvent
+	self.addEventListener('pushsubscriptionchange', (event: ExtendableEvent) => {
 		const scope = self.registration.scope
-		changeEvent.waitUntil(
-			handlePushSubscriptionChange(self.registration, scope, self.fetch.bind(self)),
-		)
+		event.waitUntil(handlePushSubscriptionChange(self.registration, scope, self.fetch.bind(self)))
 	})
 }
 
