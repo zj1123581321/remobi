@@ -1,16 +1,31 @@
 import { joinBasePath } from '../base-path'
+import type { NotifyEvent, NotifyKind } from '../notify/events'
 import { el } from '../util/dom'
 import { onTap } from '../util/tap'
 
 export interface NotifyPanelDeps {
 	readonly basePath: string
 	readonly fetchFn?: typeof fetch
+	readonly now?: () => number
 }
 
 interface NotifyPanelResult {
 	readonly element: HTMLDivElement
 	readonly open: () => void
 	readonly close: () => void
+}
+
+const KIND_LABELS: Record<Exclude<NotifyKind, 'test'>, string> = {
+	asking: '等待输入',
+	done: '已完成',
+	'ci-red': 'CI 变红',
+	silence: '可能完工',
+	health: '服务状态',
+}
+
+function kindLabel(kind: NotifyKind): string {
+	if (kind === 'test') return '测试'
+	return KIND_LABELS[kind]
 }
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -38,9 +53,63 @@ function isStandaloneDisplay(): boolean {
 	return window.matchMedia('(display-mode: standalone)').matches
 }
 
+function formatAbsoluteTime(ts: number): string {
+	return new Date(ts).toLocaleString('zh-CN', {
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		hour: '2-digit',
+		minute: '2-digit',
+		second: '2-digit',
+		hour12: false,
+	})
+}
+
+function formatRelativeTime(ts: number, now: number): string {
+	const diffMs = now - ts
+	if (diffMs < 0) return '刚刚'
+	const seconds = Math.floor(diffMs / 1000)
+	if (seconds < 60) return '刚刚'
+	const minutes = Math.floor(seconds / 60)
+	if (minutes < 60) return `${minutes} 分钟前`
+	const hours = Math.floor(minutes / 60)
+	if (hours < 24) return `${hours} 小时前`
+	const days = Math.floor(hours / 24)
+	if (days < 30) return `${days} 天前`
+	return formatAbsoluteTime(ts)
+}
+
+function renderHistoryItem(event: NotifyEvent, now: number): HTMLDivElement {
+	const item = el('div', { class: 'wt-notify-history-item' })
+	const badge = el(
+		'span',
+		{ class: `wt-notify-kind-badge wt-notify-kind-${event.kind}` },
+		kindLabel(event.kind),
+	)
+	const content = el('div', { class: 'wt-notify-history-content' })
+	const titleRow = el('div', { class: 'wt-notify-history-title-row' })
+	const titleEl = el('span', { class: 'wt-notify-history-title' }, event.title)
+	const timeEl = el(
+		'time',
+		{
+			class: 'wt-notify-history-time',
+			title: formatAbsoluteTime(event.ts),
+		},
+		formatRelativeTime(event.ts, now),
+	)
+	titleRow.append(titleEl, timeEl)
+	content.append(titleRow)
+	if (event.body !== undefined && event.body.length > 0) {
+		content.append(el('p', { class: 'wt-notify-history-body' }, event.body))
+	}
+	item.append(badge, content)
+	return item
+}
+
 /** Create the notify settings panel — fail-safe overlay opened from the drawer. */
 export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
 	const fetchFn = deps.fetchFn ?? fetch.bind(globalThis)
+	const nowFn = deps.now ?? (() => Date.now())
 	const overlay = el('div', { id: 'wt-notify' })
 	const closeBtn = el('button', { class: 'wt-notify-close', type: 'button' }, '\u00D7')
 	const title = el('h2', {}, 'Notifications')
@@ -57,7 +126,14 @@ export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
 		{ type: 'button', class: 'wt-notify-test' },
 		'Send test notification',
 	)
-	overlay.append(closeBtn, title, status, iosHint, toggleRow, testBtn)
+	const historyHeader = el('div', { class: 'wt-notify-history-header' })
+	const historyTitle = el('h3', { class: 'wt-notify-history-heading' }, '历史')
+	const refreshBtn = el('button', { type: 'button', class: 'wt-notify-history-refresh' }, '刷新')
+	historyHeader.append(historyTitle, refreshBtn)
+	const historyList = el('div', { class: 'wt-notify-history-list' })
+	const historySection = el('section', { class: 'wt-notify-history' })
+	historySection.append(historyHeader, historyList)
+	overlay.append(closeBtn, title, status, iosHint, toggleRow, testBtn, historySection)
 
 	function setStatus(message: string): void {
 		status.textContent = message
@@ -65,6 +141,40 @@ export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
 
 	function updateIosHint(): void {
 		iosHint.style.display = isStandaloneDisplay() ? 'none' : 'block'
+	}
+
+	function clearHistoryList(): void {
+		while (historyList.firstChild) {
+			historyList.removeChild(historyList.firstChild)
+		}
+	}
+
+	async function fetchHistory(): Promise<void> {
+		clearHistoryList()
+		historyList.append(el('p', { class: 'wt-notify-history-empty' }, '加载中…'))
+		try {
+			const response = await fetchFn(joinBasePath(deps.basePath, '/api/events/history'))
+			clearHistoryList()
+			if (!response.ok) {
+				historyList.append(
+					el('p', { class: 'wt-notify-history-error' }, `加载失败 (${response.status})`),
+				)
+				return
+			}
+			const body = (await response.json()) as { events?: NotifyEvent[] }
+			const events = Array.isArray(body.events) ? body.events : []
+			if (events.length === 0) {
+				historyList.append(el('p', { class: 'wt-notify-history-empty' }, '暂无事件'))
+				return
+			}
+			const now = nowFn()
+			for (const event of events) {
+				historyList.append(renderHistoryItem(event, now))
+			}
+		} catch {
+			clearHistoryList()
+			historyList.append(el('p', { class: 'wt-notify-history-error' }, '加载失败'))
+		}
 	}
 
 	async function getRegistration(): Promise<ServiceWorkerRegistration | null> {
@@ -159,6 +269,7 @@ export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
 		updateIosHint()
 		overlay.style.display = 'block'
 		void refreshToggle()
+		void fetchHistory()
 	}
 
 	function close(): void {
@@ -203,6 +314,11 @@ export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
 				setStatus(`Test failed (${response.status})`)
 			}
 		})()
+	})
+
+	onTap(refreshBtn, (e: Event) => {
+		e.stopPropagation()
+		void fetchHistory()
 	})
 
 	return { element: overlay, open, close }
