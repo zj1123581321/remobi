@@ -180,10 +180,18 @@ export function createNotifyService(deps: NotifyServiceDeps): NotifyService {
 		async awaitInFlight(timeoutMs: number): Promise<void> {
 			const pending = [...inFlight]
 			if (pending.length === 0) return
-			await Promise.race([
-				Promise.allSettled(pending),
-				new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
-			])
+			let timer: ReturnType<typeof setTimeout> | undefined
+			try {
+				await Promise.race([
+					Promise.allSettled(pending),
+					new Promise<void>((resolve) => {
+						timer = setTimeout(resolve, timeoutMs)
+						timer.unref()
+					}),
+				])
+			} finally {
+				if (timer !== undefined) clearTimeout(timer)
+			}
 		},
 
 		lastEventAt(session?: string): number | undefined {
