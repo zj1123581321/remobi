@@ -10,21 +10,17 @@ import type { WSContext } from 'hono/ws'
 import type WebSocket from 'ws'
 import { bundleClientAssets, bundleSwAsset, bundleWorkletAsset, renderClientHtml } from '../build'
 import { bareDocumentRoute, documentRoute, joinBasePath } from './base-path'
-import { ensureVapidKeys } from './notify/push'
 import {
 	buildRestartEvent,
 	buildSessionEndEvent,
 	extractSessionKey,
 	shouldAnnounceRestart,
 } from './notify/health'
+import { ensureVapidKeys } from './notify/push'
 import { registerNotifyRoutes } from './notify/routes'
-import { createNotifyService, notifyDrain, type NotifyService } from './notify/service'
-import { createSilenceDetector, type SilenceDetector } from './notify/silence'
-import {
-	readLastSessionStore,
-	resolveNotifyStateDir,
-	updateLastSessionEntry,
-} from './notify/state'
+import { type NotifyService, createNotifyService, notifyDrain } from './notify/service'
+import { type SilenceDetector, createSilenceDetector } from './notify/silence'
+import { readLastSessionStore, resolveNotifyStateDir, updateLastSessionEntry } from './notify/state'
 import { manifestToJson } from './pwa/manifest'
 import type { SessionClient, SharedTerminalSession } from './session'
 import {
@@ -492,6 +488,7 @@ async function handleSessionExit(deps: {
 }
 
 /** Start herdweb serve: build client assets, spawn the PTY, and serve HTTP + WS */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serve bootstraps HTTP, WS, notify, and PTY lifecycle
 export async function serve(
 	config: HerdwebConfig,
 	port: number = DEFAULT_PORT,
@@ -735,11 +732,12 @@ export async function serve(
 	try {
 		console.log(`herdweb: starting command ${describeCommandForLogs(command)}...`)
 		session = new SharedTerminalSession(command)
-		if (shouldAnnounceRestart(prevSession, session.id, Date.now())) {
+		const activeSession = session
+		if (shouldAnnounceRestart(prevSession, activeSession.id, Date.now())) {
 			notifyService.dispatchEvent(
 				buildRestartEvent({
 					sessionKey,
-					startTime: session.startTime,
+					startTime: activeSession.startTime,
 					ts: Date.now(),
 				}),
 			)
@@ -747,8 +745,8 @@ export async function serve(
 		silenceDetector = createSilenceDetector({
 			sessionKey,
 			config: config.notify.silence,
-			bytesInWindow: (windowMs) => session!.bytesInWindow(windowMs),
-			lastOutputAt: () => session!.lastOutputAt(),
+			bytesInWindow: (windowMs) => activeSession.bytesInWindow(windowMs),
+			lastOutputAt: () => activeSession.lastOutputAt(),
 			dispatch: (event) => {
 				notifyService.dispatchEvent(event)
 			},

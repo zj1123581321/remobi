@@ -12,11 +12,7 @@ describe('SharedTerminalSession activity tracking', () => {
 	})
 
 	test('bytesInWindow sums trailing PTY output within window', async () => {
-		session = new SharedTerminalSession([
-			'bash',
-			'-c',
-			'printf "%1500s" "" | tr " " "x"; sleep 60',
-		])
+		session = new SharedTerminalSession(['bash', '-c', 'printf "%1500s" "" | tr " " "x"; sleep 60'])
 		const deadline = Date.now() + 3000
 		while (Date.now() < deadline && session.bytesInWindow(30_000) < 1024) {
 			await new Promise((resolve) => setTimeout(resolve, 50))
@@ -51,9 +47,7 @@ describe('SharedTerminalSession activity tracking', () => {
 
 	test('exposes stable id and startTime', () => {
 		session = new SharedTerminalSession(['sleep', '60'])
-		expect(session.id).toMatch(
-			/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-		)
+		expect(session.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
 		expect(session.startTime).toBeLessThanOrEqual(Date.now())
 		expect(session.startTime).toBeGreaterThan(0)
 	})

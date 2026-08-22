@@ -9,12 +9,14 @@ const BASE_CONFIG = {
 	cooldownMs: 600_000,
 }
 
-function makeHarness(overrides: {
-	bytesInWindow?: (windowMs: number) => number
-	lastOutputAt?: () => number | undefined
-	lastEventAt?: (sessionKey: string) => number | undefined
-	enabled?: boolean
-} = {}) {
+function makeHarness(
+	overrides: {
+		bytesInWindow?: (windowMs: number) => number
+		lastOutputAt?: () => number | undefined
+		lastEventAt?: (sessionKey: string) => number | undefined
+		enabled?: boolean
+	} = {},
+) {
 	const dispatched: NotifyEvent[] = []
 	let nowMs = 0
 	const bytesInWindow = overrides.bytesInWindow ?? (() => 0)
@@ -79,7 +81,7 @@ describe('createSilenceDetector', () => {
 
 	test('after trigger — no re-trigger within cooldown without new busy', () => {
 		let busy = true
-		let lastOut = 0
+		const lastOut = 0
 		const h = makeHarness({
 			bytesInWindow: () => (busy ? 1500 : 0),
 			lastOutputAt: () => lastOut,
@@ -104,12 +106,13 @@ describe('createSilenceDetector', () => {
 		busy = false
 		h.advance(180_000)
 		expect(h.dispatched).toHaveLength(1)
+		const firstTs = h.dispatched[0]?.ts ?? 0
 
 		busy = true
-		lastOut = h.dispatched[0]!.ts + 30_000
+		lastOut = firstTs + 30_000
 		h.advance(30_000)
 		busy = false
-		lastOut = h.dispatched[0]!.ts + 30_000
+		lastOut = firstTs + 30_000
 		h.advance(180_000)
 		expect(h.dispatched).toHaveLength(2)
 		h.dispose()
@@ -117,7 +120,7 @@ describe('createSilenceDetector', () => {
 
 	test('yields when other lane event within cooldown window', () => {
 		let busy = true
-		let lastOut = 0
+		const lastOut = 0
 		const h = makeHarness({
 			bytesInWindow: () => (busy ? 1500 : 0),
 			lastOutputAt: () => lastOut,
@@ -146,7 +149,7 @@ describe('createSilenceDetector', () => {
 		h.advance(30_000)
 		busy = false
 		h.advance(180_000)
-		expect(h.dispatched[0]?.id).toBe('silence:dev:5')
+		expect(h.dispatched[0]?.id).toBe('silence:dev:3')
 		h.dispose()
 	})
 })

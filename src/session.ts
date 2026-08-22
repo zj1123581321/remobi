@@ -358,8 +358,10 @@ export class SharedTerminalSession {
 	}
 
 	private pruneActivity(cutoff: number): void {
-		while (this.activityRecords.length > 0 && this.activityRecords[0]!.ts < cutoff) {
+		let first = this.activityRecords[0]
+		while (first !== undefined && first.ts < cutoff) {
 			this.activityRecords.shift()
+			first = this.activityRecords[0]
 		}
 	}
 }

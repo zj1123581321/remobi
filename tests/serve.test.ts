@@ -5,6 +5,9 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
+import { writeSubscriptions } from '../src/notify/push'
+import { createNotifyService, notifyDrain } from '../src/notify/service'
+import { readLastSessionStore } from '../src/notify/state'
 import {
 	buildSecurityHeaders,
 	describeCommandForLogs,
@@ -16,9 +19,6 @@ import {
 	withSecurityHeaders,
 	writeImageDrop,
 } from '../src/serve'
-import { notifyDrain, createNotifyService } from '../src/notify/service'
-import { writeSubscriptions } from '../src/notify/push'
-import { readLastSessionStore } from '../src/notify/state'
 import { sleep, spawnProcess } from '../src/util/node-compat'
 
 const repoRoot = join(import.meta.dirname, '..')
@@ -374,9 +374,7 @@ describe('notifyDrain shutdown', () => {
 				lastSuccessAt: 0,
 			},
 		])
-		const sendPush = vi.fn().mockImplementation(
-			() => new Promise<void>(() => {}),
-		)
+		const sendPush = vi.fn().mockImplementation(() => new Promise<void>(() => {}))
 		const notifyService = createNotifyService({ stateDir, historyLimit: 200, sendPush })
 		notifyService.dispatchEvent({
 			v: 1,
