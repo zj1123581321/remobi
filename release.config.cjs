@@ -1,4 +1,5 @@
-export default {
+/** @type {import('semantic-release').GlobalConfig} */
+module.exports = {
 	branches: ['main', { name: 'dev', prerelease: true }],
 	plugins: [
 		'@semantic-release/commit-analyzer',
