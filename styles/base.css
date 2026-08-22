@@ -15,7 +15,10 @@ body {
 
 #terminal-container {
 	margin: 0 auto;
-	padding: 0;
+	box-sizing: border-box;
+	padding-top: env(safe-area-inset-top, 0px);
+	padding-left: env(safe-area-inset-left, 0px);
+	padding-right: env(safe-area-inset-right, 0px);
 	width: auto;
 	/* Inherits theme background from JS; covers sub-row gaps */
 	background: inherit;
