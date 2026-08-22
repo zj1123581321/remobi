@@ -1,3 +1,11 @@
+## [1.0.1](https://github.com/zlxlabs/herdweb/compare/v1.0.0...v1.0.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* **pwa:** pad terminal container by top/side safe-area insets ([96b34e6](https://github.com/zlxlabs/herdweb/commit/96b34e6a7fe455692147607c424924425e5edcc4)), closes [#terminal-container](https://github.com/zlxlabs/herdweb/issues/terminal-container) [#terminal](https://github.com/zlxlabs/herdweb/issues/terminal)
+* **test:** narrow matchAll capture so tsc accepts safe-area asserts ([a488ac5](https://github.com/zlxlabs/herdweb/commit/a488ac5d838bc6e12696d0f4aba1c48cca69289f))
+
 # 1.0.0 (2026-08-22)
 
 
