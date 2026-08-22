@@ -4,7 +4,7 @@
 
 Report security vulnerabilities via GitHub's private vulnerability reporting:
 
-**https://github.com/zj1123581321/remobi/security/advisories/new**
+**https://github.com/zlxlabs/herdweb/security/advisories/new**
 
 Include a description, reproduction steps, and impact assessment.
 
