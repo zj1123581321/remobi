@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { parseNotifyEvent } from '../src/notify/events'
 import { STALE_SUBSCRIPTION_MS, readSubscriptions, writeSubscriptions } from '../src/notify/push'
+import * as pushModule from '../src/notify/push'
 import { createNotifyService } from '../src/notify/service'
 import {
 	handleNotificationClick,
@@ -120,6 +121,65 @@ describe('notify push delivery', () => {
 		expect(readSubscriptions(stateDir)).toHaveLength(0)
 		notifyService.dispose()
 	})
+
+	test('dispatchEvent does not emit unhandledRejection when push write fails', async () => {
+		stateDir = mkdtempSync(join(tmpdir(), 'herdweb-notify-push-'))
+		writeSubscriptions(stateDir, [
+			{
+				endpoint: 'https://push.example/ok',
+				keys: { p256dh: 'k', auth: 'a' },
+				lastSuccessAt: 0,
+			},
+		])
+		const writeSpy = vi.spyOn(pushModule, 'writeSubscriptions').mockImplementation(() => {
+			throw new Error('disk full')
+		})
+		let unhandled = false
+		const onUnhandled = () => {
+			unhandled = true
+		}
+		process.on('unhandledRejection', onUnhandled)
+		const sendPush = vi.fn().mockResolvedValue(undefined)
+		const notifyService = createNotifyService({ stateDir, historyLimit: 200, sendPush })
+		const event = parseNotifyEvent(
+			JSON.stringify({ v: 1, id: 'p-reject', kind: 'done', title: 'T', ts: 1 }),
+		)
+		notifyService.dispatchEvent(event)
+		await notifyService.awaitInFlight(1000)
+		process.off('unhandledRejection', onUnhandled)
+		writeSpy.mockRestore()
+		expect(unhandled).toBe(false)
+		notifyService.dispose()
+	})
+
+	test('skips stale prune while push delivery is in flight', () => {
+		vi.useFakeTimers()
+		stateDir = mkdtempSync(join(tmpdir(), 'herdweb-notify-push-'))
+		const now = 2_000_000_000_000
+		writeSubscriptions(stateDir, [
+			{
+				endpoint: 'https://push.example/stale',
+				keys: { p256dh: 'k', auth: 'a' },
+				lastSuccessAt: now - STALE_SUBSCRIPTION_MS - 1,
+			},
+		])
+		const sendPush = vi.fn().mockImplementation(() => new Promise<void>(() => {}))
+		const writeSpy = vi.spyOn(pushModule, 'writeSubscriptions')
+		const notifyService = createNotifyService({
+			stateDir,
+			historyLimit: 200,
+			sendPush,
+			now: () => now,
+		})
+		notifyService.dispatchEvent(
+			parseNotifyEvent(JSON.stringify({ v: 1, id: 'p4', kind: 'done', title: 'T', ts: 1 })),
+		)
+		writeSpy.mockClear()
+		vi.advanceTimersByTime(24 * 60 * 60 * 1000)
+		expect(writeSpy).not.toHaveBeenCalled()
+		writeSpy.mockRestore()
+		notifyService.dispose()
+	})
 })
 
 describe('service worker helpers', () => {
@@ -202,5 +262,32 @@ describe('service worker helpers', () => {
 			'http://localhost/api/push/subscribe',
 			expect.objectContaining({ method: 'POST' }),
 		)
+	})
+
+	test('handlePushSubscriptionChange rolls back when subscribe POST fails', async () => {
+		const unsubscribe = vi.fn().mockResolvedValue(true)
+		const fetchFn = vi
+			.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				json: async () => ({ publicKey: 'cHVibGljLWtleQ' }),
+			})
+			.mockResolvedValueOnce({ ok: true })
+			.mockResolvedValueOnce({ ok: false, status: 500 })
+		const subscription = {
+			endpoint: 'https://push.example/new',
+			unsubscribe,
+			getKey: () => new Uint8Array([1, 2, 3]).buffer,
+		}
+		const registration = {
+			pushManager: {
+				getSubscription: vi.fn().mockResolvedValue({ endpoint: 'https://push.example/old' }),
+				subscribe: vi.fn().mockResolvedValue(subscription),
+			},
+		} as unknown as ServiceWorkerRegistration
+		await expect(
+			handlePushSubscriptionChange(registration, 'http://localhost/', fetchFn),
+		).rejects.toThrow('subscribe failed: 500')
+		expect(unsubscribe).toHaveBeenCalled()
 	})
 })

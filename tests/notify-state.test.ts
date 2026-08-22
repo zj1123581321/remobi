@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
@@ -85,22 +85,38 @@ describe('notify state', () => {
 		expect(resolveNotifyStateDir(7781)).toContain(`${join('herdweb', '7781')}`)
 	})
 
-	test('appendEventLine skips test kind and trims when over 2x limit', () => {
+	test('appendEventLine skips test kind and trims when over 2x limit', async () => {
 		stateDir = mkdtempSync(join(tmpdir(), 'herdweb-notify-state-'))
 		for (let i = 0; i < 25; i++) {
 			appendEventLine(stateDir, { ...validBase, id: `e${i}`, kind: 'done', title: `t${i}` }, 10)
 		}
+		await new Promise<void>((resolve) => setImmediate(resolve))
 		const lines = readFileSync(join(stateDir, 'events.jsonl'), 'utf-8').trim().split('\n')
-		expect(lines).toHaveLength(14)
+		expect(lines).toHaveLength(10)
 		appendEventLine(stateDir, { ...validBase, kind: 'test', title: 'skip' }, 10)
+		await new Promise<void>((resolve) => setImmediate(resolve))
 		const afterTest = readFileSync(join(stateDir, 'events.jsonl'), 'utf-8').trim().split('\n')
-		expect(afterTest).toHaveLength(14)
+		expect(afterTest).toHaveLength(10)
 	})
 
-	test('writeJsonFileAtomic writes readable JSON', () => {
+	test('writeJsonFileAtomic preserves explicit file mode from tmp write', () => {
 		stateDir = mkdtempSync(join(tmpdir(), 'herdweb-notify-state-'))
 		const path = join(stateDir, 'sample.json')
-		writeJsonFileAtomic(path, { ok: true })
+		writeJsonFileAtomic(path, { ok: true }, 0o600)
+		const mode = statSync(path).mode & 0o777
+		expect(mode).toBe(0o600)
 		expect(readFileSync(path, 'utf-8')).toContain('"ok":true')
+	})
+
+	test('appendEventLine defers trim via setImmediate', async () => {
+		stateDir = mkdtempSync(join(tmpdir(), 'herdweb-notify-state-'))
+		for (let i = 0; i < 25; i++) {
+			appendEventLine(stateDir, { ...validBase, id: `e${i}`, kind: 'done', title: `t${i}` }, 10)
+		}
+		const beforeTrim = readFileSync(join(stateDir, 'events.jsonl'), 'utf-8').trim().split('\n')
+		expect(beforeTrim).toHaveLength(25)
+		await new Promise<void>((resolve) => setImmediate(resolve))
+		const afterTrim = readFileSync(join(stateDir, 'events.jsonl'), 'utf-8').trim().split('\n')
+		expect(afterTrim).toHaveLength(10)
 	})
 })

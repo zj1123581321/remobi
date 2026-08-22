@@ -5,6 +5,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
+import { defineConfig } from '../src/config'
 import { writeSubscriptions } from '../src/notify/push'
 import { createNotifyService, notifyDrain } from '../src/notify/service'
 import { readLastSessionStore } from '../src/notify/state'
@@ -423,6 +424,32 @@ describe('serve health on PTY exit', () => {
 		const store = readLastSessionStore(join(stateDir, 'state-root', 'herdweb', String(port)))
 		expect(store.default?.exitCode).toBe(0)
 	})
+
+	test('disposes terminal session after PTY exit', async () => {
+		const disposeMock = vi.fn().mockResolvedValue(undefined)
+		vi.doMock('../src/session', async (importOriginal) => {
+			const mod = await importOriginal<typeof import('../src/session')>()
+			class TrackedSession extends mod.SharedTerminalSession {
+				override async dispose(): Promise<void> {
+					disposeMock()
+					await super.dispose()
+				}
+			}
+			return { ...mod, SharedTerminalSession: TrackedSession }
+		})
+		const port = await reservePort()
+		const stateDir = mkdtempSync(join(tmpdir(), 'herdweb-health-dispose-'))
+		tempDirs.push(stateDir)
+		const configDir = mkdtempSync(join(tmpdir(), 'herdweb-serve-dispose-cfg-'))
+		tempDirs.push(configDir)
+		const configPath = join(configDir, 'herdweb.config.ts')
+		writeFileSync(configPath, 'export default { asr: { enabled: false } }')
+		vi.stubEnv('XDG_STATE_HOME', join(stateDir, 'state-root'))
+		const { serve } = await import('../src/serve')
+		await serve(defineConfig({ asr: { enabled: false } }), port, ['bash', '--norc', '-c', 'exit 0'])
+		expect(disposeMock).toHaveBeenCalled()
+		vi.doUnmock('../src/session')
+	}, 30_000)
 })
 
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02])

@@ -15,6 +15,8 @@ interface NotifyPanelResult {
 	readonly close: () => void
 }
 
+const SW_READY_TIMEOUT_MS = 5000
+
 const KIND_LABELS: Record<Exclude<NotifyKind, 'test'>, string> = {
 	asking: '等待输入',
 	done: '已完成',
@@ -180,7 +182,11 @@ export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
 	async function getRegistration(): Promise<ServiceWorkerRegistration | null> {
 		if (!('serviceWorker' in navigator)) return null
 		try {
-			return await navigator.serviceWorker.ready
+			const registration = await Promise.race([
+				navigator.serviceWorker.ready,
+				new Promise<null>((resolve) => setTimeout(() => resolve(null), SW_READY_TIMEOUT_MS)),
+			])
+			return registration
 		} catch {
 			return null
 		}
@@ -191,7 +197,7 @@ export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
 		if (!registration) {
 			toggle.checked = false
 			toggle.disabled = true
-			setStatus('Service worker unavailable')
+			setStatus('Service worker unavailable or timed out')
 			return
 		}
 		toggle.disabled = false
@@ -228,17 +234,25 @@ export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
 			userVisibleOnly: true,
 			applicationServerKey: new Uint8Array(urlBase64ToUint8Array(publicKey)) as BufferSource,
 		})
-		const response = await fetchFn(joinBasePath(deps.basePath, '/api/push/subscribe'), {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({
-				endpoint: subscription.endpoint,
-				keys: {
-					p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
-					auth: arrayBufferToBase64(subscription.getKey('auth')),
-				},
-			}),
-		})
+		let response: Response
+		try {
+			response = await fetchFn(joinBasePath(deps.basePath, '/api/push/subscribe'), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					endpoint: subscription.endpoint,
+					keys: {
+						p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
+						auth: arrayBufferToBase64(subscription.getKey('auth')),
+					},
+				}),
+			})
+		} catch {
+			setStatus('Subscribe failed on server')
+			await subscription.unsubscribe().catch(() => {})
+			toggle.checked = false
+			return
+		}
 		if (!response.ok) {
 			setStatus('Subscribe failed on server')
 			await subscription.unsubscribe().catch(() => {})

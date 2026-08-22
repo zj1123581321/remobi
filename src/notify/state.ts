@@ -46,23 +46,21 @@ export function writeJsonFileAtomic(path: string, value: unknown, mode = 0o644):
 	const tmpPath = `${path}.tmp-${process.pid}-${Date.now()}`
 	writeFileSync(tmpPath, `${JSON.stringify(value)}\n`, { encoding: 'utf-8', mode })
 	renameSync(tmpPath, path)
-	if (process.platform !== 'win32') {
-		try {
-			writeFileSync(path, readFileSync(path), { mode })
-		} catch {
-			// ignore chmod failures on exotic FS
-		}
-	}
 }
 
 function trimEventsFile(stateDir: string, limit: number): void {
 	const path = join(stateDir, EVENTS_FILE)
-	const lines = readFileSync(path, 'utf-8')
-		.split('\n')
-		.filter((line) => line.length > 0)
-	if (lines.length <= limit * 2) return
-	const kept = lines.slice(-limit)
-	writeFileSync(path, `${kept.join('\n')}\n`, { encoding: 'utf-8', mode: 0o644 })
+	if (!existsSync(path)) return
+	try {
+		const lines = readFileSync(path, 'utf-8')
+			.split('\n')
+			.filter((line) => line.length > 0)
+		if (lines.length <= limit * 2) return
+		const kept = lines.slice(-limit)
+		writeFileSync(path, `${kept.join('\n')}\n`, { encoding: 'utf-8', mode: 0o644 })
+	} catch {
+		// File may have been removed between append and deferred trim.
+	}
 }
 
 /** Append one event line; kind=test is a no-op. Trims when line count exceeds 2×limit. */
@@ -71,7 +69,7 @@ export function appendEventLine(stateDir: string, event: NotifyEvent, limit: num
 	ensureStateDir(stateDir)
 	const path = join(stateDir, EVENTS_FILE)
 	appendFileSync(path, `${JSON.stringify(event)}\n`, { encoding: 'utf-8', mode: 0o644 })
-	trimEventsFile(stateDir, limit)
+	setImmediate(() => trimEventsFile(stateDir, limit))
 }
 
 const LAST_SESSION_FILE = 'last-session.json'
