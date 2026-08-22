@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/zlxlabs/herdweb/compare/v1.0.1...v1.0.2) (2026-08-22)
+
+
+### Bug Fixes
+
+* **viewport:** lift bottom chrome above soft keyboard and debounce terminal resize ([9c8b781](https://github.com/zlxlabs/herdweb/commit/9c8b7812b0779891492914c670b556cb478ca673))
+
 ## [1.0.1](https://github.com/zlxlabs/herdweb/compare/v1.0.0...v1.0.1) (2026-08-22)
 
 
