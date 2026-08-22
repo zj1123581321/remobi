@@ -233,7 +233,7 @@ describe('buildSecurityHeaders', () => {
 	test('does not grant microphone or Doubao access when ASR is disabled', () => {
 		const headers = buildSecurityHeaders('127.0.0.1:7681', '127.0.0.1', 7681, 'nonce-123', false)
 		expect(headers['content-security-policy']).toBe(
-			"default-src 'self'; script-src 'self' 'nonce-nonce-123'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:7681 wss://127.0.0.1:7681; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
+			"default-src 'self'; script-src 'self' 'nonce-nonce-123'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:7681 wss://127.0.0.1:7681; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
 		)
 		expect(headers['permissions-policy']).toBe('camera=(), microphone=(), geolocation=()')
 		expect(headers['content-security-policy']).not.toContain('*')
@@ -243,7 +243,7 @@ describe('buildSecurityHeaders', () => {
 	test('grants only microphone and the Doubao origin when ASR is enabled', () => {
 		const headers = buildSecurityHeaders('127.0.0.1:7681', '127.0.0.1', 7681, 'nonce-123', true)
 		expect(headers['content-security-policy']).toBe(
-			"default-src 'self'; script-src 'self' 'nonce-nonce-123'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:7681 wss://127.0.0.1:7681 wss://openspeech.bytedance.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
+			"default-src 'self'; script-src 'self' 'nonce-nonce-123'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:7681 wss://127.0.0.1:7681 wss://openspeech.bytedance.com; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
 		)
 		expect(headers['permissions-policy']).toBe('camera=(), microphone=(self), geolocation=()')
 		expect(headers['content-security-policy']).not.toContain('*')
