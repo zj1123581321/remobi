@@ -8,8 +8,12 @@ import { createNodeWebSocket } from '@hono/node-ws'
 import { type Context, Hono } from 'hono'
 import type { WSContext } from 'hono/ws'
 import type WebSocket from 'ws'
-import { bundleClientAssets, bundleWorkletAsset, renderClientHtml } from '../build'
+import { bundleClientAssets, bundleSwAsset, bundleWorkletAsset, renderClientHtml } from '../build'
 import { bareDocumentRoute, documentRoute, joinBasePath } from './base-path'
+import { ensureVapidKeys } from './notify/push'
+import { registerNotifyRoutes } from './notify/routes'
+import { createNotifyService, notifyDrain } from './notify/service'
+import { resolveNotifyStateDir } from './notify/state'
 import { manifestToJson } from './pwa/manifest'
 import type { SessionClient, SharedTerminalSession } from './session'
 import {
@@ -165,7 +169,7 @@ export function buildSecurityHeaders(
 		? `'self' ws://${authority} wss://${authority} wss://openspeech.bytedance.com`
 		: `'self' ws://${authority} wss://${authority}`
 	return {
-		'content-security-policy': `default-src 'self'; script-src 'self' 'nonce-${scriptNonce}'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src ${connectSrc}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'`,
+		'content-security-policy': `default-src 'self'; script-src 'self' 'nonce-${scriptNonce}'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https:; img-src 'self' data:; connect-src ${connectSrc}; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'`,
 		'x-frame-options': 'DENY',
 		'x-content-type-options': 'nosniff',
 		'referrer-policy': 'no-referrer',
@@ -279,6 +283,8 @@ function routeVariants(basePath: string, path: string): readonly string[] {
 
 	return Array.from(new Set([path, joinBasePath(basePath, path)]))
 }
+
+export { routeVariants }
 
 const IMAGE_DROP_MAX_BYTES = 10 * 1024 * 1024
 
@@ -401,6 +407,50 @@ export function describeCommandForLogs(command: readonly string[]): string {
 	return `${file} (${args.length} arg${args.length === 1 ? '' : 's'})`
 }
 
+function mountNotifyStack(
+	app: Hono,
+	config: HerdwebConfig,
+	port: number,
+	basePath: string,
+	swJs: string,
+	securityHeadersForRequest: (hostHeader: string | undefined) => Record<string, string>,
+): ReturnType<typeof createNotifyService> {
+	const stateDir = resolveNotifyStateDir(port)
+	ensureVapidKeys(stateDir, config.notify.vapid)
+	console.log('herdweb: notify state directory ready (VAPID keys loaded or generated)')
+	const notifyService = createNotifyService({
+		stateDir,
+		historyLimit: config.notify.history.limit,
+		vapidOverride: config.notify.vapid,
+	})
+	registerNotifyRoutes(app, {
+		basePath,
+		notifyService,
+		stateDir,
+		token: config.notify.token,
+		vapidOverride: config.notify.vapid,
+		securityHeadersForRequest,
+		routeVariants,
+		withSecurityHeaders,
+		isAllowedOrigin,
+	})
+	for (const route of routeVariants(basePath, '/sw.js')) {
+		app.get(route, (c) =>
+			withSecurityHeaders(
+				new Response(swJs, {
+					headers: {
+						'content-type': 'application/javascript',
+						'cache-control': 'no-cache',
+						'Service-Worker-Allowed': basePath === '/' ? '/' : basePath,
+					},
+				}),
+				securityHeadersForRequest(c.req.header('host')),
+			),
+		)
+	}
+	return notifyService
+}
+
 /** Start herdweb serve: build client assets, spawn the PTY, and serve HTTP + WS */
 export async function serve(
 	config: HerdwebConfig,
@@ -416,9 +466,11 @@ export async function serve(
 	console.log('herdweb: building client...')
 	const scriptNonce = createScriptNonce()
 	const { js, css } = await bundleClientAssets(config, version, basePath)
+	const swJs = await bundleSwAsset()
 	const worklet = config.asr.enabled ? await bundleWorkletAsset() : undefined
 	const html = renderClientHtml(js, css, config, scriptNonce, basePath)
 	console.log('herdweb: client ready')
+
 	let session: SharedTerminalSession | null = null
 	let caffeinateProc: SpawnedProcess | null = null
 
@@ -622,6 +674,15 @@ export async function serve(
 
 	registerImageDropRoutes(app, basePath, securityHeadersForRequest)
 
+	const notifyService = mountNotifyStack(
+		app,
+		config,
+		port,
+		basePath,
+		swJs,
+		securityHeadersForRequest,
+	)
+
 	const server = honoServe({ fetch: app.fetch, port, hostname: host })
 	injectWebSocket(server)
 	await waitForServerListening(server, port, host)
@@ -645,6 +706,8 @@ export async function serve(
 		if (shuttingDown) return
 		shuttingDown = true
 		console.log('\nherdweb: shutting down...')
+		await notifyDrain(notifyService)
+		notifyService.dispose()
 		server.close()
 		caffeinateProc?.kill()
 		await session?.dispose()
@@ -659,6 +722,8 @@ export async function serve(
 	})
 
 	await session.onExit
+	await notifyDrain(notifyService)
+	notifyService.dispose()
 	server.close()
 	caffeinateProc?.kill()
 }
