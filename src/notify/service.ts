@@ -139,6 +139,7 @@ export function createNotifyService(deps: NotifyServiceDeps): NotifyService {
 	}
 
 	function pruneStaleSubscriptions(): void {
+		if (inFlight.size > 0) return
 		const subs = readSubscriptions(deps.stateDir)
 		const cutoff = now() - STALE_SUBSCRIPTION_MS
 		const kept = subs.filter((sub) => sub.lastSuccessAt >= cutoff)
@@ -165,9 +166,13 @@ export function createNotifyService(deps: NotifyServiceDeps): NotifyService {
 			}
 
 			recordLastEvent(normalized)
-			const pushPromise = pushToAll(normalized).finally(() => {
-				inFlight.delete(pushPromise)
-			})
+			const pushPromise = pushToAll(normalized)
+				.catch((error: unknown) => {
+					console.error('herdweb: notify push failed', error)
+				})
+				.finally(() => {
+					inFlight.delete(pushPromise)
+				})
 			inFlight.add(pushPromise)
 			return 'accepted'
 		},
