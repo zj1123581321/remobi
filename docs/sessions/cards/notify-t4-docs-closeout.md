@@ -25,7 +25,7 @@
   4. AGENTS.md Module Layout 加 `src/notify/` 与 `src/sw-entry.ts` 一行；`docs/deploy-herdr.md` 补状态目录契约与重启只发一条通知的运维预期。
 - **任务类型**：tests-docs
 - **复杂度**：M
-- **Base commit**：（派发时由主脑填：卡 2/3 合入后的 sha）
+- **Base commit**：a9ee03b（t1+t2+t3+fix1 已合入 feat/notify-attention）
 - **Branch**：由 delegate 分配（card/<worktree 名>），执行器不得另建分支
 - **Worktree**：是，delegate 创建
 - **当前唯一写入者**：delegate 派发的执行器
