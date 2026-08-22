@@ -1,6 +1,7 @@
 import { getConnInfo } from '@hono/node-server/conninfo'
 import type { Context, Hono } from 'hono'
 import { NotifyEventError, parseNotifyEvent } from './events'
+import { parseHistoryLimitParam, readEventHistory } from './history'
 import {
 	type PushSubscriptionRecord,
 	ensureVapidKeys,
@@ -120,6 +121,20 @@ export function registerNotifyRoutes(app: Hono, deps: NotifyRouteDeps): void {
 
 			deps.notifyService.dispatchEvent(event)
 			return deps.withSecurityHeaders(c.body(null, 202), securityHeaders)
+		})
+	}
+
+	for (const route of deps.routeVariants(deps.basePath, '/api/events/history')) {
+		app.get(route, (c) => {
+			const securityHeaders = deps.securityHeadersForRequest(c.req.header('host'))
+			const denied = requireOrigin(c, deps, securityHeaders)
+			if (denied) return denied
+			if (!pushLimiter.allow()) {
+				return deny(c, deps, securityHeaders, 'Too Many Requests', 429)
+			}
+			const limit = parseHistoryLimitParam(c.req.query('limit'))
+			const events = readEventHistory(deps.stateDir, limit)
+			return deps.withSecurityHeaders(c.json({ events }), securityHeaders)
 		})
 	}
 
