@@ -79,7 +79,7 @@ test('send button produces a WS input payload while the keyboard is suppressed',
 	// client actually sends, not a mock.
 	await page.evaluate(() => {
 		window.__sentPayloads = []
-		const socket = window.__remobiSockets?.[0]
+		const socket = window.__herdwebSockets?.[0]
 		if (!socket) return
 		const original = socket.send.bind(socket)
 		socket.send = (data: string | ArrayBufferLike | Blob | ArrayBufferView) => {

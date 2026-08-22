@@ -148,7 +148,7 @@ test('reverse-proxied subpath access uses request-scoped CSP and a live websocke
 		expect(csp).not.toContain(`ws://127.0.0.1:${backend.port}`)
 
 		await page.waitForSelector('#terminal .xterm', { timeout: 10_000 })
-		await expect.poll(() => page.evaluate(() => window.__remobiSockets?.[0]?.readyState)).toBe(1)
+		await expect.poll(() => page.evaluate(() => window.__herdwebSockets?.[0]?.readyState)).toBe(1)
 
 		await page.evaluate(() => {
 			window.term?.input('printf "proxy-smoke\\n"\r', true)

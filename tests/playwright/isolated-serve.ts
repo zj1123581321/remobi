@@ -1,8 +1,8 @@
 /**
- * Spin up a private `remobi serve` instance for specs that can't share the
+ * Spin up a private `herdweb serve` instance for specs that can't share the
  * suite-wide webServer PTY — e.g. because they flip modal terminal state
  * (foreground processes, live mouse modes) that would race parallel specs.
- * Uses a temp HOME so the user's real ~/.config/remobi/ config can't leak in.
+ * Uses a temp HOME so the user's real ~/.config/herdweb/ config can't leak in.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer as createNetServer } from 'node:net'
@@ -85,8 +85,8 @@ export async function startIsolatedServe(
 		isolateTmpDir,
 	} = options
 	const port = await reservePort()
-	const home = mkdtempSync(join(tmpdir(), 'remobi-playwright-home-'))
-	const serveTmp = isolateTmpDir ? mkdtempSync(join(tmpdir(), 'remobi-playwright-tmp-')) : null
+	const home = mkdtempSync(join(tmpdir(), 'herdweb-playwright-home-'))
+	const serveTmp = isolateTmpDir ? mkdtempSync(join(tmpdir(), 'herdweb-playwright-tmp-')) : null
 
 	const proc = spawnProcess(
 		[

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('serves the remobi terminal client', async ({ page }) => {
+test('serves the herdweb terminal client', async ({ page }) => {
 	await page.goto('/')
 	await page.waitForSelector('#terminal .xterm', { timeout: 10_000 })
 	await expect(page.locator('#terminal .xterm')).toBeVisible()
@@ -81,7 +81,7 @@ test('help overlay shows version', async ({ page }) => {
 
 	const versionEl = page.locator('#wt-help .wt-help-version')
 	await expect(versionEl).toBeVisible()
-	await expect(versionEl).toContainText(/remobi v\d+\.\d+\.\d+/)
+	await expect(versionEl).toContainText(/herdweb v\d+\.\d+\.\d+/)
 })
 
 test('late client receives terminal snapshot', async ({ browser, page }) => {

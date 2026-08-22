@@ -1,5 +1,5 @@
 export default {
-	name: 'remobi ASR e2e',
+	name: 'herdweb ASR e2e',
 	asr: {
 		enabled: true,
 		provider: 'doubao',

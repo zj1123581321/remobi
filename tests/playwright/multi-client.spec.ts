@@ -28,10 +28,10 @@ test('two live clients stay in sync after alternating resizes', async ({ browser
 		await secondPage.waitForSelector('#terminal .xterm', { timeout: 10_000 })
 
 		await firstPage.evaluate(() => {
-			window.__remobiResize?.()
+			window.__herdwebResize?.()
 		})
 		await secondPage.evaluate(() => {
-			window.__remobiResize?.()
+			window.__herdwebResize?.()
 		})
 
 		await firstPage.evaluate(() => {
@@ -44,11 +44,11 @@ test('two live clients stay in sync after alternating resizes', async ({ browser
 
 		await firstPage.setViewportSize({ width: 390, height: 844 })
 		await firstPage.evaluate(() => {
-			window.__remobiResize?.()
+			window.__herdwebResize?.()
 		})
 		await secondPage.setViewportSize({ width: 280, height: 653 })
 		await secondPage.evaluate(() => {
-			window.__remobiResize?.()
+			window.__herdwebResize?.()
 		})
 
 		const longLine = `printf "wrap-check-${'x'.repeat(120)}\\n"\r`
@@ -64,10 +64,10 @@ test('two live clients stay in sync after alternating resizes', async ({ browser
 		await expect(firstPage.locator('body')).toContainText('post-resize-sync', { timeout: 15_000 })
 		await expect(secondPage.locator('body')).toContainText('post-resize-sync', { timeout: 15_000 })
 		await expect
-			.poll(() => firstPage.evaluate(() => window.__remobiSockets?.[0]?.readyState))
+			.poll(() => firstPage.evaluate(() => window.__herdwebSockets?.[0]?.readyState))
 			.toBe(1)
 		await expect
-			.poll(() => secondPage.evaluate(() => window.__remobiSockets?.[0]?.readyState))
+			.poll(() => secondPage.evaluate(() => window.__herdwebSockets?.[0]?.readyState))
 			.toBe(1)
 	} finally {
 		await firstContext.close()

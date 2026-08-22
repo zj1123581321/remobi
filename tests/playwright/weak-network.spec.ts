@@ -5,15 +5,15 @@ import { startIsolatedServe } from './isolated-serve'
 async function installSocketProbe(page: import('@playwright/test').Page): Promise<void> {
 	await page.addInitScript(() => {
 		const browserWindow = window as typeof window & {
-			__remobiSentFrames?: string[]
-			__remobiPendingAtActionSend?: (string | null)[]
-			__remobiBufferedSamples?: number[]
-			__remobiSocketConstructs?: number
+			__herdwebSentFrames?: string[]
+			__herdwebPendingAtActionSend?: (string | null)[]
+			__herdwebBufferedSamples?: number[]
+			__herdwebSocketConstructs?: number
 		}
-		browserWindow.__remobiSentFrames = []
-		browserWindow.__remobiPendingAtActionSend = []
-		browserWindow.__remobiBufferedSamples = []
-		browserWindow.__remobiSocketConstructs = 0
+		browserWindow.__herdwebSentFrames = []
+		browserWindow.__herdwebPendingAtActionSend = []
+		browserWindow.__herdwebBufferedSamples = []
+		browserWindow.__herdwebSocketConstructs = 0
 		const NativeWebSocket = window.WebSocket
 		const NativeSend = NativeWebSocket.prototype.send
 		NativeWebSocket.prototype.send = function (
@@ -21,20 +21,20 @@ async function installSocketProbe(page: import('@playwright/test').Page): Promis
 		) {
 			const before = this.bufferedAmount
 			if (typeof data === 'string') {
-				browserWindow.__remobiSentFrames?.push(data)
+				browserWindow.__herdwebSentFrames?.push(data)
 				if (JSON.parse(data).type === 'input-action') {
-					browserWindow.__remobiPendingAtActionSend?.push(
-						localStorage.getItem('remobi:composer:v1:/'),
+					browserWindow.__herdwebPendingAtActionSend?.push(
+						localStorage.getItem('herdweb:composer:v1:/'),
 					)
 				}
 			}
 			const result = NativeSend.call(this, data)
-			browserWindow.__remobiBufferedSamples?.push(before, this.bufferedAmount)
+			browserWindow.__herdwebBufferedSamples?.push(before, this.bufferedAmount)
 			return result
 		}
 		// biome-ignore lint/complexity/useArrowFunction: WebSocket replacement must remain constructable
 		const TrackedWebSocket = function (...args: ConstructorParameters<typeof WebSocket>) {
-			browserWindow.__remobiSocketConstructs = (browserWindow.__remobiSocketConstructs ?? 0) + 1
+			browserWindow.__herdwebSocketConstructs = (browserWindow.__herdwebSocketConstructs ?? 0) + 1
 			return new NativeWebSocket(...args)
 		} as unknown as typeof WebSocket
 		Object.setPrototypeOf(TrackedWebSocket, NativeWebSocket)
@@ -52,15 +52,15 @@ async function getPendingAtActionSend(
 ): Promise<(string | null)[]> {
 	return page.evaluate(
 		() =>
-			(window as typeof window & { __remobiPendingAtActionSend?: (string | null)[] })
-				.__remobiPendingAtActionSend ?? [],
+			(window as typeof window & { __herdwebPendingAtActionSend?: (string | null)[] })
+				.__herdwebPendingAtActionSend ?? [],
 	)
 }
 
 async function getSentFrames(page: import('@playwright/test').Page): Promise<string[]> {
 	return page.evaluate(() => {
-		const browserWindow = window as typeof window & { __remobiSentFrames?: string[] }
-		return browserWindow.__remobiSentFrames ?? []
+		const browserWindow = window as typeof window & { __herdwebSentFrames?: string[] }
+		return browserWindow.__herdwebSentFrames ?? []
 	})
 }
 
@@ -70,15 +70,15 @@ async function getNonPingFrames(page: import('@playwright/test').Page): Promise<
 
 async function getBufferedSamples(page: import('@playwright/test').Page): Promise<number[]> {
 	return page.evaluate(() => {
-		const browserWindow = window as typeof window & { __remobiBufferedSamples?: number[] }
-		return browserWindow.__remobiBufferedSamples ?? []
+		const browserWindow = window as typeof window & { __herdwebBufferedSamples?: number[] }
+		return browserWindow.__herdwebBufferedSamples ?? []
 	})
 }
 
 async function getSocketConstructs(page: import('@playwright/test').Page): Promise<number> {
 	return page.evaluate(() => {
-		const browserWindow = window as typeof window & { __remobiSocketConstructs?: number }
-		return browserWindow.__remobiSocketConstructs ?? 0
+		const browserWindow = window as typeof window & { __herdwebSocketConstructs?: number }
+		return browserWindow.__herdwebSocketConstructs ?? 0
 	})
 }
 
@@ -112,7 +112,7 @@ test('offline keyboard input is dropped and recovery requires a fresh synced sna
 	await waitForSynced(page)
 
 	await context.setOffline(true)
-	await page.evaluate(() => window.__remobiSockets?.[0]?.close())
+	await page.evaluate(() => window.__herdwebSockets?.[0]?.close())
 	await waitForState(page, 'disconnected')
 	await page.screenshot({ path: 'test-results/weak-network-disconnected.png' })
 	await page.evaluate(() => {
@@ -149,13 +149,13 @@ test('offline and online recovery converges to the server snapshot', async ({ pa
 	console.log(`normal-network bufferedAmount samples: ${JSON.stringify(bufferedSamples)}`)
 	await page.waitForTimeout(250)
 	const bufferedAtRest = await page.evaluate(
-		() => window.__remobiSockets?.[0]?.bufferedAmount ?? -1,
+		() => window.__herdwebSockets?.[0]?.bufferedAmount ?? -1,
 	)
 	console.log(`normal-network bufferedAmount after 250ms: ${bufferedAtRest}`)
 	expect(bufferedAtRest).toBe(0)
 
 	await context.setOffline(true)
-	await page.evaluate(() => window.__remobiSockets?.[0]?.close())
+	await page.evaluate(() => window.__herdwebSockets?.[0]?.close())
 	await waitForState(page, 'disconnected')
 	await page.screenshot({ path: 'test-results/weak-network-disconnected.png' })
 	await context.setOffline(false)
@@ -246,7 +246,7 @@ test.describe('composer action weak network', () => {
 		await installSocketProbe(page)
 		await page.goto(server.url)
 		await waitForSynced(page)
-		await page.locator('[data-remobi-action="voice-input"]').click()
+		await page.locator('[data-herdweb-action="voice-input"]').click()
 		const marker = `T4-${Date.now()}`
 		const escaped = [...marker]
 			.map((character) => `\\x${(character.codePointAt(0) ?? 0).toString(16).padStart(2, '0')}`)
@@ -278,7 +278,7 @@ test.describe('composer action weak network', () => {
 		await installSocketProbe(page)
 		await page.goto(server.url)
 		await waitForSynced(page)
-		await page.locator('[data-remobi-action="voice-input"]').click()
+		await page.locator('[data-herdweb-action="voice-input"]').click()
 		const composer = page.locator('#wt-asr-composer')
 		await composer.locator('textarea').fill("printf 'offline'")
 		await context.setOffline(true)
