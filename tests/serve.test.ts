@@ -101,9 +101,9 @@ async function startServe(
 	options: { extraArgs?: string[]; dropDir?: string } = {},
 ): Promise<{ port: number; url: string }> {
 	const port = await reservePort()
-	const configDir = mkdtempSync(join(tmpdir(), 'remobi-serve-test-'))
+	const configDir = mkdtempSync(join(tmpdir(), 'herdweb-serve-test-'))
 	tempDirs.push(configDir)
-	const configPath = join(configDir, 'remobi.config.ts')
+	const configPath = join(configDir, 'herdweb.config.ts')
 	writeFileSync(
 		configPath,
 		`export default ${JSON.stringify({
@@ -345,7 +345,7 @@ function postImageDrop(
 }
 describe('image drop upload', () => {
 	test('stores the four formats byte-for-byte (0600, no-store) and rejects bad uploads', async () => {
-		const dropDir = mkdtempSync(join(tmpdir(), 'remobi-drop-test-'))
+		const dropDir = mkdtempSync(join(tmpdir(), 'herdweb-drop-test-'))
 		const { url } = await startServe(false, { dropDir })
 		const endpoint = `${url}/api/image-drop`
 		const cases = [
@@ -376,20 +376,20 @@ describe('image drop upload', () => {
 		const crossOrigin = await postImageDrop(endpoint, PNG_BYTES, { origin: 'https://evil.example' })
 		expect(crossOrigin.statusCode).toBe(403)
 		// Only the five accepted uploads landed; rejected uploads left nothing behind. (TMPDIR also
-		// holds the child process's node-compile-cache, so count only remobi-drop-* files.)
-		expect(readdirSync(dropDir).filter((name) => name.startsWith('remobi-drop-'))).toHaveLength(5)
+		// holds the child process's node-compile-cache, so count only herdweb-drop-* files.)
+		expect(readdirSync(dropDir).filter((name) => name.startsWith('herdweb-drop-'))).toHaveLength(5)
 	})
 
 	test('is reachable under a configured base path', async () => {
-		const dropDir = mkdtempSync(join(tmpdir(), 'remobi-drop-test-'))
-		const { url } = await startServe(false, { dropDir, extraArgs: ['--base-path', '/remobi'] })
-		const response = await postImageDrop(`${url}/remobi/api/image-drop`, PNG_BYTES)
+		const dropDir = mkdtempSync(join(tmpdir(), 'herdweb-drop-test-'))
+		const { url } = await startServe(false, { dropDir, extraArgs: ['--base-path', '/herdweb'] })
+		const response = await postImageDrop(`${url}/herdweb/api/image-drop`, PNG_BYTES)
 		expect(response.statusCode).toBe(200)
 		expect(JSON.parse(response.body).format).toBe('png')
 	})
 
 	test('writeImageDrop removes only its own partial file when the write fails', async () => {
-		const dropDir = mkdtempSync(join(tmpdir(), 'remobi-drop-test-'))
+		const dropDir = mkdtempSync(join(tmpdir(), 'herdweb-drop-test-'))
 		tempDirs.push(dropDir)
 		vi.stubEnv('TMPDIR', dropDir)
 		const probe = await open(join(dropDir, 'probe'), 'w')

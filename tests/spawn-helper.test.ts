@@ -22,7 +22,7 @@ afterEach(() => {
 })
 
 function tempFile(mode: number): string {
-	const dir = mkdtempSync(join(tmpdir(), 'remobi-spawn-helper-'))
+	const dir = mkdtempSync(join(tmpdir(), 'herdweb-spawn-helper-'))
 	tempDirs.push(dir)
 	const path = join(dir, 'spawn-helper')
 	writeFileSync(path, 'binary')
@@ -62,7 +62,7 @@ describe('ensureExecutable', () => {
 	})
 
 	test('does not throw when the file is missing', () => {
-		expect(() => ensureExecutable(join(tmpdir(), 'remobi-does-not-exist-xyz'))).not.toThrow()
+		expect(() => ensureExecutable(join(tmpdir(), 'herdweb-does-not-exist-xyz'))).not.toThrow()
 	})
 })
 

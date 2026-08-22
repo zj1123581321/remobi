@@ -16,9 +16,9 @@ describe('validateBreakingChangeCommitMessage', () => {
 		const message = [
 			'feat: replace ttyd runtime',
 			'',
-			'Move remobi to the built-in runtime.',
+			'Move herdweb to the built-in runtime.',
 			'',
-			'BREAKING CHANGE: remobi no longer depends on ttyd.',
+			'BREAKING CHANGE: herdweb no longer depends on ttyd.',
 		].join('\n')
 
 		expect(hasBreakingChangeFooter(message)).toBe(true)
@@ -29,7 +29,7 @@ describe('validateBreakingChangeCommitMessage', () => {
 		const message = [
 			'feat!: replace ttyd runtime',
 			'',
-			'Move remobi to the built-in runtime.',
+			'Move herdweb to the built-in runtime.',
 		].join('\n')
 
 		expect(hasBreakingMarkerInHeader(message)).toBe(true)
@@ -42,9 +42,9 @@ describe('validateBreakingChangeCommitMessage', () => {
 		const message = [
 			'feat!: replace ttyd runtime',
 			'',
-			'Move remobi to the built-in runtime.',
+			'Move herdweb to the built-in runtime.',
 			'',
-			'BREAKING CHANGE remobi no longer depends on ttyd.',
+			'BREAKING CHANGE herdweb no longer depends on ttyd.',
 		].join('\n')
 
 		expect(validateBreakingChangeCommitMessage(message)).toBe(

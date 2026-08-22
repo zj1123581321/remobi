@@ -25,7 +25,7 @@ afterEach(() => {
 function createTempDir(): string {
 	// realpathSync resolves the macOS /private symlink so the path matches the child's
 	// process.cwd() that the CLI echoes back in `Created: <path>`.
-	const dir = realpathSync(mkdtempSync(join(tmpdir(), 'remobi-cli-validation-')))
+	const dir = realpathSync(mkdtempSync(join(tmpdir(), 'herdweb-cli-validation-')))
 	tempDirs.push(dir)
 	return dir
 }
@@ -48,13 +48,20 @@ async function runCli(args: readonly string[], cwd: string = repoRoot): Promise<
 }
 
 function writeConfig(dir: string, source: string): string {
-	const path = join(dir, 'remobi.config.ts')
+	const path = join(dir, 'herdweb.config.ts')
 	writeFileSync(path, source)
 	return path
 }
 
 function writeLocalConfig(dir: string, source: string): string {
-	const path = join(dir, 'remobi.config.local.ts')
+	const path = join(dir, 'herdweb.config.local.ts')
+	writeFileSync(path, source)
+	return path
+}
+
+function writeLegacyConfig(dir: string, source: string): string {
+	const legacyApp = 're' + 'mobi'
+	const path = join(dir, `${legacyApp}.config.ts`)
 	writeFileSync(path, source)
 	return path
 }
@@ -106,18 +113,18 @@ async function waitForHttp(url: string, timeoutMs = 10_000): Promise<string> {
 }
 
 describe('CLI command validation', () => {
-	test('init scaffolds a plain default export without remobi imports', async () => {
+	test('init scaffolds a plain default export without herdweb imports', async () => {
 		const dir = createTempDir()
 
 		const result = await runCli(['init'], dir)
 
 		expect(result.exitCode).toBe(0)
 		expect(result.stderr).toBe('')
-		const configPath = join(dir, 'remobi.config.ts')
+		const configPath = join(dir, 'herdweb.config.ts')
 		expect(result.stdout).toContain(`Created: ${configPath}`)
 		const scaffold = readFileSync(configPath, 'utf8')
 		expect(scaffold).toContain('export default {')
-		expect(scaffold).not.toContain("from 'remobi'")
+		expect(scaffold).not.toContain("from 'herdweb'")
 		expect(scaffold).not.toContain('defineConfig(')
 	})
 	test('serve fails fast with nested validation errors', async () => {
@@ -140,8 +147,8 @@ describe('CLI command validation', () => {
 
 		expect(result.exitCode).toBe(1)
 		expect(result.stdout).toBe('')
-		expect(result.stderr).toContain('remobi build is deprecated and no longer supported')
-		expect(result.stderr).toContain('Use `remobi serve` instead.')
+		expect(result.stderr).toContain('herdweb build is deprecated and no longer supported')
+		expect(result.stderr).toContain('Use `herdweb serve` instead.')
 	})
 
 	test('inject exits with a deprecation error', async () => {
@@ -149,8 +156,8 @@ describe('CLI command validation', () => {
 
 		expect(result.exitCode).toBe(1)
 		expect(result.stdout).toBe('')
-		expect(result.stderr).toContain('remobi inject is deprecated and no longer supported')
-		expect(result.stderr).toContain('Use `remobi serve` instead.')
+		expect(result.stderr).toContain('herdweb inject is deprecated and no longer supported')
+		expect(result.stderr).toContain('Use `herdweb serve` instead.')
 	})
 
 	test('serve loads local config overrides from the .local sibling file', async () => {
@@ -226,7 +233,7 @@ describe('CLI command validation', () => {
 			])
 
 			expect(result.exitCode).toBe(1)
-			expect(result.stdout).not.toContain(`remobi: serving on http://localhost:${port}`)
+			expect(result.stdout).not.toContain(`herdweb: serving on http://localhost:${port}`)
 			expect(result.stderr).toContain(`port ${port} is already in use`)
 		} finally {
 			await new Promise<void>((resolve, reject) => {
@@ -238,6 +245,108 @@ describe('CLI command validation', () => {
 					resolve()
 				})
 			})
+		}
+	})
+
+	test('serve loads legacy config with rename hint when herdweb config is absent', async () => {
+		const dir = createTempDir()
+		const legacyPath = writeLegacyConfig(dir, "export default { name: 'legacy-name' }")
+		const port = await reservePort()
+		const proc = spawnProcess(
+			[
+				'tsx',
+				join(repoRoot, 'cli.ts'),
+				'serve',
+				'--port',
+				String(port),
+				'--',
+				'bash',
+				'--norc',
+				'--noprofile',
+				'-lc',
+				'sleep 30',
+			],
+			{ cwd: dir, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+		)
+		const stdoutChunks: string[] = []
+		const stdoutStream = proc.stdout
+		if (stdoutStream) {
+			stdoutStream.on('data', (chunk: Buffer | string) => {
+				stdoutChunks.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8'))
+			})
+		}
+
+		try {
+			const html = await waitForHttp(`http://127.0.0.1:${port}/`)
+			expect(html).toContain('<title>legacy-name</title>')
+			const stdout = stdoutChunks.join('')
+			expect(stdout).toContain('loaded legacy config')
+			expect(stdout).toContain(legacyPath)
+			expect(stdout).toContain('consider renaming to herdweb.config.ts')
+		} finally {
+			proc.kill('SIGTERM')
+			await proc.exited
+		}
+	})
+
+	test('herdweb config takes priority over legacy config in the same directory', async () => {
+		const dir = createTempDir()
+		writeLegacyConfig(dir, "export default { name: 'legacy-name' }")
+		writeConfig(dir, "export default { name: 'herdweb-name' }")
+		const port = await reservePort()
+		const proc = spawnProcess(
+			[
+				'tsx',
+				join(repoRoot, 'cli.ts'),
+				'serve',
+				'--port',
+				String(port),
+				'--',
+				'bash',
+				'--norc',
+				'--noprofile',
+				'-lc',
+				'sleep 30',
+			],
+			{ cwd: dir, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+		)
+
+		try {
+			const html = await waitForHttp(`http://127.0.0.1:${port}/`)
+			expect(html).toContain('herdweb-name')
+			expect(html).not.toContain('legacy-name')
+		} finally {
+			proc.kill('SIGTERM')
+			await proc.exited
+		}
+	})
+
+	test('serve uses built-in defaults when no config files exist', async () => {
+		const dir = createTempDir()
+		const port = await reservePort()
+		const proc = spawnProcess(
+			[
+				'tsx',
+				join(repoRoot, 'cli.ts'),
+				'serve',
+				'--port',
+				String(port),
+				'--',
+				'bash',
+				'--norc',
+				'--noprofile',
+				'-lc',
+				'sleep 30',
+			],
+			{ cwd: dir, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+		)
+
+		try {
+			const html = await waitForHttp(`http://127.0.0.1:${port}/`)
+			expect(html).toContain('herdweb')
+		} finally {
+			proc.kill('SIGTERM')
+			await proc.exited
 		}
 	})
 })

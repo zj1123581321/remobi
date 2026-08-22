@@ -33,7 +33,7 @@ describe('createActionRegistry', () => {
 					async sendText(_data: string) {},
 				},
 			),
-		).rejects.toThrow('remobi: no handler registered for action type "send"')
+		).rejects.toThrow('herdweb: no handler registered for action type "send"')
 		expect(errorSpy).toHaveBeenCalled()
 	})
 
@@ -546,7 +546,7 @@ describe('dpad-toggle action', () => {
 		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
 		await expect(registry.execute({ type: 'dpad-toggle' }, makeContext())).rejects.toThrow(
-			'remobi: dpad-toggle action requires a toggleDpad callback',
+			'herdweb: dpad-toggle action requires a toggleDpad callback',
 		)
 		expect(errorSpy).toHaveBeenCalled()
 	})
@@ -569,7 +569,7 @@ describe('font-size action', () => {
 		const term = mockTerminal()
 		const focused = { value: false }
 		const resizeSpy = vi.fn()
-		window.__remobiResize = resizeSpy
+		window.__herdwebResize = resizeSpy
 
 		const executed = await registry.execute(
 			{ type: 'font-size', delta: 2 },
@@ -583,7 +583,7 @@ describe('font-size action', () => {
 		// Persisted so a reload keeps the adjusted size
 		expect(localStorage.getItem(FONT_SIZE_STORAGE_KEY)).toBe('16')
 
-		window.__remobiResize = undefined
+		window.__herdwebResize = undefined
 	})
 
 	test('does not write localStorage when the size is unchanged (clamped)', async () => {
@@ -591,13 +591,13 @@ describe('font-size action', () => {
 		const term = mockTerminal()
 		term.options.fontSize = 32
 		const focused = { value: false }
-		window.__remobiResize = () => {}
+		window.__herdwebResize = () => {}
 
 		await registry.execute({ type: 'font-size', delta: 2 }, makeContext(term, focused))
 		expect(term.options.fontSize).toBe(32)
 		expect(localStorage.getItem(FONT_SIZE_STORAGE_KEY)).toBeNull()
 
-		window.__remobiResize = undefined
+		window.__herdwebResize = undefined
 	})
 
 	test('survives localStorage write failures (iOS private mode) — logs and continues', async () => {
@@ -608,13 +608,13 @@ describe('font-size action', () => {
 		vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
 			throw new Error('QuotaExceededError')
 		})
-		window.__remobiResize = () => {}
+		window.__herdwebResize = () => {}
 
 		await registry.execute({ type: 'font-size', delta: 2 }, makeContext(term, focused))
 		expect(term.options.fontSize).toBe(16)
 		expect(errorSpy).toHaveBeenCalled()
 
-		window.__remobiResize = undefined
+		window.__herdwebResize = undefined
 	})
 
 	test('clamps at sizeRange upper bound and stops resizing at the cap', async () => {
@@ -623,7 +623,7 @@ describe('font-size action', () => {
 		term.options.fontSize = 31
 		const focused = { value: false }
 		const resizeSpy = vi.fn()
-		window.__remobiResize = resizeSpy
+		window.__herdwebResize = resizeSpy
 
 		await registry.execute({ type: 'font-size', delta: 2 }, makeContext(term, focused))
 		expect(term.options.fontSize).toBe(32)
@@ -633,7 +633,7 @@ describe('font-size action', () => {
 		expect(term.options.fontSize).toBe(32)
 		expect(resizeSpy).toHaveBeenCalledTimes(1)
 
-		window.__remobiResize = undefined
+		window.__herdwebResize = undefined
 	})
 
 	test('clamps at sizeRange lower bound and stops resizing at the floor', async () => {
@@ -642,7 +642,7 @@ describe('font-size action', () => {
 		term.options.fontSize = 9
 		const focused = { value: false }
 		const resizeSpy = vi.fn()
-		window.__remobiResize = resizeSpy
+		window.__herdwebResize = resizeSpy
 
 		await registry.execute({ type: 'font-size', delta: -2 }, makeContext(term, focused))
 		expect(term.options.fontSize).toBe(8)
@@ -652,7 +652,7 @@ describe('font-size action', () => {
 		expect(term.options.fontSize).toBe(8)
 		expect(resizeSpy).toHaveBeenCalledTimes(1)
 
-		window.__remobiResize = undefined
+		window.__herdwebResize = undefined
 	})
 
 	test('context.font takes precedence over registry deps', async () => {
@@ -661,7 +661,7 @@ describe('font-size action', () => {
 		const term = mockTerminal()
 		term.options.fontSize = 10
 		const focused = { value: false }
-		window.__remobiResize = () => {}
+		window.__herdwebResize = () => {}
 
 		await registry.execute(
 			{ type: 'font-size', delta: 2 },
@@ -671,7 +671,7 @@ describe('font-size action', () => {
 		// context.font range [8, 32] applies — deps range [20, 24] would clamp to 20
 		expect(term.options.fontSize).toBe(12)
 
-		window.__remobiResize = undefined
+		window.__herdwebResize = undefined
 	})
 
 	test('fails loud when no font config is available', async () => {
@@ -681,7 +681,7 @@ describe('font-size action', () => {
 
 		await expect(
 			registry.execute({ type: 'font-size', delta: 2 }, makeContext(mockTerminal(), focused)),
-		).rejects.toThrow('remobi: font-size action requires a FontConfig')
+		).rejects.toThrow('herdweb: font-size action requires a FontConfig')
 		expect(errorSpy).toHaveBeenCalled()
 		expect(focused.value).toBe(false)
 	})
@@ -712,7 +712,7 @@ describe('image-upload action', () => {
 		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
 		await expect(registry.execute({ type: 'image-upload' }, makeContext())).rejects.toThrow(
-			'remobi: image-upload action requires an openImageDrop callback',
+			'herdweb: image-upload action requires an openImageDrop callback',
 		)
 		expect(errorSpy).toHaveBeenCalled()
 	})
@@ -771,7 +771,7 @@ describe('help action', () => {
 					async sendText(_data: string) {},
 				},
 			),
-		).rejects.toThrow('remobi: help action requires an openHelp callback')
+		).rejects.toThrow('herdweb: help action requires an openHelp callback')
 		expect(errorSpy).toHaveBeenCalled()
 	})
 })

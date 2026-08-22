@@ -21,8 +21,8 @@ describe('isValidSwipe', () => {
 		maxDuration: 400,
 		left: '\x02n',
 		right: '\x02p',
-		leftLabel: 'Next tmux window',
-		rightLabel: 'Previous tmux window',
+		leftLabel: 'Next herdr tab',
+		rightLabel: 'Previous herdr tab',
 	}
 
 	test('detects right swipe', () => {
@@ -56,8 +56,8 @@ describe('isValidSwipe', () => {
 			maxDuration: 400,
 			left: '\x02n',
 			right: '\x02p',
-			leftLabel: 'Next tmux window',
-			rightLabel: 'Previous tmux window',
+			leftLabel: 'Next herdr tab',
+			rightLabel: 'Previous herdr tab',
 		}
 		expect(isValidSwipe(150, 10, 200, strict)).toBeNull()
 		expect(isValidSwipe(250, 10, 200, strict)).toBe('right')

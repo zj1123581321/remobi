@@ -449,7 +449,7 @@ describe('assertValidConfigOverrides', () => {
 						{
 							id: 'guide',
 							label: 'Guide',
-							description: 'Open the remobi help guide',
+							description: 'Open the herdweb help guide',
 							action: { type: 'help' },
 						},
 					],
@@ -498,7 +498,7 @@ describe('assertValidConfigOverrides', () => {
 						{
 							id: 'guide',
 							label: 'Guide',
-							description: 'Open the remobi help guide',
+							description: 'Open the herdweb help guide',
 							action: { type: 'help', data: 'x' },
 						},
 					],
@@ -590,8 +590,8 @@ describe('assertValidResolvedConfig', () => {
 						maxDuration: 400,
 						left: '\x02n',
 						right: '\x02p',
-						leftLabel: 'Next tmux window',
-						rightLabel: 'Previous tmux window',
+						leftLabel: 'Next herdr tab',
+						rightLabel: 'Previous herdr tab',
 					},
 					pinch: { enabled: false },
 					scroll: {

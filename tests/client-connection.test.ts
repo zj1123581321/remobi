@@ -138,7 +138,7 @@ describe('client connection state machine', () => {
 	beforeAll(async () => {
 		vi.useFakeTimers()
 		document.body.innerHTML = '<div id="terminal"></div>'
-		Object.defineProperty(globalThis, '__remobiConfig', {
+		Object.defineProperty(globalThis, '__herdwebConfig', {
 			configurable: true,
 			value: {
 				name: 'test',
@@ -147,7 +147,7 @@ describe('client connection state machine', () => {
 				reconnect: { enabled: false },
 			},
 		})
-		Object.defineProperty(globalThis, '__remobiBasePath', { configurable: true, value: '/' })
+		Object.defineProperty(globalThis, '__herdwebBasePath', { configurable: true, value: '/' })
 		vi.stubGlobal('WebSocket', FakeSocket)
 		vi.stubGlobal('crypto', { randomUUID: vi.fn(() => `ping-${harness.sockets.length}`) })
 		await import('../src/client-entry')
@@ -186,10 +186,10 @@ describe('client connection state machine', () => {
 		expect(window.term?.isConnected()).toBe(false)
 		terminal.cols = 90
 		terminal.rows = 30
-		window.__remobiResize?.()
+		window.__herdwebResize?.()
 		terminal.cols = 100
 		terminal.rows = 40
-		window.__remobiResize?.()
+		window.__herdwebResize?.()
 
 		receive(socket, { type: 'output', data: 'five', seq: 5 })
 		receive(socket, { type: 'output', data: 'four', seq: 4 })
@@ -268,10 +268,10 @@ describe('client connection state machine', () => {
 		const onNotice = (event: Event): void => {
 			if (event instanceof CustomEvent && typeof event.detail === 'string') notice = event.detail
 		}
-		window.addEventListener('remobi-connection-notice', onNotice)
+		window.addEventListener('herdweb-connection-notice', onNotice)
 		vi.setSystemTime(age)
 		window.term?.input(data, true)
-		window.removeEventListener('remobi-connection-notice', onNotice)
+		window.removeEventListener('herdweb-connection-notice', onNotice)
 
 		expect(socket.sent).toHaveLength(sentBefore)
 		expect(socket.readyState).toBe(FakeSocket.CLOSED)
@@ -309,7 +309,7 @@ describe('client connection state machine', () => {
 		vi.setSystemTime(26_000)
 		terminal.cols = 111
 		terminal.rows = 37
-		window.__remobiResize?.()
+		window.__herdwebResize?.()
 
 		const frames = socket.sent.map((payload) => JSON.parse(payload) as Record<string, unknown>)
 		expect(frames.at(-1)).toEqual({ type: 'resize', cols: 111, rows: 37 })
@@ -738,9 +738,9 @@ describe('client connection state machine', () => {
 		const onNotice = (event: Event): void => {
 			if (event instanceof CustomEvent && typeof event.detail === 'string') notice = event.detail
 		}
-		window.addEventListener('remobi-connection-notice', onNotice)
+		window.addEventListener('herdweb-connection-notice', onNotice)
 		receive(socket, { type: 'output', data: '🙂'.repeat(262_145), seq: 1 })
-		window.removeEventListener('remobi-connection-notice', onNotice)
+		window.removeEventListener('herdweb-connection-notice', onNotice)
 		expect(socket.readyState).toBe(FakeSocket.CLOSED)
 		expect(getStatus().lastFailureReason).toBe('output-overflow')
 		expect(notice).toBe('Output too fast — resyncing.')
@@ -767,13 +767,13 @@ describe('client connection state machine', () => {
 		const onNotice = (event: Event): void => {
 			if (event instanceof CustomEvent && typeof event.detail === 'string') notice = event.detail
 		}
-		window.addEventListener('remobi-connection-notice', onNotice)
+		window.addEventListener('herdweb-connection-notice', onNotice)
 		receive(socket, { type: 'exit', exitCode: 0, signal: null })
 		socket.close()
 		await vi.advanceTimersByTimeAsync(20_000)
-		window.removeEventListener('remobi-connection-notice', onNotice)
+		window.removeEventListener('herdweb-connection-notice', onNotice)
 		expect(getStatus().state).toBe('disconnected')
-		expect(notice).toBe('Session ended — restart remobi to start a new one.')
+		expect(notice).toBe('Session ended — restart herdweb to start a new one.')
 		expect(harness.sockets).toHaveLength(socketCount)
 	})
 
@@ -820,10 +820,10 @@ describe('client connection state machine', () => {
 		const terminal = harness.terminal as FakeTerminal
 		terminal.cols = 120
 		terminal.rows = 45
-		window.__remobiResize?.()
+		window.__herdwebResize?.()
 		terminal.cols = 140
 		terminal.rows = 50
-		window.__remobiResize?.()
+		window.__herdwebResize?.()
 		window.term?.input('must-not-be-replayed', true)
 		expect(socket.sent).toEqual([])
 
@@ -906,10 +906,10 @@ describe('client connection state machine', () => {
 		const onNotice = (event: Event): void => {
 			if (event instanceof CustomEvent && typeof event.detail === 'string') notice = event.detail
 		}
-		window.addEventListener('remobi-connection-notice', onNotice)
+		window.addEventListener('herdweb-connection-notice', onNotice)
 		window.dispatchEvent(new Event('offline'))
 		window.term?.input('offline-must-drop', true)
-		window.removeEventListener('remobi-connection-notice', onNotice)
+		window.removeEventListener('herdweb-connection-notice', onNotice)
 		expect(socket.sent).toHaveLength(sentBefore)
 		expect(notice).toBe('Not sent — still syncing.')
 	})
@@ -921,10 +921,10 @@ describe('client connection state machine', () => {
 		window.dispatchEvent(new Event('offline'))
 		terminal.cols = 101
 		terminal.rows = 31
-		window.__remobiResize?.()
+		window.__herdwebResize?.()
 		terminal.cols = 120
 		terminal.rows = 40
-		window.__remobiResize?.()
+		window.__herdwebResize?.()
 		expect(socket.sent).toHaveLength(sentBefore)
 
 		window.dispatchEvent(new Event('online'))

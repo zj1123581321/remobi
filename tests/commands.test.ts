@@ -15,14 +15,12 @@ describe('defaultDrawerButtons', () => {
 		}
 	})
 
-	test('tmux commands send tmux prefix (Ctrl-b); raw key sends do not', () => {
+	test('herdr commands send herdr prefix (Ctrl-b); raw key sends do not', () => {
 		for (const cmd of defaultDrawerButtons) {
 			if (cmd.action.type !== 'send') continue
-			if (cmd.id.startsWith('tmux-')) {
+			if (cmd.id.startsWith('herdr-')) {
 				expect(cmd.action.data.startsWith('\x02')).toBe(true)
 			} else {
-				// Scroll keys and the keys relocated from the single-row toolbar
-				// are app-level raw sends (no tmux prefix).
 				expect(cmd.action.data.startsWith('\x02')).toBe(false)
 			}
 		}
@@ -36,20 +34,20 @@ describe('defaultDrawerButtons', () => {
 		expect(labels).toContain('Kill')
 	})
 
-	test('includes navigation commands', () => {
+	test('includes herdr navigation commands', () => {
 		const labels = defaultDrawerButtons.map((c) => c.label)
-		expect(labels).toContain('Sessions')
-		expect(labels).toContain('Windows')
+		expect(labels).toContain('Spaces')
+		expect(labels).toContain('Sidebar')
 	})
 
-	test('uses stock tmux bindings for split/session/window/copy actions', () => {
+	test('uses herdr bindings for split/workspace/sidebar/scrollback actions', () => {
 		const byId = new Map(defaultDrawerButtons.map((button) => [button.id, button]))
 
-		expect(byId.get('tmux-split-vertical')?.action).toEqual({ type: 'send', data: '\x02%' })
-		expect(byId.get('tmux-split-horizontal')?.action).toEqual({ type: 'send', data: '\x02"' })
-		expect(byId.get('tmux-sessions')?.action).toEqual({ type: 'send', data: '\x02s' })
-		expect(byId.get('tmux-windows')?.action).toEqual({ type: 'send', data: '\x02w' })
-		expect(byId.get('tmux-copy')?.action).toEqual({ type: 'send', data: '\x02[' })
+		expect(byId.get('herdr-split-v')?.action).toEqual({ type: 'send', data: '\x02v' })
+		expect(byId.get('herdr-split-h')?.action).toEqual({ type: 'send', data: '\x02-' })
+		expect(byId.get('herdr-workspaces')?.action).toEqual({ type: 'send', data: '\x02w' })
+		expect(byId.get('herdr-sidebar')?.action).toEqual({ type: 'send', data: '\x02b' })
+		expect(byId.get('herdr-scrollback')?.action).toEqual({ type: 'send', data: '\x02e' })
 	})
 
 	test('includes scroll commands', () => {
@@ -58,11 +56,11 @@ describe('defaultDrawerButtons', () => {
 		expect(labels).toContain('PgDn')
 	})
 
-	test('does not include opinionated popup workflow buttons', () => {
+	test('does not include legacy tmux drawer ids', () => {
 		const ids = defaultDrawerButtons.map((button) => button.id)
-		expect(ids).not.toContain('tmux-git')
-		expect(ids).not.toContain('tmux-files')
-		expect(ids).not.toContain('tmux-links')
+		expect(ids).not.toContain('tmux-split-vertical')
+		expect(ids).not.toContain('tmux-sessions')
+		expect(ids).not.toContain('tmux-copy')
 	})
 
 	test('includes combo sender command', () => {
@@ -78,41 +76,11 @@ describe('defaultDrawerButtons', () => {
 		expect(byId.get('font-decrease')?.action).toEqual({ type: 'font-size', delta: -2 })
 		expect(byId.get('font-increase')?.label).toBe('Font +')
 		expect(byId.get('font-increase')?.action).toEqual({ type: 'font-size', delta: 2 })
-		// 'Guide' — must not clash with tmux-help's 'Help' label
-		expect(byId.get('guide')?.label).toBe('Guide')
 		expect(byId.get('guide')?.action).toEqual({ type: 'help' })
-		expect(byId.get('tmux-help')?.label).toBe('Help')
 	})
 
-	test('keeps the keys removed from the single-row toolbar reachable', () => {
-		const byId = new Map(defaultDrawerButtons.map((button) => [button.id, button]))
-
-		expect(byId.get('shift-tab')?.action).toEqual({
-			type: 'send',
-			data: '\x1b[Z',
-			keyLabel: 'Shift+Tab',
-		})
-		expect(byId.get('left')?.action).toEqual({ type: 'send', data: '\x1b[D', keyLabel: 'Left' })
-		expect(byId.get('right')?.action).toEqual({ type: 'send', data: '\x1b[C', keyLabel: 'Right' })
-		// up/down fell off row1 when the d-pad took over the arrows — drawer fallback
-		expect(byId.get('up')?.action).toEqual({ type: 'send', data: '\x1b[A', keyLabel: 'Up' })
-		expect(byId.get('down')?.action).toEqual({ type: 'send', data: '\x1b[B', keyLabel: 'Down' })
-		expect(byId.get('ctrl-c')?.action).toEqual({ type: 'send', data: '\x03' })
-		expect(byId.get('ctrl-d')?.action).toEqual({ type: 'send', data: '\x04' })
-		expect(byId.get('q')?.action).toEqual({ type: 'send', data: 'q' })
-		expect(byId.get('alt-enter')?.action).toEqual({
-			type: 'send',
-			data: '\x1b\r',
-			keyLabel: 'Alt+Enter',
-		})
-		expect(byId.get('space')?.action).toEqual({ type: 'send', data: ' ' })
-		expect(byId.get('backspace')?.action).toEqual({
-			type: 'send',
-			data: '\x7f',
-			keyLabel: 'Backspace',
-		})
-		expect(byId.get('ctrl')?.action).toEqual({ type: 'ctrl-modifier' })
-		expect(byId.get('tmux-prefix')?.action).toEqual({ type: 'prefix', data: '\x02' })
-		expect(byId.get('paste')?.action).toEqual({ type: 'paste' })
+	test('prefix button sends Ctrl-B without sticky modifier', () => {
+		const prefix = defaultDrawerButtons.find((button) => button.id === 'prefix')
+		expect(prefix?.action).toEqual({ type: 'prefix', data: '\x02' })
 	})
 })

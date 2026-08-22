@@ -8,7 +8,7 @@ describe('ASR worklet build', () => {
 	test('bundles the source worklet entry', async () => {
 		const asset = await bundleWorkletAsset()
 		expect(asset).toContain('registerProcessor')
-		expect(asset).toContain('remobi-pcm-processor')
+		expect(asset).toContain('herdweb-pcm-processor')
 		expect(asset).toContain('posted')
 	})
 
@@ -26,7 +26,7 @@ describe('ASR worklet build', () => {
 		const sourceOutput = result.outputFiles.find((file) => file.path.endsWith('.js'))
 		if (!sourceOutput) throw new Error('expected source worklet output')
 
-		const outputDir = mkdtempSync(join(tmpdir(), 'remobi-worklet-'))
+		const outputDir = mkdtempSync(join(tmpdir(), 'herdweb-worklet-'))
 		try {
 			await writeWorkletBundle(outputDir)
 			expect(readFileSync(join(outputDir, 'asr-worklet.js'), 'utf8')).toBe(sourceOutput.text)

@@ -1,8 +1,9 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { createAsrPreview } from '../src/controls/asr-preview'
+import { LEGACY_COMPOSER_STORAGE_KEY_PREFIX, createAsrPreview } from '../src/controls/asr-preview'
 
-const COMPOSER_STORAGE_KEY = 'remobi:composer:v1:/'
+const COMPOSER_STORAGE_KEY = 'herdweb:composer:v1:/'
+const LEGACY_COMPOSER_STORAGE_KEY = `${LEGACY_COMPOSER_STORAGE_KEY_PREFIX}/`
 const DRAFT_RESTORE_FAILURE = 'Draft could not be restored; stored copy left untouched.'
 const DRAFT_CORRUPT_RESET = 'Draft storage was corrupt and has been reset; your text is saved.'
 const DRAFT_STORAGE_FAILURE = 'Draft is not protected on this device.'
@@ -201,5 +202,40 @@ describe('composer draft persistence', () => {
 		expect(composer.isOpen()).toBe(true)
 		expect(setItem).toHaveBeenCalledTimes(2)
 		expect(errorSpy).toHaveBeenCalledTimes(1)
+	})
+
+	test('migrates legacy composer key when new key is absent', () => {
+		localStorage.setItem(
+			LEGACY_COMPOSER_STORAGE_KEY,
+			JSON.stringify({ version: 1, draft: 'legacy draft', pending: null }),
+		)
+
+		const composer = createAsrPreview()
+
+		expect(composer.getText()).toBe('legacy draft')
+		expect(localStorage.getItem(COMPOSER_STORAGE_KEY)).toContain('legacy draft')
+		expect(localStorage.getItem(LEGACY_COMPOSER_STORAGE_KEY)).toBeNull()
+	})
+
+	test('legacy composer key is ignored when new key already has a value', () => {
+		localStorage.setItem(
+			COMPOSER_STORAGE_KEY,
+			JSON.stringify({ version: 1, draft: 'current', pending: null }),
+		)
+		localStorage.setItem(
+			LEGACY_COMPOSER_STORAGE_KEY,
+			JSON.stringify({ version: 1, draft: 'stale', pending: null }),
+		)
+
+		const composer = createAsrPreview()
+
+		expect(composer.getText()).toBe('current')
+		expect(localStorage.getItem(LEGACY_COMPOSER_STORAGE_KEY)).not.toBeNull()
+	})
+
+	test('no legacy composer key — migration is a no-op', () => {
+		const composer = createAsrPreview()
+		expect(composer.getText()).toBe('')
+		expect(localStorage.getItem(COMPOSER_STORAGE_KEY)).toBeNull()
 	})
 })

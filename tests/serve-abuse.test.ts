@@ -359,7 +359,7 @@ function postRawImageDrop(
 describe('image drop body limits', () => {
 	test('accepts exactly 10 MiB and rejects 10 MiB + 1, with content-length or chunked', async () => {
 		const port = await reservePort()
-		const dropDir = mkdtempSync(join(tmpdir(), 'remobi-drop-abuse-'))
+		const dropDir = mkdtempSync(join(tmpdir(), 'herdweb-drop-abuse-'))
 		const proc = startServe(port, ['bash', '--norc', '--noprofile'], { TMPDIR: dropDir })
 		try {
 			const endpoint = `http://127.0.0.1:${port}/api/image-drop`

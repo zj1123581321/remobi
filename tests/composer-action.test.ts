@@ -18,5 +18,5 @@ test('composer action persists the locked pending fields', () => {
 		status: 'pending' as const,
 	}
 	expect(composer.setPending(pending)).toBe(true)
-	expect(JSON.parse(localStorage.getItem('remobi:composer:v1:/') ?? '{}').pending).toEqual(pending)
+	expect(JSON.parse(localStorage.getItem('herdweb:composer:v1:/') ?? '{}').pending).toEqual(pending)
 })
