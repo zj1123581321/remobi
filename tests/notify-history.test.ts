@@ -5,30 +5,30 @@ import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, test } from 'vitest'
-import { registerNotifyRoutes } from '../src/notify/routes'
-import { createNotifyService } from '../src/notify/service'
-import { buildSecurityHeaders, isAllowedOrigin, withSecurityHeaders } from '../src/serve'
 import {
-	clampHistoryLimit,
 	HISTORY_DEFAULT_LIMIT,
 	HISTORY_MAX_LIMIT,
 	HISTORY_MIN_LIMIT,
+	clampHistoryLimit,
 	parseHistoryLimitParam,
 	readEventHistory,
 } from '../src/notify/history'
+import { registerNotifyRoutes } from '../src/notify/routes'
+import { createNotifyService } from '../src/notify/service'
 import { appendEventLine } from '../src/notify/state'
+import { buildSecurityHeaders, isAllowedOrigin, withSecurityHeaders } from '../src/serve'
 
 const validBase = {
 	v: 1,
 	id: 'evt-1',
-	kind: 'asking' as const,
+	kind: 'asking',
 	title: 'Need input',
 	ts: 1_700_000_000,
-}
+} as const
 
 describe('clampHistoryLimit', () => {
 	test('defaults non-finite to 50', () => {
-		expect(clampHistoryLimit(NaN)).toBe(HISTORY_DEFAULT_LIMIT)
+		expect(clampHistoryLimit(Number.NaN)).toBe(HISTORY_DEFAULT_LIMIT)
 		expect(clampHistoryLimit(Number.POSITIVE_INFINITY)).toBe(HISTORY_DEFAULT_LIMIT)
 	})
 
@@ -185,9 +185,7 @@ describe('GET /api/events/history', () => {
 		const body = (await response.json()) as { events: Array<{ id: string }> }
 		expect(body.events.map((e) => e.id)).toEqual(['c4', 'c3'])
 
-		const clamped = await fetch(
-			`http://127.0.0.1:${harness.port}/api/events/history?limit=0`,
-		)
+		const clamped = await fetch(`http://127.0.0.1:${harness.port}/api/events/history?limit=0`)
 		const clampedBody = (await clamped.json()) as { events: Array<{ id: string }> }
 		expect(clampedBody.events.map((e) => e.id)).toEqual(['c4'])
 	})
