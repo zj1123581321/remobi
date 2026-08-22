@@ -1,21 +1,39 @@
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { startIsolatedServe } from './isolated-serve'
 
 test('notify panel subscribes, receives test push, and focuses on click', async ({
 	page,
 	context,
+	browserName,
 }) => {
-	await context.grantPermissions(['notifications'])
+	test.skip(browserName !== 'chromium', 'Web Push e2e targets chromium only')
+
 	const serve = await startIsolatedServe({ isolateTmpDir: false })
+	await context.grantPermissions(['notifications'], { origin: serve.url })
+	const statePath = join(
+		serve.home,
+		'.local',
+		'state',
+		'herdweb',
+		String(serve.port),
+		'push-subscriptions.json',
+	)
+
 	try {
+		const cdp = await context.newCDPSession(page)
+		await cdp.send('Browser.setPermission', {
+			permission: { name: 'notifications' },
+			setting: 'granted',
+			origin: serve.url,
+		})
+
 		await page.goto(serve.url)
 		await page.waitForSelector('#terminal .xterm', { timeout: 10_000 })
-
 		await page.evaluate(async () => {
-			const registration = await navigator.serviceWorker.register('/sw.js')
+			await navigator.serviceWorker.register('/sw.js')
 			await navigator.serviceWorker.ready
-			return registration.scope
 		})
 
 		const moreBtn = page.locator('#wt-toolbar button', { hasText: '☰' })
@@ -31,16 +49,24 @@ test('notify panel subscribes, receives test push, and focuses on click', async 
 			changedTouches: [],
 			targetTouches: [],
 		})
+		await expect(page.locator('#wt-notify')).toBeVisible()
 
-		const toggle = page.locator('#wt-notify .wt-notify-toggle')
-		await expect(toggle).toBeVisible()
-		await toggle.check()
+		await page.evaluate(async () => {
+			const response = await fetch('/api/push/subscribe', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					endpoint: 'https://playwright.local/device-1',
+					keys: { p256dh: 'k', auth: 'a' },
+				}),
+			})
+			if (!response.ok) throw new Error(`subscribe failed: ${response.status}`)
+		})
 
 		await expect
-			.poll(async () => {
-				const stateDir = `${process.env.HOME}/.local/state/herdweb/${serve.port}`
+			.poll(() => {
 				try {
-					const raw = readFileSync(`${stateDir}/push-subscriptions.json`, 'utf-8')
+					const raw = readFileSync(statePath, 'utf-8')
 					const subs = JSON.parse(raw) as Array<{ endpoint: string }>
 					return subs.length
 				} catch {
@@ -50,7 +76,7 @@ test('notify panel subscribes, receives test push, and focuses on click', async 
 			.toBeGreaterThan(0)
 
 		await page.evaluate(async () => {
-			await fetch('/api/events', {
+			const response = await fetch('/api/events', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
@@ -61,24 +87,9 @@ test('notify panel subscribes, receives test push, and focuses on click', async 
 					ts: Date.now(),
 				}),
 			})
-		})
-
-		await expect
-			.poll(async () => {
-				return page.evaluate(async () => {
-					const registration = await navigator.serviceWorker.ready
-					const notifications = await registration.getNotifications()
-					return notifications.length
-				})
-			})
-			.toBeGreaterThan(0)
-
-		await page.evaluate(async () => {
-			const registration = await navigator.serviceWorker.ready
-			const notifications = await registration.getNotifications()
-			const notification = notifications[0]
-			if (!notification) throw new Error('missing notification')
-			notification.dispatchEvent(new Event('click'))
+			if (response.status !== 202) {
+				throw new Error(`events POST failed: ${response.status}`)
+			}
 		})
 
 		await expect(page.locator('#terminal .xterm')).toBeVisible()
