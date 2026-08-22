@@ -11,6 +11,10 @@ test('loads without console errors', async ({ page }) => {
 	const consoleErrors: string[] = []
 	page.on('console', (message) => {
 		if (message.type() === 'error') {
+			// WebKit logs 'Viewport argument key "interactive-widget" not recognized and
+			// ignored' for interactive-widget=resizes-content — expected noise, the key
+			// targets Android Chrome and is safely ignored elsewhere.
+			if (message.text().includes('interactive-widget')) return
 			consoleErrors.push(message.text())
 		}
 	})
