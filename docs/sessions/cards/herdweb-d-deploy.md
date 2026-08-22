@@ -42,7 +42,7 @@
   6. AGENTS.md 不改（C 卡已把 systemd 操作指向 deploy-herdr.md，本卡在 runbook 内闭环）。
 - **任务类型**：refactor-migration
 - **复杂度**：M
-- **Base commit**：A+B（+C）合并后的 origin/main（派发时主脑回填 sha）
+- **Base commit**：bc7b8ce17a3d7785035e64a43cad74ff689b9dca（A+B+C 合并后的 origin/main，PR #36/#38/#37）
 - **Branch**：由 delegate 分配（`card/<worktree 名>`），执行器不得另建分支
 - **Worktree**：由 delegate 分配
 - **当前唯一写入者**：本卡执行器
