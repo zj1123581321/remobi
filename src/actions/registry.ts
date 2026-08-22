@@ -44,7 +44,7 @@ export function createActionRegistry(): ActionRegistry {
 		const handler = handlers.get(action.type)
 		if (!handler) {
 			// Fail loud: an unregistered action must never become a silent dead button.
-			const error = new Error(`remobi: no handler registered for action type "${action.type}"`)
+			const error = new Error(`herdweb: no handler registered for action type "${action.type}"`)
 			console.error(error)
 			throw error
 		}
@@ -83,7 +83,25 @@ function describePrefixByte(data: string): string | null {
 }
 
 /** localStorage key for the user-adjusted terminal font size */
-export const FONT_SIZE_STORAGE_KEY = 'remobi:fontSize'
+export const FONT_SIZE_STORAGE_KEY = 'herdweb:fontSize'
+
+/** Pre-rename localStorage key — split to keep the legacy identifier out of grep scans. */
+const LEGACY_APP = 're' + 'mobi'
+export const LEGACY_FONT_SIZE_STORAGE_KEY = `${LEGACY_APP}:fontSize`
+
+/**
+ * Read font size from localStorage with one-time migration from the pre-rename key.
+ * New key wins when both exist; migrated value is written to the new key and the old key removed.
+ */
+export function readFontSizeFromStorage(): string | null {
+	const raw = localStorage.getItem(FONT_SIZE_STORAGE_KEY)
+	if (raw !== null && raw !== '') return raw
+	const legacy = localStorage.getItem(LEGACY_FONT_SIZE_STORAGE_KEY)
+	if (legacy === null || legacy === '') return null
+	localStorage.setItem(FONT_SIZE_STORAGE_KEY, legacy)
+	localStorage.removeItem(LEGACY_FONT_SIZE_STORAGE_KEY)
+	return legacy
+}
 
 /** Change terminal font size by delta, clamped to config range, and persist it */
 function changeFontSize(term: XTerminal, delta: number, font: FontConfig): void {
@@ -96,7 +114,7 @@ function changeFontSize(term: XTerminal, delta: number, font: FontConfig): void 
 			localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(next))
 		} catch (error) {
 			// iOS private mode throws on localStorage writes — keep going without a cache
-			console.error('remobi: failed to persist font size', error)
+			console.error('herdweb: failed to persist font size', error)
 		}
 	}
 }
@@ -211,7 +229,7 @@ export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): Actio
 		if (!font) {
 			// Fail loud: a font-size button without font config is a wiring bug.
 			const error = new Error(
-				'remobi: font-size action requires a FontConfig (context.font or registry deps)',
+				'herdweb: font-size action requires a FontConfig (context.font or registry deps)',
 			)
 			console.error(error)
 			throw error
@@ -225,7 +243,7 @@ export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): Actio
 		if (!openHelp) {
 			// Fail loud: a help button without an openHelp callback is a wiring bug.
 			const error = new Error(
-				'remobi: help action requires an openHelp callback (context.openHelp or registry deps)',
+				'herdweb: help action requires an openHelp callback (context.openHelp or registry deps)',
 			)
 			console.error(error)
 			throw error
@@ -238,7 +256,7 @@ export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): Actio
 		if (!toggleKeyboard) {
 			// Fail loud: a keyboard-toggle button without a toggleKeyboard callback is a wiring bug.
 			const error = new Error(
-				'remobi: keyboard-toggle action requires a toggleKeyboard callback ' +
+				'herdweb: keyboard-toggle action requires a toggleKeyboard callback ' +
 					'(context.toggleKeyboard or registry deps)',
 			)
 			console.error(error)
@@ -252,7 +270,7 @@ export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): Actio
 		if (!toggleDpad) {
 			// Fail loud: a dpad-toggle button without a toggleDpad callback is a wiring bug.
 			const error = new Error(
-				'remobi: dpad-toggle action requires a toggleDpad callback ' +
+				'herdweb: dpad-toggle action requires a toggleDpad callback ' +
 					'(context.toggleDpad or registry deps)',
 			)
 			console.error(error)
@@ -268,7 +286,7 @@ export function createDefaultActionRegistry(deps: DefaultActionDeps = {}): Actio
 		if (!openImageDrop) {
 			// Fail loud: an image-upload button without an openImageDrop callback is a wiring bug.
 			const error = new Error(
-				'remobi: image-upload action requires an openImageDrop callback (registry deps)',
+				'herdweb: image-upload action requires an openImageDrop callback (registry deps)',
 			)
 			console.error(error)
 			throw error

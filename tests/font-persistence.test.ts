@@ -1,10 +1,14 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { FONT_SIZE_STORAGE_KEY } from '../src/actions/registry'
+import {
+	FONT_SIZE_STORAGE_KEY,
+	LEGACY_FONT_SIZE_STORAGE_KEY,
+	readFontSizeFromStorage,
+} from '../src/actions/registry'
 import { defaultConfig, defineConfig } from '../src/config'
 import { createGestureLock } from '../src/gestures/lock'
 import { attachPinchGestures } from '../src/gestures/pinch'
-import type { ConnectionStatus, RemobiConfig, XTerminal } from '../src/types'
+import type { ConnectionStatus, HerdwebConfig, XTerminal } from '../src/types'
 import { mockTerminal } from './fixtures'
 
 beforeEach(() => {
@@ -25,7 +29,7 @@ function setInnerHeight(height: number): void {
 }
 
 /** Boot the overlay on a mock mobile terminal and return it once rendered */
-async function bootOverlay(config: RemobiConfig = defineConfig()): Promise<XTerminal> {
+async function bootOverlay(config: HerdwebConfig = defineConfig()): Promise<XTerminal> {
 	Object.defineProperty(navigator, 'maxTouchPoints', { value: 1, configurable: true })
 	// happy-dom lacks document.fonts
 	Object.defineProperty(document, 'fonts', {
@@ -84,7 +88,7 @@ async function bootOverlay(config: RemobiConfig = defineConfig()): Promise<XTerm
 	return term
 }
 
-describe('font size persistence (localStorage remobi:fontSize)', () => {
+describe('font size persistence (localStorage herdweb:fontSize)', () => {
 	test('no persisted value — config default (13) applies', async () => {
 		const term = await bootOverlay()
 		expect(term.options.fontSize).toBe(13)
@@ -128,6 +132,33 @@ describe('font size persistence (localStorage remobi:fontSize)', () => {
 		const term = await bootOverlay()
 		expect(term.options.fontSize).toBe(13)
 		expect(errorSpy).toHaveBeenCalled()
+	})
+
+	test('migrates legacy font size key when new key is absent', () => {
+		localStorage.setItem(LEGACY_FONT_SIZE_STORAGE_KEY, '18')
+		expect(readFontSizeFromStorage()).toBe('18')
+		expect(localStorage.getItem(FONT_SIZE_STORAGE_KEY)).toBe('18')
+		expect(localStorage.getItem(LEGACY_FONT_SIZE_STORAGE_KEY)).toBeNull()
+	})
+
+	test('legacy font size key is ignored when new key already has a value', () => {
+		localStorage.setItem(FONT_SIZE_STORAGE_KEY, '22')
+		localStorage.setItem(LEGACY_FONT_SIZE_STORAGE_KEY, '18')
+		expect(readFontSizeFromStorage()).toBe('22')
+		expect(localStorage.getItem(LEGACY_FONT_SIZE_STORAGE_KEY)).toBe('18')
+	})
+
+	test('no legacy key — migration is a no-op', () => {
+		expect(readFontSizeFromStorage()).toBeNull()
+		expect(localStorage.getItem(FONT_SIZE_STORAGE_KEY)).toBeNull()
+	})
+
+	test('boot overlay migrates legacy font size from pre-rename key', async () => {
+		localStorage.setItem(LEGACY_FONT_SIZE_STORAGE_KEY, '18')
+		const term = await bootOverlay()
+		expect(term.options.fontSize).toBe(18)
+		expect(localStorage.getItem(FONT_SIZE_STORAGE_KEY)).toBe('18')
+		expect(localStorage.getItem(LEGACY_FONT_SIZE_STORAGE_KEY)).toBeNull()
 	})
 })
 

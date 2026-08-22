@@ -108,7 +108,7 @@ export function encodeFullRequest(payload: Uint8Array | ArrayBuffer | string): U
 /** Build the request body used by the documented PCM SAUC flow. */
 export function createFullRequest(options: FullRequestOptions = {}): Uint8Array {
 	const payload = {
-		user: { uid: options.uid ?? 'remobi' },
+		user: { uid: options.uid ?? 'herdweb' },
 		audio: { format: 'pcm', rate: 16_000, bits: 16, channel: 1 },
 		request: {
 			model_name: options.modelName ?? 'bigmodel',

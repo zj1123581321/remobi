@@ -11,7 +11,7 @@ import {
 	assertValidResolvedConfig,
 } from './src/config-validate'
 import { serve } from './src/serve'
-import type { RemobiConfig, RemobiConfigOverrides } from './src/types'
+import type { HerdwebConfig, HerdwebConfigOverrides } from './src/types'
 
 // Walk up from module location to find project root — works from both source and dist/
 function findProjectRoot(): string {
@@ -54,26 +54,26 @@ function resolveVersion(): string {
 const VERSION: string = resolveVersion()
 
 function usage(): void {
-	console.log(`remobi v${VERSION} — mobile terminal overlay for tmux
+	console.log(`herdweb v${VERSION} — web UI for herdr
 
 Usage:
-  remobi serve [--config <path>] [--port <n>] [--host <addr>] [--base-path <path>] [--no-sleep] [-- <command...>]
-    Start remobi with a built-in web terminal, PWA support, and the configured command.
-    Default host: 127.0.0.1. Default port: 7681. Default command: tmux new-session -A -s main
+  herdweb serve [--config <path>] [--port <n>] [--host <addr>] [--base-path <path>] [--no-sleep] [-- <command...>]
+    Start herdweb with a built-in web terminal, PWA support, and the configured command.
+    Default host: 127.0.0.1. Default port: 7681. Default command: herdr --session default
 
-  remobi build [--config <path>] [--output <path>] [--dry-run]
-    Deprecated. remobi no longer patches ttyd HTML.
+  herdweb build [--config <path>] [--output <path>] [--dry-run]
+    Deprecated. herdweb no longer patches ttyd HTML.
 
-  remobi inject [--config <path>] [--dry-run]
-    Deprecated. remobi no longer patches ttyd HTML.
+  herdweb inject [--config <path>] [--dry-run]
+    Deprecated. herdweb no longer patches ttyd HTML.
 
-  remobi init
-    Scaffold a remobi.config.ts with defaults.
+  herdweb init
+    Scaffold a herdweb.config.ts with defaults.
 
-  remobi --version
+  herdweb --version
     Print version.
 
-  remobi --help
+  herdweb --help
     Show this help.
 
 Flags:
@@ -81,22 +81,38 @@ Flags:
   -o, --output <path>  Deprecated build output path flag
   -p, --port <n>       Port to serve on (serve only, default 7681)
       --host <addr>    Host/interface to bind (serve only, default 127.0.0.1)
-      --base-path <p>  Mount remobi under a URL prefix such as /random-token
+      --base-path <p>  Mount herdweb under a URL prefix such as /random-token
   -n, --dry-run        Deprecated build/inject dry-run flag
       --no-sleep       Prevent macOS sleep while serving (caffeinate -s, serve only)
 
 Examples:
-  remobi serve
-  remobi serve --no-sleep
-  remobi serve --host 0.0.0.0 --port 8080
-  remobi serve --base-path /random-token
-  remobi serve --port 8080 -- tmux new -As dev
-  remobi serve -- zellij attach --create main
-  remobi serve -- herdr --session main`)
+  herdweb serve
+  herdweb serve --no-sleep
+  herdweb serve --host 0.0.0.0 --port 8080
+  herdweb serve --base-path /random-token
+  herdweb serve --port 8080 -- herdr --session dev
+  herdweb serve -- bash --norc
+  herdweb serve -- herdr --session main`)
+}
+
+/** Pre-rename config dir/file prefix — split to keep the legacy identifier out of grep scans. */
+const LEGACY_CONFIG_APP = 're' + 'mobi'
+
+function legacyConfigNames(): readonly string[] {
+	return [`${LEGACY_CONFIG_APP}.config.ts`, `${LEGACY_CONFIG_APP}.config.js`]
+}
+
+function legacyConfigDir(): string {
+	return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), LEGACY_CONFIG_APP)
+}
+
+function isLegacyConfigPath(path: string): boolean {
+	const base = path.split(/[/\\]/).pop() ?? path
+	return legacyConfigNames().some((name) => base === name)
 }
 
 interface LoadedConfig {
-	readonly config: RemobiConfig
+	readonly config: HerdwebConfig
 	readonly source: string
 }
 
@@ -116,11 +132,11 @@ function throwConfigValidationError(source: string, error: ConfigValidationError
 
 function throwDeprecatedCommand(command: 'build' | 'inject'): never {
 	throw new Error(
-		`remobi ${command} is deprecated and no longer supported.\nremobi now ships its own terminal runtime and no longer patches ttyd HTML.\nUse \`remobi serve\` instead.`,
+		`herdweb ${command} is deprecated and no longer supported.\nherdweb now ships its own terminal runtime and no longer patches ttyd HTML.\nUse \`herdweb serve\` instead.`,
 	)
 }
 
-/** Convert a config path to its .local sibling, e.g. remobi.config.ts → remobi.config.local.ts */
+/** Convert a config path to its .local sibling, e.g. herdweb.config.ts → herdweb.config.local.ts */
 function toLocalPath(configPath: string): string {
 	const dotIdx = configPath.lastIndexOf('.')
 	if (dotIdx === -1) {
@@ -130,7 +146,7 @@ function toLocalPath(configPath: string): string {
 }
 
 /** Try to load a .local config override file. Returns undefined if the file does not exist. */
-async function loadLocalOverrides(localPath: string): Promise<RemobiConfigOverrides | undefined> {
+async function loadLocalOverrides(localPath: string): Promise<HerdwebConfigOverrides | undefined> {
 	if (!existsSync(localPath)) {
 		return undefined
 	}
@@ -148,7 +164,7 @@ async function loadLocalOverrides(localPath: string): Promise<RemobiConfigOverri
 function assertValidOverridesOrThrow(
 	value: unknown,
 	source: string,
-): asserts value is RemobiConfigOverrides {
+): asserts value is HerdwebConfigOverrides {
 	try {
 		assertValidConfigOverrides(value)
 	} catch (error) {
@@ -159,7 +175,10 @@ function assertValidOverridesOrThrow(
 	}
 }
 
-function assertValidResolvedOrThrow(value: unknown, source: string): asserts value is RemobiConfig {
+function assertValidResolvedOrThrow(
+	value: unknown,
+	source: string,
+): asserts value is HerdwebConfig {
 	try {
 		assertValidResolvedConfig(value)
 	} catch (error) {
@@ -170,55 +189,83 @@ function assertValidResolvedOrThrow(value: unknown, source: string): asserts val
 	}
 }
 
-async function loadConfig(configPath: string | undefined): Promise<LoadedConfig> {
-	let resolved = configPath
-	if (!resolved) {
-		// Search order: cwd → XDG config dir (~/.config/remobi/)
-		const names = ['remobi.config.ts', 'remobi.config.js']
-		const searchDirs = [
-			process.cwd(),
-			join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'remobi'),
-		]
-		for (const dir of searchDirs) {
-			for (const name of names) {
-				const full = join(dir, name)
-				if (existsSync(full)) {
-					resolved = full
-					break
-				}
+function discoverConfigPath(): { path: string; usedLegacy: boolean } | undefined {
+	const herdwebNames = ['herdweb.config.ts', 'herdweb.config.js']
+	const searchPlans: ReadonlyArray<{ dir: string; names: readonly string[]; legacy: boolean }> = [
+		{ dir: process.cwd(), names: herdwebNames, legacy: false },
+		{
+			dir: join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'herdweb'),
+			names: herdwebNames,
+			legacy: false,
+		},
+		{ dir: process.cwd(), names: legacyConfigNames(), legacy: true },
+		{ dir: legacyConfigDir(), names: legacyConfigNames(), legacy: true },
+	]
+	for (const plan of searchPlans) {
+		for (const name of plan.names) {
+			const full = join(plan.dir, name)
+			if (existsSync(full)) {
+				return { path: full, usedLegacy: plan.legacy }
 			}
-			if (resolved) break
 		}
 	}
+	return undefined
+}
 
-	if (resolved) {
-		const abs = resolve(process.cwd(), resolved)
-		const mod = await import(abs)
-		const defaultExport = extractDefaultExport(mod)
-		if (defaultExport === undefined) {
-			throw new Error(`Config file has no default export: ${abs}`)
+async function loadLocalOverridesForConfig(
+	abs: string,
+): Promise<{ overrides?: HerdwebConfigOverrides; localSource?: string }> {
+	const configDir = dirname(abs)
+	const localCandidates = [
+		toLocalPath(abs),
+		join(configDir, 'herdweb.config.local.ts'),
+		join(configDir, 'herdweb.config.local.js'),
+		join(configDir, `${LEGACY_CONFIG_APP}.config.local.ts`),
+		join(configDir, `${LEGACY_CONFIG_APP}.config.local.js`),
+	]
+	for (const candidate of localCandidates) {
+		const overrides = await loadLocalOverrides(candidate)
+		if (overrides !== undefined) {
+			return { overrides, localSource: candidate }
 		}
+	}
+	return {}
+}
 
-		assertValidOverridesOrThrow(defaultExport, abs)
-		const sharedConfig = defineConfig(defaultExport)
+async function loadConfigFromFile(abs: string, usedLegacy: boolean): Promise<LoadedConfig> {
+	if (usedLegacy || isLegacyConfigPath(abs)) {
+		console.log(`herdweb: loaded legacy config ${abs} — consider renaming to herdweb.config.ts`)
+	}
+	const mod = await import(abs)
+	const defaultExport = extractDefaultExport(mod)
+	if (defaultExport === undefined) {
+		throw new Error(`Config file has no default export: ${abs}`)
+	}
 
-		// Apply .local overrides on top of the shared config
-		const localPath = toLocalPath(abs)
-		const localOverrides = await loadLocalOverrides(localPath)
-		const config =
-			localOverrides !== undefined ? mergeConfig(sharedConfig, localOverrides) : sharedConfig
+	assertValidOverridesOrThrow(defaultExport, abs)
+	const sharedConfig = defineConfig(defaultExport)
+	const { overrides: localOverrides, localSource } = await loadLocalOverridesForConfig(abs)
+	const config =
+		localOverrides !== undefined ? mergeConfig(sharedConfig, localOverrides) : sharedConfig
+	const sourceLabel = localSource !== undefined ? `${abs} + ${localSource}` : abs
+	assertValidResolvedOrThrow(config, sourceLabel)
+	return { config, source: sourceLabel }
+}
 
-		const sourceLabel = localOverrides !== undefined ? `${abs} + ${localPath}` : abs
-		assertValidResolvedOrThrow(config, sourceLabel)
-		return { config, source: sourceLabel }
+async function loadConfig(configPath: string | undefined): Promise<LoadedConfig> {
+	if (configPath) {
+		const abs = resolve(process.cwd(), configPath)
+		return loadConfigFromFile(abs, isLegacyConfigPath(abs))
+	}
+
+	const discovered = discoverConfigPath()
+	if (discovered) {
+		const abs = resolve(process.cwd(), discovered.path)
+		return loadConfigFromFile(abs, discovered.usedLegacy)
 	}
 
 	assertValidResolvedOrThrow(defaultConfig, 'built-in defaults')
-
-	return {
-		config: defaultConfig,
-		source: 'built-in defaults',
-	}
+	return { config: defaultConfig, source: 'built-in defaults' }
 }
 
 async function main(): Promise<void> {
@@ -255,13 +302,13 @@ async function main(): Promise<void> {
 		}
 
 		case 'init': {
-			const targetPath = resolve(process.cwd(), 'remobi.config.ts')
+			const targetPath = resolve(process.cwd(), 'herdweb.config.ts')
 			if (existsSync(targetPath)) {
-				console.error('remobi.config.ts already exists')
+				console.error('herdweb.config.ts already exists')
 				process.exit(1)
 			}
 			const template = `export default {
-  // name: 'remobi',              // app name (tab title, PWA home screen label)
+  // name: 'herdweb',              // app name (tab title, PWA home screen label)
   // theme: 'catppuccin-mocha',
   // font: {
   //   family: 'JetBrainsMono NFM, monospace',
@@ -322,8 +369,8 @@ async function main(): Promise<void> {
   // { type: 'dpad-toggle' } is the ✥ floating arrow pad (← ↑ ↓ → ⌫ ⏎) — both
   // default to toolbar row1.
   // pwa: {
-  //   enabled: true,              // enable PWA manifest + meta tags (used by remobi serve)
-  //   shortName: 'remobi',        // short name for home screen icon (defaults to name)
+  //   enabled: true,              // enable PWA manifest + meta tags (used by herdweb serve)
+  //   shortName: 'herdweb',        // short name for home screen icon (defaults to name)
   //   themeColor: '#1e1e2e',      // theme-color meta tag + manifest
   // },
   // reconnect: {

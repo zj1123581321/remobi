@@ -259,7 +259,7 @@ export function createComboPicker(): ComboPickerResult {
 		try {
 			await dispatch.sendText(parsed.data)
 		} catch (errorValue) {
-			console.error('remobi: combo send failed', errorValue)
+			console.error('herdweb: combo send failed', errorValue)
 		} finally {
 			dispatch.focusIfNeeded()
 		}

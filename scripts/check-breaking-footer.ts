@@ -5,7 +5,7 @@ function main(): void {
 	const [, , commitMessagePath] = process.argv
 
 	if (commitMessagePath === undefined) {
-		console.error('remobi: missing commit message path')
+		console.error('herdweb: missing commit message path')
 		process.exit(1)
 	}
 
@@ -16,7 +16,7 @@ function main(): void {
 		return
 	}
 
-	console.error(`remobi: ${error}`)
+	console.error(`herdweb: ${error}`)
 	process.exit(1)
 }
 

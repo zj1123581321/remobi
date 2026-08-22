@@ -1,4 +1,4 @@
-import type { ControlButton, FloatingButtonGroup, RemobiConfig, XTerminal } from '../types'
+import type { ControlButton, FloatingButtonGroup, HerdwebConfig, XTerminal } from '../types'
 import { el } from '../util/dom'
 import { haptic } from '../util/haptic'
 import { conditionalFocus, isKeyboardOpen } from '../util/keyboard'
@@ -22,7 +22,7 @@ function renderButtonTable(title: string, buttons: readonly ControlButton[]): Do
 	return frag
 }
 
-function renderGestures(config: RemobiConfig): DocumentFragment {
+function renderGestures(config: HerdwebConfig): DocumentFragment {
 	const frag = document.createDocumentFragment()
 	frag.appendChild(el('h2', {}, 'Gestures'))
 	const table = el('table')
@@ -65,7 +65,7 @@ function renderGestures(config: RemobiConfig): DocumentFragment {
 }
 
 /** Build the help overlay content as a DocumentFragment — no innerHTML */
-function buildHelpContent(config: RemobiConfig, version?: string): DocumentFragment {
+function buildHelpContent(config: HerdwebConfig, version?: string): DocumentFragment {
 	const frag = document.createDocumentFragment()
 
 	const closeBtn = el('button', { class: 'wt-help-close' }, '\u00D7')
@@ -88,7 +88,7 @@ function buildHelpContent(config: RemobiConfig, version?: string): DocumentFragm
 	}
 
 	if (version !== undefined) {
-		frag.appendChild(el('p', { class: 'wt-help-version' }, `remobi v${version}`))
+		frag.appendChild(el('p', { class: 'wt-help-version' }, `herdweb v${version}`))
 	}
 
 	return frag
@@ -103,7 +103,7 @@ interface HelpOverlayResult {
 /** Create the help overlay — opened via the `help` button action */
 export function createHelpOverlay(
 	term: XTerminal,
-	config: RemobiConfig,
+	config: HerdwebConfig,
 	version?: string,
 ): HelpOverlayResult {
 	const overlay = el('div', { id: 'wt-help' })

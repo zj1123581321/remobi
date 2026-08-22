@@ -1,7 +1,7 @@
 import { DoubaoEngine } from '../asr/doubao/engine'
 import type { AsrEngine, AsrErrorCode } from '../asr/types'
 import type { HookRegistry } from '../hooks/registry'
-import type { ConnectionStatus, InputActionResult, RemobiConfig, XTerminal } from '../types'
+import type { ConnectionStatus, HerdwebConfig, InputActionResult, XTerminal } from '../types'
 import { haptic } from '../util/haptic'
 import { conditionalFocus, isKeyboardOpen } from '../util/keyboard'
 import { onTap } from '../util/tap'
@@ -29,7 +29,7 @@ export interface MicController {
 
 interface MicControllerOptions {
 	readonly term: XTerminal
-	readonly config: RemobiConfig
+	readonly config: HerdwebConfig
 	readonly hooks: HookRegistry
 	readonly engine?: AsrEngine
 	readonly closeComposerOverlays?: () => void
@@ -161,7 +161,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 
 	function stopEngine(): void {
 		void engine.stop().catch((error: unknown) => {
-			console.error('remobi: ASR stop failed', error)
+			console.error('herdweb: ASR stop failed', error)
 		})
 	}
 
@@ -417,7 +417,7 @@ export function createMicController(options: MicControllerOptions): MicControlle
 		preview.showMessage('Finishing…')
 		finalTimer = setTimeout(() => finishPreview(sessionGeneration), WAITING_FINAL_TIMEOUT_MS)
 		void engine.stop().catch((error: unknown) => {
-			console.error('remobi: ASR stop failed', error)
+			console.error('herdweb: ASR stop failed', error)
 			if (currentState === 'waiting-final') showError('socket-closed', sessionGeneration)
 		})
 	}

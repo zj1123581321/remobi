@@ -1,5 +1,5 @@
 /**
- * Valibot schemas for remobi config validation.
+ * Valibot schemas for herdweb config validation.
  * Only used at CLI time (build/inject/serve) — never in the browser bundle.
  */
 import * as v from 'valibot'
@@ -480,7 +480,7 @@ function voiceInputPlacementCheck<T extends Record<string, unknown>>() {
 	})
 }
 
-const remobiConfigOverridesBaseSchema = v.strictObject({
+const herdwebConfigOverridesBaseSchema = v.strictObject({
 	name: v.optional(v.string()),
 	theme: v.optional(termThemeOverridesSchema),
 	font: v.optional(fontOverridesSchema),
@@ -505,13 +505,13 @@ const remobiConfigOverridesBaseSchema = v.strictObject({
 })
 
 /** Schema for config overrides (all fields optional, button arrays accept array | function) */
-export const remobiConfigOverridesSchema = v.pipe(
-	remobiConfigOverridesBaseSchema,
-	voiceInputPlacementCheck<v.InferOutput<typeof remobiConfigOverridesBaseSchema>>(),
+export const herdwebConfigOverridesSchema = v.pipe(
+	herdwebConfigOverridesBaseSchema,
+	voiceInputPlacementCheck<v.InferOutput<typeof herdwebConfigOverridesBaseSchema>>(),
 )
 
 /** Schema for fully resolved config (all required fields, plain button arrays) */
-const remobiConfigResolvedBaseSchema = v.strictObject({
+const herdwebConfigResolvedBaseSchema = v.strictObject({
 	name: v.string(),
 	theme: termThemeResolvedSchema,
 	font: fontResolvedSchema,
@@ -531,7 +531,7 @@ const remobiConfigResolvedBaseSchema = v.strictObject({
 	asr: asrResolvedSchema,
 })
 
-export const remobiConfigResolvedSchema = v.pipe(
-	remobiConfigResolvedBaseSchema,
-	voiceInputPlacementCheck<v.InferOutput<typeof remobiConfigResolvedBaseSchema>>(),
+export const herdwebConfigResolvedSchema = v.pipe(
+	herdwebConfigResolvedBaseSchema,
+	voiceInputPlacementCheck<v.InferOutput<typeof herdwebConfigResolvedBaseSchema>>(),
 )

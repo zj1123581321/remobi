@@ -1,4 +1,4 @@
-import type { ControlButton, KeyboardMode, RemobiConfig, XTerminal } from '../types'
+import type { ControlButton, HerdwebConfig, KeyboardMode, XTerminal } from '../types'
 import { el } from '../util/dom'
 import { isKeyboardOpen } from '../util/keyboard'
 
@@ -118,7 +118,7 @@ export function createKeyboardController(term: XTerminal, mode: KeyboardMode): K
 	function toggle(): void {
 		if (!available) {
 			throw new Error(
-				`remobi: keyboard-toggle unavailable — terminal bridge lacks ${mode === 'manual' ? 'setKeyboardSuppressed' : 'blur'}`,
+				`herdweb: keyboard-toggle unavailable — terminal bridge lacks ${mode === 'manual' ? 'setKeyboardSuppressed' : 'blur'}`,
 			)
 		}
 		const now = Date.now()
@@ -179,7 +179,7 @@ export function createKeyboardController(term: XTerminal, mode: KeyboardMode): K
  * of toolbar row1 (row1 is the primary row — it always renders). Pure —
  * returns a new config.
  */
-export function withKeyboardEscapeHatch(config: RemobiConfig): RemobiConfig {
+export function withKeyboardEscapeHatch(config: HerdwebConfig): HerdwebConfig {
 	if (config.mobile.keyboardMode !== 'manual') return config
 
 	// Directly reachable buttons: always rendered without any intermediate step

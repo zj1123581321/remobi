@@ -5,7 +5,7 @@ import {
 	suppressSynthesisedMouse,
 } from '../controls/keyboard-controller'
 import type { HookRegistry } from '../hooks/registry'
-import type { ControlButton, RemobiConfig, XTerminal } from '../types'
+import type { ControlButton, HerdwebConfig, XTerminal } from '../types'
 import { el } from '../util/dom'
 import { haptic } from '../util/haptic'
 import { conditionalFocus, isKeyboardOpen } from '../util/keyboard'
@@ -26,7 +26,7 @@ export function createDrawer(
 	buttons: readonly ControlButton[],
 	config: {
 		readonly hooks: HookRegistry
-		readonly appConfig: RemobiConfig
+		readonly appConfig: HerdwebConfig
 		readonly actions?: ActionRegistry
 		readonly openComboPicker?: (options: {
 			readonly sendText: (data: string) => Promise<void>
@@ -99,7 +99,7 @@ export function createDrawer(
 					openComboPicker: config.openComboPicker,
 				})
 				.catch((error) => {
-					console.error('remobi: drawer action execution failed', error)
+					console.error('herdweb: drawer action execution failed', error)
 					button.classList.add('wt-action-error')
 					conditionalFocus(term, kbWasOpen)
 				})

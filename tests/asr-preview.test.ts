@@ -23,7 +23,7 @@ describe('voice composer shell', () => {
 		expect(composer.input).toBeInstanceOf(HTMLTextAreaElement)
 		expect(composer.input.getAttribute('rows')).toBe('1')
 		expect(composer.input.placeholder).toBe('Speak or type…')
-		expect(composer.element.querySelector('[data-remobi-control="composer-mic"]')).not.toBeNull()
+		expect(composer.element.querySelector('[data-herdweb-control="composer-mic"]')).not.toBeNull()
 		expect(composer.element.querySelector('.wt-composer-send')?.textContent).toBe('Send')
 		expect(
 			composer.element

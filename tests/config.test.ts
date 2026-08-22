@@ -34,8 +34,8 @@ describe('defineConfig', () => {
 		expect(config.gestures.swipe.maxDuration).toBe(400)
 		expect(config.gestures.swipe.left).toBe('\x02n')
 		expect(config.gestures.swipe.right).toBe('\x02p')
-		expect(config.gestures.swipe.leftLabel).toBe('Next tmux window')
-		expect(config.gestures.swipe.rightLabel).toBe('Previous tmux window')
+		expect(config.gestures.swipe.leftLabel).toBe('Next herdr tab')
+		expect(config.gestures.swipe.rightLabel).toBe('Previous herdr tab')
 		// Pinch defaults preserved
 		expect(config.gestures.pinch.enabled).toBe(false)
 	})
@@ -49,8 +49,8 @@ describe('defineConfig', () => {
 		// Other swipe defaults preserved
 		expect(config.gestures.swipe.enabled).toBe(false)
 		expect(config.gestures.swipe.threshold).toBe(80)
-		expect(config.gestures.swipe.leftLabel).toBe('Next tmux window')
-		expect(config.gestures.swipe.rightLabel).toBe('Previous tmux window')
+		expect(config.gestures.swipe.leftLabel).toBe('Next herdr tab')
+		expect(config.gestures.swipe.rightLabel).toBe('Previous herdr tab')
 	})
 
 	test('replaces arrays entirely (toolbar row1)', () => {
@@ -160,18 +160,18 @@ describe('defaultConfig', () => {
 		expect(defaultConfig.drawer.buttons.some((button) => button.id === 'image-upload')).toBe(false)
 	})
 
-	test('default drawer uses stock tmux bindings only', () => {
+	test('default drawer uses herdr bindings only', () => {
 		const byId = new Map(defaultConfig.drawer.buttons.map((button) => [button.id, button]))
 
-		expect(byId.get('tmux-split-vertical')?.action).toEqual({ type: 'send', data: '\x02%' })
-		expect(byId.get('tmux-split-horizontal')?.action).toEqual({ type: 'send', data: '\x02"' })
-		expect(byId.get('tmux-sessions')?.action).toEqual({ type: 'send', data: '\x02s' })
-		expect(byId.get('tmux-windows')?.action).toEqual({ type: 'send', data: '\x02w' })
-		expect(byId.get('tmux-copy')?.action).toEqual({ type: 'send', data: '\x02[' })
-		expect(byId.get('tmux-help')?.action).toEqual({ type: 'send', data: '\x02?' })
-		expect(byId.has('tmux-git')).toBe(false)
-		expect(byId.has('tmux-files')).toBe(false)
-		expect(byId.has('tmux-links')).toBe(false)
+		expect(byId.get('herdr-split-v')?.action).toEqual({ type: 'send', data: '\x02v' })
+		expect(byId.get('herdr-split-h')?.action).toEqual({ type: 'send', data: '\x02-' })
+		expect(byId.get('herdr-workspaces')?.action).toEqual({ type: 'send', data: '\x02w' })
+		expect(byId.get('herdr-sidebar')?.action).toEqual({ type: 'send', data: '\x02b' })
+		expect(byId.get('herdr-scrollback')?.action).toEqual({ type: 'send', data: '\x02e' })
+		expect(byId.get('herdr-help')?.action).toEqual({ type: 'send', data: '\x02?' })
+		expect(byId.has('tmux-split-vertical')).toBe(false)
+		expect(byId.has('tmux-sessions')).toBe(false)
+		expect(byId.has('tmux-copy')).toBe(false)
 	})
 
 	test('row1 is Esc, C-c, ✥, ⏎, Voice, 🖼, ⌨, ☰', () => {
@@ -206,7 +206,7 @@ describe('defaultConfig', () => {
 	})
 
 	test('has default name', () => {
-		expect(defaultConfig.name).toBe('remobi')
+		expect(defaultConfig.name).toBe('herdweb')
 	})
 
 	test('has default pwa config', () => {
@@ -214,12 +214,12 @@ describe('defaultConfig', () => {
 		expect(defaultConfig.pwa.themeColor).toBe('#1e1e2e')
 	})
 
-	test('swipe defaults to tmux next/prev window', () => {
+	test('swipe defaults to herdr next/prev tab', () => {
 		expect(defaultConfig.gestures.swipe.enabled).toBe(false)
 		expect(defaultConfig.gestures.swipe.left).toBe('\x02n')
 		expect(defaultConfig.gestures.swipe.right).toBe('\x02p')
-		expect(defaultConfig.gestures.swipe.leftLabel).toBe('Next tmux window')
-		expect(defaultConfig.gestures.swipe.rightLabel).toBe('Previous tmux window')
+		expect(defaultConfig.gestures.swipe.leftLabel).toBe('Next herdr tab')
+		expect(defaultConfig.gestures.swipe.rightLabel).toBe('Previous herdr tab')
 	})
 })
 

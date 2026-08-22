@@ -13,20 +13,20 @@ import type {
 	ConnectionFailureReason,
 	ConnectionState,
 	ConnectionStatus,
+	HerdwebConfig,
 	InputActionResult,
-	RemobiConfig,
 	XTerminal,
 } from './types'
 import { el } from './util/dom'
 import { onTap } from './util/tap'
 
-declare const __remobiConfig: RemobiConfig
-declare const __remobiVersion: string | undefined
-declare const __remobiBasePath: string | undefined
+declare const __herdwebConfig: HerdwebConfig
+declare const __herdwebVersion: string | undefined
+declare const __herdwebBasePath: string | undefined
 
 function createSocketUrl(): string {
 	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-	const socketPath = joinBasePath(__remobiBasePath ?? '/', '/ws')
+	const socketPath = joinBasePath(__herdwebBasePath ?? '/', '/ws')
 	return `${protocol}//${window.location.host}${socketPath}`
 }
 
@@ -75,7 +75,7 @@ function createTermBridge(
 		get theme() {
 			return term.options.theme
 		},
-		set theme(value: Partial<RemobiConfig['theme']> | undefined) {
+		set theme(value: Partial<HerdwebConfig['theme']> | undefined) {
 			term.options.theme = value
 		},
 		get fontFamily() {
@@ -116,7 +116,7 @@ function createTermBridge(
 		setKeyboardSuppressed(suppressed: boolean) {
 			const textarea = term.textarea
 			if (!textarea) {
-				throw new Error('remobi: terminal textarea unavailable (terminal not open)')
+				throw new Error('herdweb: terminal textarea unavailable (terminal not open)')
 			}
 			if (suppressed) {
 				// Spike 增量0 探针⑤: blur first — flipping the attribute alone does
@@ -130,7 +130,7 @@ function createTermBridge(
 		onFocusChange(handler: (focused: boolean) => void) {
 			const textarea = term.textarea
 			if (!textarea) {
-				throw new Error('remobi: terminal textarea unavailable (terminal not open)')
+				throw new Error('herdweb: terminal textarea unavailable (terminal not open)')
 			}
 			const onFocus = (): void => handler(true)
 			const onBlur = (): void => handler(false)
@@ -169,7 +169,7 @@ function clearTimer(timer: number | undefined): void {
 
 function createSessionStatusOverlay(onReload: () => void): SessionStatusOverlay {
 	const overlay = el('div', {
-		id: 'remobi-session-status',
+		id: 'herdweb-session-status',
 		style: [
 			'display:none',
 			'position:fixed',
@@ -212,10 +212,10 @@ function createSessionStatusOverlay(onReload: () => void): SessionStatusOverlay 
 	return { element: overlay, message, button }
 }
 
-function main(config: RemobiConfig, version: string | undefined): void {
+function main(config: HerdwebConfig, version: string | undefined): void {
 	const container = document.getElementById('terminal')
 	if (!(container instanceof HTMLElement)) {
-		throw new Error('remobi: missing #terminal container')
+		throw new Error('herdweb: missing #terminal container')
 	}
 
 	const term = new Terminal({
@@ -285,7 +285,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		if (!notSentNoticeShown) {
 			notSentNoticeShown = true
 			window.dispatchEvent(
-				new CustomEvent('remobi-connection-notice', {
+				new CustomEvent('herdweb-connection-notice', {
 					detail: 'Not sent — still syncing.',
 				}),
 			)
@@ -297,7 +297,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 			if (!notSentNoticeShown) {
 				notSentNoticeShown = true
 				window.dispatchEvent(
-					new CustomEvent('remobi-connection-notice', {
+					new CustomEvent('herdweb-connection-notice', {
 						detail: 'Not sent — still syncing.',
 					}),
 				)
@@ -464,7 +464,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		}
 		if (connectionStatus.consecutivePreSyncFailures >= PRE_SYNC_FAILURES_BEFORE_AUTH_HINT) {
 			window.dispatchEvent(
-				new CustomEvent('remobi-connection-notice', {
+				new CustomEvent('herdweb-connection-notice', {
 					detail:
 						reason === 'protocol-error'
 							? 'Connection failed — refresh, and check the server version.'
@@ -506,7 +506,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		invalidateConnection()
 		socket = null
 		if (notice) {
-			window.dispatchEvent(new CustomEvent('remobi-connection-notice', { detail: notice }))
+			window.dispatchEvent(new CustomEvent('herdweb-connection-notice', { detail: notice }))
 		}
 		if (connectionStatus.state !== 'synced' || reason === 'protocol-error') {
 			recordPreSyncFailure(reason)
@@ -514,9 +514,9 @@ function main(config: RemobiConfig, version: string | undefined): void {
 			setConnectionStatus('disconnected', reason)
 		}
 		if (sessionEnded) {
-			const sessionEndedNotice = 'Session ended — restart remobi to start a new one.'
+			const sessionEndedNotice = 'Session ended — restart herdweb to start a new one.'
 			window.dispatchEvent(
-				new CustomEvent('remobi-connection-notice', { detail: sessionEndedNotice }),
+				new CustomEvent('herdweb-connection-notice', { detail: sessionEndedNotice }),
 			)
 			showSessionStatus(sessionEndedNotice)
 		}
@@ -640,7 +640,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 				exitReceived = true
 				return
 			case 'error':
-				console.error(`remobi: ${message.message}`)
+				console.error(`herdweb: ${message.message}`)
 				return
 			case 'pong':
 				handlePong(myEpoch, message.id)
@@ -709,7 +709,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 
 		const nextSocket = new WebSocket(createSocketUrl())
 		socket = nextSocket
-		window.__remobiSockets = [nextSocket]
+		window.__herdwebSockets = [nextSocket]
 
 		nextSocket.addEventListener('open', () => {
 			if (myEpoch !== currentEpoch) return
@@ -748,7 +748,7 @@ function main(config: RemobiConfig, version: string | undefined): void {
 		send({ type: 'input', data })
 	})
 	window.term = termBridge
-	window.__remobiResize = syncSize
+	window.__herdwebResize = syncSize
 
 	function onVisibilityChange(): void {
 		if (document.visibilityState === 'hidden') {
@@ -827,10 +827,10 @@ function main(config: RemobiConfig, version: string | undefined): void {
 	// synced state and sendInputAction() enforces heartbeat freshness internally.
 	const imageDrop = createImageDropController({
 		term: termBridge,
-		basePath: __remobiBasePath ?? '/',
+		basePath: __herdwebBasePath ?? '/',
 	})
 	document.body.appendChild(imageDrop.element)
 	init(config, hooks, version, { openImageDrop: imageDrop.open })
 }
 
-main(__remobiConfig, typeof __remobiVersion === 'undefined' ? undefined : __remobiVersion)
+main(__herdwebConfig, typeof __herdwebVersion === 'undefined' ? undefined : __herdwebVersion)

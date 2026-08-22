@@ -3,7 +3,7 @@
  * /api/image-drop → bytes land 0600 in the serve process's isolated TMPDIR →
  * the path travels the real input-action into the PTY and shows at the bash
  * prompt, but is never followed by Enter (no execution, no new prompt).
- * Runs on both projects (Pixel 5 Chromium, iPhone 13 WebKit) × base paths (/ and /remobi).
+ * Runs on both projects (Pixel 5 Chromium, iPhone 13 WebKit) × base paths (/ and /herdweb).
  */
 import { readFileSync, statSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
@@ -13,7 +13,7 @@ import { startIsolatedServe } from './isolated-serve'
 /** Minimal PNG the server accepts: magic bytes + payload — format is sniffed from magic bytes only. */
 const PNG_BYTES = Buffer.concat([
 	Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-	Buffer.from('remobi-image-drop-e2e-payload'),
+	Buffer.from('herdweb-image-drop-e2e-payload'),
 ])
 
 /** Raw xterm rows; rows are padded with spaces, so callers usually normalise whitespace. */
@@ -26,7 +26,7 @@ async function terminalTextFlat(page: Page): Promise<string> {
 	return (await terminalText(page)).replace(/\s+/g, '')
 }
 
-for (const basePath of [undefined, '/remobi'] as const) {
+for (const basePath of [undefined, '/herdweb'] as const) {
 	const label = basePath ?? '/'
 
 	test(`image drop inserts path into PTY without Enter (base path ${label})`, async ({ page }) => {
@@ -52,7 +52,7 @@ for (const basePath of [undefined, '/remobi'] as const) {
 				timeout: 10_000,
 			})
 			const droppedPath = (await page.locator('.wt-image-drop-path').textContent()) ?? ''
-			expect(droppedPath).toMatch(/remobi-drop-[0-9a-f-]+\.png$/)
+			expect(droppedPath).toMatch(/herdweb-drop-[0-9a-f-]+\.png$/)
 			expect(droppedPath.startsWith(`${tmpDir}/`)).toBe(true)
 
 			// The uploaded bytes landed in the isolated TMPDIR byte-for-byte, with 0600.

@@ -57,7 +57,7 @@ describe('toolbar integration', () => {
 		const buttons = row1?.querySelectorAll('button')
 		// voice-input is on default row1 but stays hidden until ASR is available
 		expect(buttons?.length).toBe(defaultConfig.toolbar.row1.length - 1)
-		expect(toolbar.querySelector('[data-remobi-button-id="voice-input"]')).toBeNull()
+		expect(toolbar.querySelector('[data-herdweb-button-id="voice-input"]')).toBeNull()
 	})
 
 	test('row1 renders the voice-input button when a micController is wired', () => {
@@ -82,7 +82,7 @@ describe('toolbar integration', () => {
 
 		const row1 = toolbar.querySelector('.wt-row')
 		expect(row1?.querySelectorAll('button').length).toBe(defaultConfig.toolbar.row1.length)
-		expect(toolbar.querySelector('[data-remobi-button-id="voice-input"]')).not.toBeNull()
+		expect(toolbar.querySelector('[data-herdweb-button-id="voice-input"]')).not.toBeNull()
 	})
 
 	test('renders voice input as an icon button with the mic class', () => {
@@ -235,7 +235,7 @@ describe('drawer close behaviour', () => {
 	}
 
 	test('font-size actions keep the drawer open (repeat taps)', async () => {
-		window.__remobiResize = () => {}
+		window.__herdwebResize = () => {}
 		const result = openDrawerWith([
 			{
 				id: 'font-decrease',
@@ -256,7 +256,7 @@ describe('drawer close behaviour', () => {
 		await tapGridButton(result.drawer, 1)
 		expect(result.isOpen()).toBe(true)
 
-		window.__remobiResize = undefined
+		window.__herdwebResize = undefined
 	})
 
 	test('help action keeps the drawer open', async () => {
@@ -264,7 +264,7 @@ describe('drawer close behaviour', () => {
 			{
 				id: 'guide',
 				label: 'Guide',
-				description: 'Open the remobi help guide',
+				description: 'Open the herdweb help guide',
 				action: { type: 'help' },
 			},
 		])
@@ -312,14 +312,14 @@ describe('help overlay integration', () => {
 
 		const versionEl = element.querySelector('.wt-help-version')
 		expect(versionEl).not.toBeNull()
-		expect(versionEl?.textContent).toBe('remobi v1.2.3')
+		expect(versionEl?.textContent).toBe('herdweb v1.2.3')
 	})
 
 	test('shows dev version with hash', () => {
 		const term = mockTerminal()
 		const { element } = createHelpOverlay(term, defaultConfig, '0.2.6-dev+abc1234')
 
-		expect(element.innerHTML).toContain('remobi v0.2.6-dev+abc1234')
+		expect(element.innerHTML).toContain('herdweb v0.2.6-dev+abc1234')
 	})
 
 	test('omits version when not provided', () => {
@@ -338,7 +338,7 @@ describe('help overlay integration', () => {
 		const guideButton: ControlButton = {
 			id: 'guide',
 			label: 'Guide',
-			description: 'Open the remobi help guide',
+			description: 'Open the herdweb help guide',
 			action: { type: 'help' },
 		}
 		const { backdrop, drawer } = createDrawer(term, [guideButton], {
@@ -365,7 +365,7 @@ describe('help overlay integration', () => {
 		const guideButton: ControlButton = {
 			id: 'guide',
 			label: 'Guide',
-			description: 'Open the remobi help guide',
+			description: 'Open the herdweb help guide',
 			action: { type: 'help' },
 		}
 		const { backdrop, drawer } = createDrawer(term, [guideButton], {
@@ -395,7 +395,7 @@ describe('help overlay integration', () => {
 		const guideButton: ControlButton = {
 			id: 'guide',
 			label: 'Guide',
-			description: 'Open the remobi help guide',
+			description: 'Open the herdweb help guide',
 			action: { type: 'help' },
 		}
 		const { backdrop, drawer } = createDrawer(term, [guideButton], {
@@ -459,10 +459,10 @@ describe('help overlay integration', () => {
 		const term = mockTerminal()
 
 		const off = createHelpOverlay(term, defaultConfig)
-		expect(off.element.innerHTML).not.toContain('Side')
+		expect(off.element.innerHTML).not.toContain('Side \u25B2')
 
 		const on = createHelpOverlay(term, { ...defaultConfig, scrollButtons: { enabled: true } })
-		expect(on.element.innerHTML).toContain('Side')
+		expect(on.element.innerHTML).toContain('Side \u25B2')
 	})
 })
 

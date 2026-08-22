@@ -38,7 +38,7 @@ declare abstract class AudioWorkletProcessor {
 
 declare function registerProcessor(name: string, processor: new () => AudioWorkletProcessor): void
 
-class RemobiPcmProcessor extends AudioWorkletProcessor {
+class HerdwebPcmProcessor extends AudioWorkletProcessor {
 	private readonly sampleBuffer = new Float32Array(PCM_CHUNK_SAMPLES)
 	private readonly intBuffer = new Int16Array(PCM_CHUNK_SAMPLES)
 	private readonly pcmMessage: PcmMessage = {
@@ -108,4 +108,4 @@ class RemobiPcmProcessor extends AudioWorkletProcessor {
 	}
 }
 
-registerProcessor('remobi-pcm-processor', RemobiPcmProcessor)
+registerProcessor('herdweb-pcm-processor', HerdwebPcmProcessor)

@@ -100,11 +100,11 @@ describe('input-action session contract', () => {
 			})
 			expect(client.messages).toContainEqual({
 				type: 'error',
-				message: 'Terminal failed; restart remobi.',
+				message: 'Terminal failed; restart herdweb.',
 			})
 			expect(otherClient.messages).toContainEqual({
 				type: 'error',
-				message: 'Terminal failed; restart remobi.',
+				message: 'Terminal failed; restart herdweb.',
 			})
 			expect(client.closeCount).toBe(1)
 			expect(otherClient.closeCount).toBe(1)
@@ -112,7 +112,7 @@ describe('input-action session contract', () => {
 
 			await session.addClient(lateClient.client)
 			expect(lateClient.messages).toEqual([
-				{ type: 'error', message: 'Terminal failed; restart remobi.' },
+				{ type: 'error', message: 'Terminal failed; restart herdweb.' },
 			])
 			expect(lateClient.closeCount).toBe(1)
 		} finally {

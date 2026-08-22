@@ -75,8 +75,8 @@ test.describe('Voice composer tap-to-toggle input', () => {
 			const outputMarker = `OUTPUT-${attempt}`
 			expect(currentText).not.toContain(outputMarker)
 			await page.goto(server.url)
-			await page.waitForSelector('#wt-toolbar [data-remobi-action="voice-input"]')
-			const entry = page.locator('[data-remobi-action="voice-input"]')
+			await page.waitForSelector('#wt-toolbar [data-herdweb-action="voice-input"]')
+			const entry = page.locator('[data-herdweb-action="voice-input"]')
 			await expect(entry).toBeVisible()
 			await expect(entry).toHaveAttribute('aria-label', 'Voice composer')
 			await expect(entry).toHaveCSS('width', '44px')
@@ -101,13 +101,13 @@ test.describe('Voice composer tap-to-toggle input', () => {
 			})
 			expect(Number.parseFloat(composerStyle.top)).toBeGreaterThan(0)
 			expect(composerStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0.58)')
-			await expect(composer.locator('[data-remobi-control="composer-mic"]')).toHaveAttribute(
+			await expect(composer.locator('[data-herdweb-control="composer-mic"]')).toHaveAttribute(
 				'data-mic-state',
 				'idle',
 			)
 			if (attempt === 0) await page.screenshot({ path: 'test-results/voice-composer-idle.png' })
 
-			const mic = composer.locator('[data-remobi-control="composer-mic"]')
+			const mic = composer.locator('[data-herdweb-control="composer-mic"]')
 			await mic.click()
 			await page.waitForTimeout(450)
 			await expect(mic).toHaveAttribute('data-mic-state', 'recording')
@@ -142,7 +142,7 @@ test.describe('Voice composer tap-to-toggle input', () => {
 	}) => {
 		if (!server) throw new Error('Voice test server was not started')
 		await page.goto(server.url)
-		const entry = page.locator('[data-remobi-action="voice-input"]')
+		const entry = page.locator('[data-herdweb-action="voice-input"]')
 		await entry.click()
 		const composer = page.locator('#wt-asr-composer')
 		const textarea = composer.locator('textarea')
@@ -171,10 +171,10 @@ test.describe('Voice composer tap-to-toggle input', () => {
 		if (!server) throw new Error('Voice test server was not started')
 		await page.goto(server.url)
 		await page.waitForSelector('#terminal .xterm')
-		await expect.poll(() => page.evaluate(() => window.__remobiSockets?.[0]?.readyState)).toBe(1)
-		await page.evaluate(() => window.__remobiSockets?.[0]?.close())
+		await expect.poll(() => page.evaluate(() => window.__herdwebSockets?.[0]?.readyState)).toBe(1)
+		await page.evaluate(() => window.__herdwebSockets?.[0]?.close())
 		await expect
-			.poll(() => page.evaluate(() => window.__remobiSockets?.[0]?.readyState), { timeout: 5_000 })
+			.poll(() => page.evaluate(() => window.__herdwebSockets?.[0]?.readyState), { timeout: 5_000 })
 			.toBe(3)
 		await page.evaluate(() => {
 			window.__voiceConnectionStates = []
@@ -189,13 +189,13 @@ test.describe('Voice composer tap-to-toggle input', () => {
 		if (!server) throw new Error('Voice test server was not started')
 		await page.goto(server.url)
 		await page.waitForSelector('#terminal .xterm')
-		await expect.poll(() => page.evaluate(() => window.__remobiSockets?.[0]?.readyState)).toBe(1)
+		await expect.poll(() => page.evaluate(() => window.__herdwebSockets?.[0]?.readyState)).toBe(1)
 		await page.evaluate(() => {
 			window.__voiceConnectionStates = []
 			window.term?.onConnectionChange((connected) => {
 				window.__voiceConnectionStates?.push(connected)
 			})
-			const socket = window.__remobiSockets?.[0]
+			const socket = window.__herdwebSockets?.[0]
 			socket?.close()
 			socket?.dispatchEvent(new Event('error'))
 		})
@@ -221,7 +221,7 @@ test.describe('Mic tap-to-toggle capability degradation', () => {
 		try {
 			await page.goto(server.url)
 			await page.waitForSelector('#wt-toolbar')
-			await expect(page.locator('[data-remobi-action="voice-input"]')).toHaveCount(0)
+			await expect(page.locator('[data-herdweb-action="voice-input"]')).toHaveCount(0)
 		} finally {
 			await server.close()
 		}

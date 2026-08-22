@@ -64,7 +64,7 @@ async function waitForHttp(url: string, timeoutMs = 10_000): Promise<void> {
 
 test('ended command closes the session and shows reconnect overlay', async ({ page }) => {
 	const port = await reservePort()
-	const home = mkdtempSync(join(tmpdir(), 'remobi-playwright-home-'))
+	const home = mkdtempSync(join(tmpdir(), 'herdweb-playwright-home-'))
 	tempDirs.push(home)
 
 	const proc = spawnProcess(
@@ -100,9 +100,9 @@ test('ended command closes the session and shows reconnect overlay', async ({ pa
 		await waitForHttp(`http://127.0.0.1:${port}`)
 		await page.goto(`http://127.0.0.1:${port}`)
 		await expect(page.locator('body')).toContainText('session-exit-e2e')
-		await expect(page.locator('#remobi-reconnect-overlay')).toBeVisible({ timeout: 10_000 })
-		await expect(page.locator('#remobi-reconnect-overlay')).toContainText(
-			'Session ended — restart remobi to start a new one.',
+		await expect(page.locator('#herdweb-reconnect-overlay')).toBeVisible({ timeout: 10_000 })
+		await expect(page.locator('#herdweb-reconnect-overlay')).toContainText(
+			'Session ended — restart herdweb to start a new one.',
 		)
 		await expect
 			.poll(async () => {
@@ -125,12 +125,12 @@ test('ended command closes the session and shows reconnect overlay', async ({ pa
 
 test('ended command shows a status overlay when reconnect is disabled', async ({ page }) => {
 	const port = await reservePort()
-	const home = mkdtempSync(join(tmpdir(), 'remobi-playwright-home-'))
+	const home = mkdtempSync(join(tmpdir(), 'herdweb-playwright-home-'))
 	tempDirs.push(home)
-	const configPath = join(home, 'remobi.config.ts')
+	const configPath = join(home, 'herdweb.config.ts')
 	writeFileSync(
 		configPath,
-		`export default { reconnect: { enabled: false }, name: 'remobi no reconnect' }`,
+		`export default { reconnect: { enabled: false }, name: 'herdweb no reconnect' }`,
 	)
 
 	const proc = spawnProcess(
@@ -168,9 +168,9 @@ test('ended command shows a status overlay when reconnect is disabled', async ({
 		await waitForHttp(`http://127.0.0.1:${port}`)
 		await page.goto(`http://127.0.0.1:${port}`)
 		await expect(page.locator('body')).toContainText('session-exit-no-reconnect')
-		await expect(page.locator('#remobi-session-status')).toBeVisible({ timeout: 10_000 })
-		await expect(page.locator('#remobi-session-status')).toContainText('Session ended')
-		await expect(page.locator('#remobi-reconnect-overlay')).toHaveCount(0)
+		await expect(page.locator('#herdweb-session-status')).toBeVisible({ timeout: 10_000 })
+		await expect(page.locator('#herdweb-session-status')).toContainText('Session ended')
+		await expect(page.locator('#herdweb-reconnect-overlay')).toHaveCount(0)
 		await expect
 			.poll(async () => {
 				return Promise.race([

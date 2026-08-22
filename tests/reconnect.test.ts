@@ -51,7 +51,7 @@ function mockConnectionTerminal(
 }
 
 function getOverlay(): HTMLElement | null {
-	return document.getElementById('remobi-reconnect-overlay')
+	return document.getElementById('herdweb-reconnect-overlay')
 }
 
 beforeEach(() => {
@@ -61,7 +61,7 @@ beforeEach(() => {
 afterEach(() => {
 	// Clean up any overlay left behind
 	getOverlay()?.remove()
-	window.__remobiSockets = undefined
+	window.__herdwebSockets = undefined
 	GlobalRegistrator.unregister()
 })
 
@@ -155,9 +155,9 @@ describe('setupReconnect', () => {
 		})
 		const dispose = setupReconnect(term, { enabled: true })
 		window.dispatchEvent(
-			new CustomEvent('remobi-connection-notice', { detail: 'Not sent — still syncing.' }),
+			new CustomEvent('herdweb-connection-notice', { detail: 'Not sent — still syncing.' }),
 		)
-		expect(document.querySelectorAll('#remobi-reconnect-overlay')).toHaveLength(1)
+		expect(document.querySelectorAll('#herdweb-reconnect-overlay')).toHaveLength(1)
 		expect(getOverlay()?.querySelector('div')?.textContent).toBe('Not sent — still syncing.')
 		dispose()
 	})
@@ -171,13 +171,13 @@ describe('setupReconnect', () => {
 		})
 		const dispose = setupReconnect(term, { enabled: true })
 		window.dispatchEvent(
-			new CustomEvent('remobi-connection-notice', {
-				detail: 'Session ended — restart remobi to start a new one.',
+			new CustomEvent('herdweb-connection-notice', {
+				detail: 'Session ended — restart herdweb to start a new one.',
 			}),
 		)
 		const buttons = [...(getOverlay()?.querySelectorAll('button') ?? [])]
 		expect(getOverlay()?.querySelector('div')?.textContent).toBe(
-			'Session ended — restart remobi to start a new one.',
+			'Session ended — restart herdweb to start a new one.',
 		)
 		expect(buttons[0]?.textContent).toBe('Retry now')
 		expect(buttons[1]?.textContent).toBe('Re-authenticate')
@@ -197,8 +197,8 @@ describe('setupReconnect', () => {
 		})
 		const dispose = setupReconnect(term, { enabled: true })
 		window.dispatchEvent(
-			new CustomEvent('remobi-connection-notice', {
-				detail: 'Session ended — restart remobi to start a new one.',
+			new CustomEvent('herdweb-connection-notice', {
+				detail: 'Session ended — restart herdweb to start a new one.',
 			}),
 		)
 		term.setStatus({ state: 'synced', consecutivePreSyncFailures: 0, lastFailureReason: null })

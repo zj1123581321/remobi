@@ -63,50 +63,42 @@ async function lateJoinSnapshot(sequence: string): Promise<string> {
 }
 
 describe('SharedTerminalSession', () => {
-	test('buildSessionEnv strips nested tmux variables before launching the command', () => {
+	test('buildSessionEnv strips HERDR-prefixed variables before launching the command', () => {
 		const env = buildSessionEnv({
 			SHELL: '/bin/zsh',
-			TERM: 'screen-256color',
-			TMUX: '/tmp/tmux-1000/default,1860,0',
-			TMUX_PANE: '%42',
-		})
-
-		expect(env.SHELL).toBe('/bin/zsh')
-		expect(env.TERM).toBe('xterm-256color')
-		expect('TMUX' in env).toBe(false)
-		expect('TMUX_PANE' in env).toBe(false)
-	})
-
-	test('buildSessionEnv strips nested zellij variables before launching the command', () => {
-		const env = buildSessionEnv({
-			SHELL: '/bin/zsh',
-			ZELLIJ: '0',
-			ZELLIJ_PANE_ID: '1',
-			ZELLIJ_SESSION_NAME: 'main',
-		})
-
-		expect(env.SHELL).toBe('/bin/zsh')
-		expect('ZELLIJ' in env).toBe(false)
-		expect('ZELLIJ_PANE_ID' in env).toBe(false)
-		expect('ZELLIJ_SESSION_NAME' in env).toBe(false)
-	})
-
-	test('buildSessionEnv strips nested herdr variables before launching the command', () => {
-		const env = buildSessionEnv({
-			SHELL: '/bin/zsh',
+			HOME: '/home/user',
+			PATH: '/usr/bin',
 			HERDR_SESSION: 'main',
 			HERDR_SOCKET_PATH: '/Users/x/.config/herdr/sessions/main/herdr.sock',
 			HERDR_PANE_ID: 'w1:p1',
 			HERDR_TAB_ID: 'w1:t1',
 			HERDR_WORKSPACE_ID: 'w1',
+			HERDR_FUTURE_VAR: 'future-proof',
 		})
 
 		expect(env.SHELL).toBe('/bin/zsh')
+		expect(env.HOME).toBe('/home/user')
+		expect(env.PATH).toBe('/usr/bin')
+		expect(env.TERM).toBe('xterm-256color')
 		expect('HERDR_SESSION' in env).toBe(false)
 		expect('HERDR_SOCKET_PATH' in env).toBe(false)
 		expect('HERDR_PANE_ID' in env).toBe(false)
 		expect('HERDR_TAB_ID' in env).toBe(false)
 		expect('HERDR_WORKSPACE_ID' in env).toBe(false)
+		expect('HERDR_FUTURE_VAR' in env).toBe(false)
+	})
+
+	test('buildSessionEnv does not strip non-HERDR multiplexer variables', () => {
+		const env = buildSessionEnv({
+			SHELL: '/bin/zsh',
+			TMUX: '/tmp/tmux-1000/default,1860,0',
+			TMUX_PANE: '%42',
+			ZELLIJ: '0',
+		})
+
+		expect(env.TMUX).toBe('/tmp/tmux-1000/default,1860,0')
+		expect(env.TMUX_PANE).toBe('%42')
+		expect(env.ZELLIJ).toBe('0')
 	})
 
 	test('closes connected clients when the PTY exits naturally', async () => {
@@ -237,7 +229,7 @@ describe('SharedTerminalSession', () => {
 			await vi.waitFor(() => {
 				expect(watcher.getMessages()).toContainEqual({
 					type: 'error',
-					message: 'Terminal failed; restart remobi.',
+					message: 'Terminal failed; restart herdweb.',
 				})
 			})
 			expect(watcher.getMessages()).not.toContainEqual(
@@ -248,7 +240,7 @@ describe('SharedTerminalSession', () => {
 			const lateClient = createClientRecorder()
 			await session.addClient(lateClient.client)
 			expect(lateClient.getMessages()).toEqual([
-				{ type: 'error', message: 'Terminal failed; restart remobi.' },
+				{ type: 'error', message: 'Terminal failed; restart herdweb.' },
 			])
 			expect(lateClient.getCloseCount()).toBe(1)
 

@@ -17,13 +17,13 @@ import {
 	parseClientMessage,
 	serialiseServerMessage,
 } from './session-protocol'
-import type { RemobiConfig } from './types'
+import type { HerdwebConfig } from './types'
 import { spawnProcess } from './util/node-compat'
 import type { SpawnedProcess } from './util/node-compat'
 
 const DEFAULT_PORT = 7681
 const DEFAULT_HOST = '127.0.0.1'
-const DEFAULT_COMMAND = ['tmux', 'new-session', '-A', '-s', 'main']
+const DEFAULT_COMMAND = ['herdr', '--session', 'default']
 
 function isValidPort(value: string): boolean {
 	return /^[0-9]+$/.test(value) && Number(value) > 0 && Number(value) <= 65_535
@@ -123,7 +123,7 @@ function waitForServerListening(
 		const onError = (error: Error) => {
 			cleanup()
 			if ('code' in error && error.code === 'EADDRINUSE') {
-				reject(new Error(`remobi serve failed: port ${port} is already in use on ${host}`))
+				reject(new Error(`herdweb serve failed: port ${port} is already in use on ${host}`))
 				return
 			}
 			reject(error)
@@ -249,7 +249,7 @@ function readIcon(filename: string): Uint8Array | undefined {
 	}
 }
 
-/** Spawn caffeinate to prevent system sleep while remobi is running (macOS only).
+/** Spawn caffeinate to prevent system sleep while herdweb is running (macOS only).
  * Uses -s (system sleep on AC) and -w <pid> so the assertion drops when the PTY exits. */
 function spawnCaffeinate(pid: number): SpawnedProcess | null {
 	try {
@@ -258,12 +258,12 @@ function spawnCaffeinate(pid: number): SpawnedProcess | null {
 			stderr: 'ignore',
 		})
 		proc.exited.catch(() => {
-			console.warn('remobi: --no-sleep requires caffeinate (macOS only), ignoring')
+			console.warn('herdweb: --no-sleep requires caffeinate (macOS only), ignoring')
 		})
-		console.log(`remobi: sleep prevention active (caffeinate -s -w ${pid})`)
+		console.log(`herdweb: sleep prevention active (caffeinate -s -w ${pid})`)
 		return proc
 	} catch {
-		console.warn('remobi: --no-sleep requires caffeinate (macOS only), ignoring')
+		console.warn('herdweb: --no-sleep requires caffeinate (macOS only), ignoring')
 		return null
 	}
 }
@@ -330,7 +330,7 @@ async function readImageDropBody(
 
 /** Write an image drop to a fresh 0600 temp file; on failure removes only this call's own partial file. */
 export async function writeImageDrop(bytes: Uint8Array, format: ImageDropFormat): Promise<string> {
-	const path = join(tmpdir(), `remobi-drop-${randomUUID()}.${format === 'jpeg' ? 'jpg' : format}`)
+	const path = join(tmpdir(), `herdweb-drop-${randomUUID()}.${format === 'jpeg' ? 'jpg' : format}`)
 	const handle = await open(path, 'wx', 0o600)
 	try {
 		await handle.writeFile(bytes)
@@ -401,9 +401,9 @@ export function describeCommandForLogs(command: readonly string[]): string {
 	return `${file} (${args.length} arg${args.length === 1 ? '' : 's'})`
 }
 
-/** Start remobi serve: build client assets, spawn the PTY, and serve HTTP + WS */
+/** Start herdweb serve: build client assets, spawn the PTY, and serve HTTP + WS */
 export async function serve(
-	config: RemobiConfig,
+	config: HerdwebConfig,
 	port: number = DEFAULT_PORT,
 	command: readonly string[] = DEFAULT_COMMAND,
 	noSleep = false,
@@ -413,12 +413,12 @@ export async function serve(
 ): Promise<void> {
 	const { SharedTerminalSession } = await import('./session')
 
-	console.log('remobi: building client...')
+	console.log('herdweb: building client...')
 	const scriptNonce = createScriptNonce()
 	const { js, css } = await bundleClientAssets(config, version, basePath)
 	const worklet = config.asr.enabled ? await bundleWorkletAsset() : undefined
 	const html = renderClientHtml(js, css, config, scriptNonce, basePath)
-	console.log('remobi: client ready')
+	console.log('herdweb: client ready')
 	let session: SharedTerminalSession | null = null
 	let caffeinateProc: SpawnedProcess | null = null
 
@@ -627,7 +627,7 @@ export async function serve(
 	await waitForServerListening(server, port, host)
 
 	try {
-		console.log(`remobi: starting command ${describeCommandForLogs(command)}...`)
+		console.log(`herdweb: starting command ${describeCommandForLogs(command)}...`)
 		session = new SharedTerminalSession(command)
 		caffeinateProc = noSleep ? spawnCaffeinate(session.pid) : null
 	} catch (error) {
@@ -635,16 +635,16 @@ export async function serve(
 		throw error
 	}
 
-	console.log(`remobi: serving on http://${isLoopbackHost(host) ? 'localhost' : host}:${port}`)
+	console.log(`herdweb: serving on http://${isLoopbackHost(host) ? 'localhost' : host}:${port}`)
 	if (!isLoopbackHost(host)) {
-		console.warn(`remobi: warning: --host ${host} exposes terminal control beyond localhost`)
+		console.warn(`herdweb: warning: --host ${host} exposes terminal control beyond localhost`)
 	}
 
 	let shuttingDown = false
 	const cleanup = async (): Promise<void> => {
 		if (shuttingDown) return
 		shuttingDown = true
-		console.log('\nremobi: shutting down...')
+		console.log('\nherdweb: shutting down...')
 		server.close()
 		caffeinateProc?.kill()
 		await session?.dispose()

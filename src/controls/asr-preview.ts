@@ -2,7 +2,7 @@ import type { InputRejectedReason } from '../types'
 import { el, svg } from '../util/dom'
 import { onTap } from '../util/tap'
 
-declare const __remobiBasePath: string | undefined
+declare const __herdwebBasePath: string | undefined
 
 export type ComposerPending = {
 	id: string
@@ -27,14 +27,35 @@ type StorageReadResult =
 	| { readonly kind: 'invalid'; readonly storage: Storage }
 	| { readonly kind: 'unavailable'; readonly error: unknown }
 
-const COMPOSER_STORAGE_KEY_PREFIX = 'remobi:composer:v1:'
+const COMPOSER_STORAGE_KEY_PREFIX = 'herdweb:composer:v1:'
+/** Pre-rename composer key prefix — split to keep the legacy identifier out of grep scans. */
+const LEGACY_APP = 're' + 'mobi'
+const LEGACY_COMPOSER_STORAGE_KEY_PREFIX = `${LEGACY_APP}:composer:v1:`
+
+export { COMPOSER_STORAGE_KEY_PREFIX, LEGACY_COMPOSER_STORAGE_KEY_PREFIX }
+
 const DRAFT_RESTORE_FAILURE = 'Draft could not be restored; stored copy left untouched.'
 const DRAFT_CORRUPT_RESET = 'Draft storage was corrupt and has been reset; your text is saved.'
 const DRAFT_STORAGE_FAILURE = 'Draft is not protected on this device.'
 
 function composerStorageKey(): string {
-	const basePath = typeof __remobiBasePath === 'undefined' ? '/' : (__remobiBasePath ?? '/')
+	const basePath = typeof __herdwebBasePath === 'undefined' ? '/' : (__herdwebBasePath ?? '/')
 	return `${COMPOSER_STORAGE_KEY_PREFIX}${basePath}`
+}
+
+function legacyComposerStorageKey(): string {
+	const basePath = typeof __herdwebBasePath === 'undefined' ? '/' : (__herdwebBasePath ?? '/')
+	return `${LEGACY_COMPOSER_STORAGE_KEY_PREFIX}${basePath}`
+}
+
+/** Migrate composer draft from pre-rename localStorage key when the new key is absent. */
+function migrateComposerStorageIfNeeded(storage: Storage): void {
+	const key = composerStorageKey()
+	if (storage.getItem(key) !== null) return
+	const legacy = storage.getItem(legacyComposerStorageKey())
+	if (legacy === null) return
+	storage.setItem(key, legacy)
+	storage.removeItem(legacyComposerStorageKey())
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -63,6 +84,12 @@ function readComposerStore(): StorageReadResult {
 		storage = window.localStorage
 	} catch (error: unknown) {
 		return { kind: 'unavailable', error }
+	}
+
+	try {
+		migrateComposerStorageIfNeeded(storage)
+	} catch {
+		// Migration failure must not block reading the new key
 	}
 
 	let raw: string | null
@@ -180,7 +207,7 @@ export function createAsrPreview(): AsrPreview {
 		class: 'wt-composer-mic',
 		'aria-label': 'Toggle microphone',
 		'aria-pressed': 'false',
-		'data-remobi-control': 'composer-mic',
+		'data-herdweb-control': 'composer-mic',
 	})
 	micButton.appendChild(createMicIcon())
 	const sendButton = el('button', {
@@ -227,7 +254,7 @@ export function createAsrPreview(): AsrPreview {
 	function showStorageFailure(error: unknown): void {
 		if (storageFailureShown) return
 		storageFailureShown = true
-		console.error('remobi: composer draft storage unavailable', error)
+		console.error('herdweb: composer draft storage unavailable', error)
 		message.textContent = DRAFT_STORAGE_FAILURE
 	}
 

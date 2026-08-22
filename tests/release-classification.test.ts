@@ -48,7 +48,7 @@ describe('semantic-release commit analysis', () => {
 						message: [
 							'feat!: replace ttyd with built-in terminal runtime',
 							'',
-							'Move remobi off ttyd patching and onto a built-in browser terminal runtime.',
+							'Move herdweb off ttyd patching and onto a built-in browser terminal runtime.',
 						].join('\n'),
 					},
 				],
@@ -73,7 +73,7 @@ describe('semantic-release commit analysis', () => {
 							'',
 							'Record the already-landed runtime swap as the next major line.',
 							'',
-							'BREAKING CHANGE: remobi replaces the ttyd-based runtime with the built-in terminal runtime.',
+							'BREAKING CHANGE: herdweb replaces the ttyd-based runtime with the built-in terminal runtime.',
 						].join('\n'),
 					},
 				],

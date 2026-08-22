@@ -12,7 +12,7 @@ afterEach(() => {
 	GlobalRegistrator.unregister()
 })
 
-const PATH = '/tmp/remobi-drop-1.png'
+const PATH = '/tmp/herdweb-drop-1.png'
 const png = () => new File(['x'], 'a.png', { type: 'image/png' })
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
@@ -40,7 +40,7 @@ function setup() {
 				return { dispose: () => listeners.delete(handler) }
 			},
 		},
-		basePath: '/remobi',
+		basePath: '/herdweb',
 		fetchFn: fetchMock as unknown as typeof fetch,
 		clipboard: { writeText },
 		createActionId: () => {
@@ -82,7 +82,7 @@ test('picker: cancel hides the panel; reset allows re-select; single-flight; raw
 	await flush()
 	expect(clickSpy).toHaveBeenCalledTimes(2)
 	expect(h.fetchMock).toHaveBeenCalledTimes(1)
-	expect(h.fetchMock).toHaveBeenCalledWith('/remobi/api/image-drop', {
+	expect(h.fetchMock).toHaveBeenCalledWith('/herdweb/api/image-drop', {
 		method: 'POST',
 		body: file,
 	})

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { escapeAttr, generatePwaHtml } from './src/pwa/meta-tags'
-import type { RemobiConfig } from './src/types'
+import type { HerdwebConfig } from './src/types'
 
 function findProjectRoot(): string {
 	let dir = import.meta.dirname
@@ -46,16 +46,16 @@ function readPrebuiltAsset(filename: string): string | null {
 	return null
 }
 
-/** Bundle the remobi client JS + CSS into strings */
+/** Bundle the herdweb client JS + CSS into strings */
 export async function bundleClientAssets(
-	config: RemobiConfig,
+	config: HerdwebConfig,
 	version: string,
 	basePath = '/',
 ): Promise<{ js: string; css: string }> {
 	const prebuiltJs = readPrebuiltAsset('client.iife.js')
 	const prebuiltCss = readPrebuiltAsset('client.css')
 	if (prebuiltJs !== null && prebuiltCss !== null) {
-		const js = `globalThis.__remobiVersion=${JSON.stringify(version)};globalThis.__remobiConfig=${JSON.stringify(config)};globalThis.__remobiBasePath=${JSON.stringify(basePath)};${prebuiltJs}`
+		const js = `globalThis.__herdwebVersion=${JSON.stringify(version)};globalThis.__herdwebConfig=${JSON.stringify(config)};globalThis.__herdwebBasePath=${JSON.stringify(basePath)};${prebuiltJs}`
 		return { js, css: prebuiltCss }
 	}
 
@@ -76,10 +76,10 @@ export async function bundleClientAssets(
 	const cssOutput = result.outputFiles.find((file) => file.path.endsWith('.css'))
 
 	if (!jsOutput || !cssOutput) {
-		throw new Error('remobi client build produced incomplete output')
+		throw new Error('herdweb client build produced incomplete output')
 	}
 
-	const js = `globalThis.__remobiVersion=${JSON.stringify(version)};globalThis.__remobiConfig=${JSON.stringify(config)};globalThis.__remobiBasePath=${JSON.stringify(basePath)};${jsOutput.text}`
+	const js = `globalThis.__herdwebVersion=${JSON.stringify(version)};globalThis.__herdwebConfig=${JSON.stringify(config)};globalThis.__herdwebBasePath=${JSON.stringify(basePath)};${jsOutput.text}`
 	return { js, css: cssOutput.text }
 }
 
@@ -95,7 +95,7 @@ async function bundleWorkletFromSource(): Promise<string> {
 		write: false,
 	})
 	const output = result.outputFiles.find((file) => file.path.endsWith('.js'))
-	if (!output) throw new Error('remobi worklet build produced no JavaScript output')
+	if (!output) throw new Error('herdweb worklet build produced no JavaScript output')
 	return output.text
 }
 
@@ -104,7 +104,7 @@ export async function bundleWorkletAsset(): Promise<string> {
 	const prebuilt = readPrebuiltAsset('asr-worklet.js')
 	if (prebuilt !== null) return prebuilt
 	if (!IS_SOURCE_RUNTIME) {
-		throw new Error('remobi package is missing dist/asr-worklet.js')
+		throw new Error('herdweb package is missing dist/asr-worklet.js')
 	}
 	return bundleWorkletFromSource()
 }
@@ -112,7 +112,7 @@ export async function bundleWorkletAsset(): Promise<string> {
 export function renderClientHtml(
 	js: string,
 	css: string,
-	config: RemobiConfig,
+	config: HerdwebConfig,
 	scriptNonce: string,
 	basePath = '/',
 ): string {
@@ -163,7 +163,7 @@ export async function writeClientBundle(outputPath: string): Promise<void> {
 	const jsOutput = result.outputFiles.find((file) => file.path.endsWith('.js'))
 	const cssOutput = result.outputFiles.find((file) => file.path.endsWith('.css'))
 	if (!jsOutput || !cssOutput) {
-		throw new Error('remobi client build produced incomplete output')
+		throw new Error('herdweb client build produced incomplete output')
 	}
 
 	writeFileSync(resolve(outputPath, 'client.iife.js'), jsOutput.text)
