@@ -1,10 +1,11 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { conditionalFocus, isKeyboardOpen } from '../src/util/keyboard'
+import { conditionalFocus, isKeyboardOpen, resetKeyboardHeightBaseline } from '../src/util/keyboard'
 import { mockTerminalWithFocus } from './fixtures'
 
 beforeEach(() => {
 	GlobalRegistrator.register()
+	resetKeyboardHeightBaseline()
 })
 
 afterEach(() => {
@@ -38,6 +39,59 @@ describe('isKeyboardOpen', () => {
 			configurable: true,
 		})
 		expect(isKeyboardOpen()).toBe(true)
+	})
+
+	test('detects the keyboard when innerHeight shrinks with the viewport (resizes-content)', () => {
+		const vv = { height: 800 }
+		Object.defineProperty(window, 'innerHeight', {
+			value: 800,
+			writable: true,
+			configurable: true,
+		})
+		Object.defineProperty(window, 'visualViewport', {
+			value: vv,
+			writable: true,
+			configurable: true,
+		})
+		expect(isKeyboardOpen()).toBe(false)
+
+		// Keyboard opens: innerHeight and vp.height shrink together — the plain
+		// diff stays ~0, so detection must use the observed ceiling instead.
+		Object.defineProperty(window, 'innerHeight', {
+			value: 500,
+			writable: true,
+			configurable: true,
+		})
+		vv.height = 500
+		expect(isKeyboardOpen()).toBe(true)
+	})
+
+	test('resetKeyboardHeightBaseline clears the observed ceiling', () => {
+		Object.defineProperty(window, 'innerHeight', {
+			value: 800,
+			writable: true,
+			configurable: true,
+		})
+		Object.defineProperty(window, 'visualViewport', {
+			value: { height: 800 },
+			writable: true,
+			configurable: true,
+		})
+		expect(isKeyboardOpen()).toBe(false)
+
+		// Simulate orientation change: smaller screen, keyboard closed
+		resetKeyboardHeightBaseline()
+		Object.defineProperty(window, 'innerHeight', {
+			value: 400,
+			writable: true,
+			configurable: true,
+		})
+		Object.defineProperty(window, 'visualViewport', {
+			value: { height: 400 },
+			writable: true,
+			configurable: true,
+		})
+		expect(isKeyboardOpen()).toBe(false)
 	})
 })
 

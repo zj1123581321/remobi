@@ -155,7 +155,7 @@ CLI + build:
 - Config resolution: `--config` flag → cwd → `~/.config/herdweb/` (XDG fallback; legacy upstream config paths auto-fallback)
 - Drawer takes a flat `readonly ControlButton[]` — rendered as a single grid
 - Help overlay is config-driven and must be fail-safe (never break core controls if help fails)
-- Mobile viewport handling: lock document scroll and compute height from visual viewport (keyboard-aware)
+- Mobile viewport handling: lock document scroll and compute height from visual viewport (keyboard-aware); viewport meta uses `interactive-widget=resizes-content`, bottom chrome lifts above the soft keyboard via `--kb-inset`, and viewport-driven terminal resizes are debounced in `src/viewport/height.ts`
 - Changelog and versioning are fully automated by semantic-release — do not manually edit `CHANGELOG.md`. Use conventional commit types to control releases: `feat:` → minor, `fix:` → patch, `BREAKING CHANGE` → major. Non-release types: `chore:`, `docs:`, `refactor:`, `test:`, `ci:`
 - All DOM creation in `util/dom.ts` helpers
 - Keyboard state preserved: capture `isKeyboardOpen()` before action, use `conditionalFocus()` after

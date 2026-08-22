@@ -117,7 +117,9 @@ export function renderClientHtml(
 	basePath = '/',
 ): string {
 	const viewport =
-		'<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">'
+		// interactive-widget=resizes-content: Android Chrome 108+ shrinks the layout
+		// viewport with the soft keyboard, so fixed bottom:0 chrome hugs the keyboard.
+		'<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content">'
 	const pwaHtml = config.pwa.enabled
 		? `${generatePwaHtml(config.name, config.pwa, basePath)}
 `

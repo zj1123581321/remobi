@@ -40,7 +40,8 @@ body {
 #wt-toolbar {
 	display: none;
 	position: fixed;
-	bottom: 0;
+	/* --kb-inset lifts the toolbar above the soft keyboard (0 where the layout viewport resizes with it) */
+	bottom: var(--kb-inset, 0px);
 	left: 0;
 	right: 0;
 	background: #313244;
@@ -150,7 +151,7 @@ body {
 	position: fixed;
 	left: 0;
 	right: 0;
-	bottom: 0;
+	bottom: var(--kb-inset, 0px);
 	align-items: flex-end;
 	justify-content: center;
 	padding: 0 12px env(safe-area-inset-bottom, 0px);
@@ -345,7 +346,7 @@ body.wt-composer-open #wt-toolbar {
 
 #wt-drawer {
 	position: fixed;
-	bottom: 0;
+	bottom: var(--kb-inset, 0px);
 	left: 0;
 	right: 0;
 	background: #313244;
@@ -460,7 +461,7 @@ body.wt-composer-open #wt-toolbar {
 	display: none;
 	position: fixed;
 	/* Above the default single-row toolbar (44px keys + 12px padding + 8px gap) */
-	bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+	bottom: calc(64px + env(safe-area-inset-bottom, 0px) + var(--kb-inset, 0px));
 	right: calc(8px + env(safe-area-inset-right, 0px));
 	grid-template-columns: repeat(3, 48px);
 	gap: 4px;
@@ -741,15 +742,15 @@ body.wt-composer-open #wt-toolbar {
 	transform: translateX(-50%);
 }
 .wt-floating-bottom-left {
-	bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+	bottom: calc(8px + env(safe-area-inset-bottom, 0px) + var(--kb-inset, 0px));
 	left: calc(8px + env(safe-area-inset-left, 0px));
 }
 .wt-floating-bottom-right {
-	bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+	bottom: calc(8px + env(safe-area-inset-bottom, 0px) + var(--kb-inset, 0px));
 	right: calc(8px + env(safe-area-inset-right, 0px));
 }
 .wt-floating-bottom-centre {
-	bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+	bottom: calc(8px + env(safe-area-inset-bottom, 0px) + var(--kb-inset, 0px));
 	left: 50%;
 	transform: translateX(-50%);
 }
