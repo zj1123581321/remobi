@@ -8,7 +8,7 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import type { NotifyEvent } from './events'
+import { type NotifyEvent, isRecord } from './events'
 
 const EVENTS_FILE = 'events.jsonl'
 
@@ -34,10 +34,30 @@ export function ensureStateDir(stateDir: string): void {
 export function readJsonFile<T>(path: string): T | undefined {
 	if (!existsSync(path)) return undefined
 	try {
-		return JSON.parse(readFileSync(path, 'utf-8')) as T
+		const parsed = JSON.parse(readFileSync(path, 'utf-8'))
+		return parsed
 	} catch {
 		return undefined
 	}
+}
+
+function isLastSessionEntry(value: unknown): value is LastSessionEntry {
+	if (!isRecord(value)) return false
+	return (
+		typeof value.sessionId === 'string' &&
+		typeof value.exitedAt === 'number' &&
+		Number.isFinite(value.exitedAt) &&
+		typeof value.exitCode === 'number' &&
+		(value.signal === null || typeof value.signal === 'number')
+	)
+}
+
+function isLastSessionStore(value: unknown): value is LastSessionStore {
+	if (!isRecord(value)) return false
+	for (const entry of Object.values(value)) {
+		if (!isLastSessionEntry(entry)) return false
+	}
+	return true
 }
 
 /** Atomic JSON write via tmp+rename with explicit file mode. */
@@ -84,7 +104,8 @@ export interface LastSessionEntry {
 export type LastSessionStore = Record<string, LastSessionEntry>
 
 export function readLastSessionStore(stateDir: string): LastSessionStore {
-	return readJsonFile<LastSessionStore>(join(stateDir, LAST_SESSION_FILE)) ?? {}
+	const parsed = readJsonFile(join(stateDir, LAST_SESSION_FILE))
+	return isLastSessionStore(parsed) ? parsed : {}
 }
 
 export function writeLastSessionStore(stateDir: string, store: LastSessionStore): void {

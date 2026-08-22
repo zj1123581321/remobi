@@ -1,6 +1,7 @@
 import { getConnInfo } from '@hono/node-server/conninfo'
 import type { Context, Hono } from 'hono'
-import { NotifyEventError, parseNotifyEvent } from './events'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
+import { NotifyEventError, isRecord, parseNotifyEvent } from './events'
 import { parseHistoryLimitParam, readEventHistory } from './history'
 import {
 	type PushSubscriptionRecord,
@@ -52,9 +53,9 @@ function deny(
 	deps: NotifyRouteDeps,
 	securityHeaders: Record<string, string>,
 	message: string,
-	status: number,
+	status: ContentfulStatusCode,
 ): Response {
-	return deps.withSecurityHeaders(c.text(message, status as 400), securityHeaders)
+	return deps.withSecurityHeaders(c.text(message, status), securityHeaders)
 }
 
 function requireOrigin(
@@ -71,6 +72,22 @@ function requireOrigin(
 interface PushSubscribeBody {
 	readonly endpoint?: unknown
 	readonly keys?: { readonly p256dh?: unknown; readonly auth?: unknown }
+}
+
+function isPushSubscribeBody(value: unknown): value is PushSubscribeBody {
+	return isRecord(value)
+}
+
+function isUnsubscribeBody(value: unknown): value is { readonly endpoint?: unknown } {
+	return isRecord(value)
+}
+
+async function readJsonBody(c: Context): Promise<unknown> {
+	try {
+		return await c.req.json()
+	} catch {
+		return null
+	}
 }
 
 function parseSubscriptionBody(body: PushSubscribeBody): PushSubscriptionRecord | null {
@@ -160,8 +177,8 @@ export function registerNotifyRoutes(app: Hono, deps: NotifyRouteDeps): void {
 				return deny(c, deps, securityHeaders, 'Too Many Requests', 429)
 			}
 
-			const body = (await c.req.json().catch(() => null)) as PushSubscribeBody | null
-			const record = body ? parseSubscriptionBody(body) : null
+			const body = await readJsonBody(c)
+			const record = isPushSubscribeBody(body) ? parseSubscriptionBody(body) : null
 			if (!record) {
 				return deny(c, deps, securityHeaders, 'invalid subscription', 400)
 			}
@@ -191,8 +208,12 @@ export function registerNotifyRoutes(app: Hono, deps: NotifyRouteDeps): void {
 				return deny(c, deps, securityHeaders, 'Too Many Requests', 429)
 			}
 
-			const body = (await c.req.json().catch(() => null)) as { readonly endpoint?: unknown } | null
-			if (typeof body?.endpoint !== 'string' || body.endpoint.length === 0) {
+			const body = await readJsonBody(c)
+			if (
+				!isUnsubscribeBody(body) ||
+				typeof body.endpoint !== 'string' ||
+				body.endpoint.length === 0
+			) {
 				return deny(c, deps, securityHeaders, 'invalid subscription', 400)
 			}
 

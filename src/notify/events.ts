@@ -33,8 +33,13 @@ function truncate(value: string, max: number): string {
 	return value.slice(0, max)
 }
 
-function isNotifyKind(value: unknown): value is NotifyKind {
-	return typeof value === 'string' && (NOTIFY_KINDS as readonly string[]).includes(value)
+export function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+export function isNotifyKind(value: unknown): value is NotifyKind {
+	if (typeof value !== 'string') return false
+	return NOTIFY_KINDS.some((kind) => kind === value)
 }
 
 /** Parse and validate a v1 notify event JSON string. Throws NotifyEventError on 400/413. */
@@ -51,11 +56,11 @@ export function parseNotifyEvent(raw: string): NotifyEvent {
 		throw new NotifyEventError('invalid JSON', 400)
 	}
 
-	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+	if (!isRecord(parsed)) {
 		throw new NotifyEventError('invalid event object', 400)
 	}
 
-	const obj = parsed as Record<string, unknown>
+	const obj = parsed
 	for (const key of Object.keys(obj)) {
 		if (!ALLOWED_FIELDS.has(key)) {
 			throw new NotifyEventError(`unknown field: ${key}`, 400)

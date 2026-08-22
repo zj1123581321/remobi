@@ -1,5 +1,5 @@
 import webpush from 'web-push'
-import type { NotifyEvent } from './events'
+import { type NotifyEvent, isRecord } from './events'
 import {
 	STALE_SUBSCRIPTION_MS,
 	type VapidConfig,
@@ -12,6 +12,15 @@ import { appendEventLine } from './state'
 
 const PUSH_TTL_SECONDS = 3600
 const STALE_SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000
+
+function readStatusCode(error: unknown): number | undefined {
+	if (!isRecord(error) || typeof error.statusCode !== 'number') return undefined
+	return error.statusCode
+}
+
+function isSubscriptionGoneReason(reason: unknown): reason is { endpoint: string } {
+	return isRecord(reason) && typeof reason.endpoint === 'string'
+}
 
 export interface NotifyServiceDeps {
 	readonly stateDir: string
@@ -96,13 +105,7 @@ export function createNotifyService(deps: NotifyServiceDeps): NotifyService {
 					)
 					sub.lastSuccessAt = now()
 				} catch (error: unknown) {
-					const statusCode =
-						typeof error === 'object' &&
-						error !== null &&
-						'statusCode' in error &&
-						typeof (error as { statusCode: unknown }).statusCode === 'number'
-							? (error as { statusCode: number }).statusCode
-							: undefined
+					const statusCode = readStatusCode(error)
 					if (statusCode === 401 || statusCode === 404 || statusCode === 410) {
 						throw Object.assign(new Error('subscription gone'), { endpoint: sub.endpoint })
 					}
@@ -118,8 +121,8 @@ export function createNotifyService(deps: NotifyServiceDeps): NotifyService {
 				deliverySucceeded = true
 			}
 			if (result.status === 'rejected') {
-				const reason = result.reason as { endpoint?: string }
-				if (typeof reason?.endpoint === 'string') {
+				const reason = result.reason
+				if (isSubscriptionGoneReason(reason)) {
 					removed.add(reason.endpoint)
 				}
 			}

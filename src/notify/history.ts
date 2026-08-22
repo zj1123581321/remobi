@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { NOTIFY_KINDS, type NotifyEvent, type NotifyKind } from './events'
+import { type NotifyEvent, isNotifyKind, isRecord } from './events'
 
 const EVENTS_FILE = 'events.jsonl'
 export const HISTORY_DEFAULT_LIMIT = 50
@@ -19,13 +19,9 @@ export function parseHistoryLimitParam(raw: string | undefined): number {
 	return clampHistoryLimit(Number(raw))
 }
 
-function isNotifyKind(value: unknown): value is NotifyKind {
-	return typeof value === 'string' && (NOTIFY_KINDS as readonly string[]).includes(value)
-}
-
 function isStoredEvent(value: unknown): value is NotifyEvent {
-	if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-	const obj = value as Record<string, unknown>
+	if (!isRecord(value)) return false
+	const obj = value
 	return (
 		obj.v === 1 &&
 		isNotifyKind(obj.kind) &&
