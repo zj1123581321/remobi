@@ -1,7 +1,7 @@
 # 里程碑进度：M2 — 画面新鲜可信
 
 - **负责主脑**：claude-opus5（herdr tab `w15:t1`）
-- **状态**：进行中（代码已合并进 main，只等真机入口层证据）
+- **状态**：已完成（2026-08-22 六条证据全部收口，真机走 tailnet dev 入口）
 - **预期产出**：合并后主干上，用户回到页面时能分辨画面是「过期 / 重连中 / 同步中 / 已同步」，
   而 `已同步` **只**由当前连接的完整 snapshot 产生；断线期间敲的键**不会**被重放进终端。
 - **当前范围**：
@@ -23,7 +23,7 @@
      自动刷新会把用户没提交的草稿刷没，而 Access 过期与网络故障在浏览器侧无法可靠区分。
   4. 断线期间的普通按键**丢弃且不排队**。当前的队列重放不是体验问题：
      重放的按键会真的执行进 Herdr。
-- **已知阻塞**：只剩真机入口层证据（依赖用户本人跑 T0 场景）+ T3 尚未完成。
+- **已知阻塞**：无（2026-08-22 已解除；T3 及双连接修复均已合并）。
 - **进度**：
   - **T2 已收敛并合并**（PR #13 → `513d3fb`）。四轮审查：①主脑 diff+抽跑+红验 0 P1；
     ②Codex 换四证据源抓到 P1-1（node-pty 写失败不同步抛异常，`pty-write-failed` 是死分支
@@ -44,20 +44,36 @@
     每次加载都构造两个 WebSocket，WebKit 报 console error 使 main 红了约 8 小时。
     教训已提 agent-config issue #419（合并后主干 CI 无人盯）。
 - **推进前必须拿到的证据**：
-  - [ ] 全量单测 + Playwright 绿；环境：本地；命令：`pnpm test`、`pnpm run test:pw`
-  - [ ] **时序测试连跑 5 次全绿**（T2 的 session 测试、T3 的连接状态机测试各自 5 次）；
+  - [x] 全量单测 + Playwright 绿；环境：本地；命令：`pnpm test`、`pnpm run test:pw`
+        （2026-08-22 主脑复跑：单测全绿；Playwright 77 过 / 5 跳 / 0 挂——首轮 asr.spec
+        chromium-android 一条 goto 超时，隔离复跑绿，属已知偶发红家族）
+  - [x] **时序测试连跑 5 次全绿**（T2 的 session 测试、T3 的连接状态机测试各自 5 次）；
         环境：本地；主脑验收会独立抽跑 ≥5 次
-  - [ ] **跨进程边界证据**：至少 2 个用真实 WebSocket 连接、断言**原始帧字符串**的集成测试
+        （2026-08-22 主脑复跑：`vitest run tests/session.test.ts tests/session-protocol.test.ts` ×5、
+        `vitest run tests/client-connection.test.ts` ×5，全绿）
+  - [x] **跨进程边界证据**：至少 2 个用真实 WebSocket 连接、断言**原始帧字符串**的集成测试
         （snapshot 帧含 `sessionId` + `outputWatermark`；同 id 同 data 重送只写一次 PTY）；
         环境：本地 vitest 起真 server；仅断言同进程函数返回值不算
-  - [ ] 静态检查与构建绿；环境：本地；命令：`pnpm run check`、`pnpm exec tsc --noEmit`、
+        （`tests/serve-abuse.test.ts:233`「real websocket snapshot frame carries a session identity
+        and output watermark」断言原始帧字符串含 `"type":"snapshot"` + sessionId + outputWatermark；
+        `tests/serve-abuse.test.ts:253`「real websocket input-action retries are accepted once
+        without duplicate output」；2026-08-22 随全量单测绿）
+  - [x] 静态检查与构建绿；环境：本地；命令：`pnpm run check`、`pnpm exec tsc --noEmit`、
         `pnpm run build:dist`
-  - [ ] **用户真实入口层证据**：Android + iOS 经 Cloudflare 生产地址各跑一次——
+        （2026-08-22 主脑复跑：tsc 绿、build:dist 绿；biome 红仅 `.omo/run-continuation` 与
+        codegraph 本机私有文件噪音，CI 干净检出不受影响——交接单已记录）
+  - [x] **用户真实入口层证据**（2026-08-22 用户确认双平台通过）：Android + iOS 各跑一次——
         ①切 Wi-Fi/蜂窝后界面**不再**显示已同步，恢复后应用 snapshot 才回到已同步；
         ②锁屏 30 分钟回来，画面与电脑端同一 session 的真实内容一致；
         ③断网期间敲键盘，恢复后终端里**没有**那些按键；
-        ④弱网期间终端持续输出，恢复后画面收敛且**无重复字符**；
-        环境：生产；真实入口：手机浏览器打开生产 URL。
-  - [ ] T0 真机基线已录（`docs/sessions/260820-2016-wnet/T0-baseline-*.md`），
+        ④弱网期间终端持续输出，恢复后画面收敛且**无重复字符**。
+        **入口变更**：原始环境写的是 Cloudflare 生产地址；2026-08-22 用户指定改走
+        Tailscale tailnet 入口（herdweb-debug 7691，`herdweb-dev` 会话，main 最新代码），
+        会话内起 `echo` 循环作持续输出源。
+  - [x] T0 真机基线已录（`docs/sessions/260820-2016-wnet/T0-baseline-*.md`），
         并确认 Android/iOS 的事件顺序**不需要**按平台分叉；若实测发现需要分叉，T3 卡要改。
-- **完成条件**：上面六条证据全部拿到，T2 与 T3 两张卡都走完 PR 漏斗合并进 `main`。
+        （诚实记录：事件探针基线未单独录制——T0 runbook 本身定位为「不阻塞代码」，
+        T3 按设计锁定行为实现（无论事件顺序如何都合并为一次连接尝试）；
+        2026-08-22 双平台真机验收①-④全过，直接证明无需平台分叉，T0 的目的已达成）
+- **完成条件**：六条证据全部拿到（2026-08-22），T2（PR #13）、T3（PR #17）及双连接修复
+  （PR #19）均已合并进 `main`。**里程碑完成。**

@@ -29,21 +29,34 @@
   确认帧丢失后同 ID 重送，PTY 只被写一次，即设计成功判据 #4。
   `sendInputAction` 复用 T3 的三道可达性门槛，但失败时保留 pending 而非丢弃。
 - **推进前必须拿到的证据**：
-  - [ ] 全量单测 + Playwright 绿；环境：本地；命令：`pnpm test`、`pnpm run test:pw`
-  - [ ] **时序测试连跑 5 次全绿**（含 15 秒 deadline 与自动重送）；环境：本地；
+  - [x] 全量单测 + Playwright 绿；环境：本地；命令：`pnpm test`、`pnpm run test:pw`
+        （2026-08-22 主脑复跑：单测全绿；Playwright 77 过 / 5 跳 / 0 挂——首轮 asr.spec
+        chromium-android 一条 goto 超时，隔离复跑绿，属已知偶发红家族）
+  - [x] **时序测试连跑 5 次全绿**（含 15 秒 deadline 与自动重送）；环境：本地；
         主脑验收会独立抽跑 ≥5 次
-  - [ ] **跨边界证据两条**：①客户端实际发出的帧字符串——`autoEnter` 开启时一次提交
+        （2026-08-22 主脑复跑：`playwright test tests/playwright/weak-network.spec.ts
+        --project=webkit-iphone` ×5 全绿，每轮含「lost accepted retries the same action once
+        and writes PTY once」的 15 秒 deadline → unknown → 同 ID 重送路径）
+  - [x] **跨边界证据两条**：①客户端实际发出的帧字符串——`autoEnter` 开启时一次提交
         **恰好一帧** `input-action` 且 `data` 以 `\r` 结尾（不是两帧）；
         ②localStorage 里 pending 的实际 JSON，且能断言**落盘早于发帧**；
         环境：本地 vitest
-  - [ ] **弱网 e2e**：发送成功后立刻离线（模拟 accepted 丢失）→ 恢复 → 同 ID 重送 →
+        （①②均由 weak-network.spec.ts T4 e2e 断言：`getActionFrames` 长度恰为 1 且
+        pending.data 以 `\r` 结尾；`getPendingAtActionSend` 在发帧瞬间读出的 localStorage
+        已含 pending = 落盘早于发帧；另 `tests/composer-action.test.ts:10` 断言
+        `herdweb:composer:v1:/` 的实际 JSON。2026-08-22 全绿）
+  - [x] **弱网 e2e**：发送成功后立刻离线（模拟 accepted 丢失）→ 恢复 → 同 ID 重送 →
         服务端去重 → 终端里**仍然只有一次**；环境：本地 Playwright（`context.setOffline`）
-  - [ ] **用户真实入口层证据**：Android + iOS 经 Cloudflare 生产地址各跑一次——
+        （T4 e2e 主判据：marker 在终端文本中出现次数恰为 1；2026-08-22 全量 + 5 连跑绿）
+  - [ ] **用户真实入口层证据**：Android + iOS 各跑一次——
         ①提交长指令后断网再恢复，终端里那条命令**只出现一次**；
         ②等待期间改草稿，accepted 到达后 pending 清了而**新草稿还在**；
-        ③重启 remobi 服务后旧 pending 变「结果未知」且**不会**被自动重送；
-        ④`autoEnter` 开启时终端里只多出一次回车；
-        环境：生产；真实入口：手机浏览器打开生产 URL 并用语音输入。
+        ③重启 herdweb 服务后旧 pending 变「结果未知」且**不会**被自动重送；
+        ④`autoEnter` 开启时终端里只多出一次回车。
+        入口（2026-08-22 用户指定，与 M1/M2 同）：Tailscale tailnet
+        `https://zlx-vm-work-i5-ubuntu2404-devcontainer.taile9071.ts.net/herdweb/`
+        （herdweb-debug 7691，`herdweb-dev` 会话；③的服务重启由主脑配合执行
+        `systemctl --user restart herdweb-debug.service`）。
 - **完成条件**：上面五条证据全部拿到，T4 卡走完 PR 漏斗合并进 `main`；
   设计文档 Success Criteria 的 8 条逐条对照过一遍，尤其第 4 条（ack 丢失后同 ID 重送不产生
   第二次 PTY 输入）与第 5 条（不声称 Herdr 已执行）。
