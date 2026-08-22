@@ -1,7 +1,7 @@
 import type { XTerminal } from '../types'
 
 /** Threshold in pixels — if the viewport height drops more than this below the observed ceiling, the keyboard is open */
-export const KB_THRESHOLD = 150
+const KB_THRESHOLD = 150
 
 /**
  * Largest viewport height observed so far — the baseline the soft keyboard
