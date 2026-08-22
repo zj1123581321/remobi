@@ -578,6 +578,71 @@ body.wt-composer-open #wt-toolbar {
 	z-index: 10003;
 }
 
+/* Notify settings panel */
+#wt-notify {
+	display: none;
+	position: fixed;
+	inset: 0;
+	z-index: 10002;
+	overflow-y: auto;
+	background: rgba(30, 30, 46, 0.96);
+	color: #cdd6f4;
+	padding: 48px 16px 24px;
+	font-family: sans-serif;
+}
+
+#wt-notify h2 {
+	margin: 0 0 12px;
+	font-size: 1.25rem;
+}
+
+#wt-notify .wt-notify-status {
+	margin: 0 0 12px;
+	color: #a6adc8;
+}
+
+#wt-notify .wt-notify-ios-hint {
+	margin: 0 0 16px;
+	padding: 12px;
+	border-radius: 8px;
+	background: #313244;
+	color: #bac2de;
+	font-size: 0.9rem;
+	line-height: 1.4;
+}
+
+#wt-notify .wt-notify-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 16px;
+}
+
+#wt-notify .wt-notify-test {
+	padding: 10px 16px;
+	border: none;
+	border-radius: 8px;
+	background: #cba6f7;
+	color: #1e1e2e;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+#wt-notify .wt-notify-close {
+	position: fixed;
+	top: 12px;
+	right: 12px;
+	background: #45475a;
+	color: #cdd6f4;
+	border: none;
+	border-radius: 50%;
+	width: 36px;
+	height: 36px;
+	font-size: 20px;
+	cursor: pointer;
+	z-index: 10003;
+}
+
 /* Combo picker */
 #wt-combo-backdrop {
 	display: none;

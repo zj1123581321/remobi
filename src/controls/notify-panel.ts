@@ -1,0 +1,209 @@
+import { joinBasePath } from '../base-path'
+import { el } from '../util/dom'
+import { onTap } from '../util/tap'
+
+export interface NotifyPanelDeps {
+	readonly basePath: string
+	readonly fetchFn?: typeof fetch
+}
+
+interface NotifyPanelResult {
+	readonly element: HTMLDivElement
+	readonly open: () => void
+	readonly close: () => void
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+	const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+	const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+	const raw = atob(base64)
+	const output = new Uint8Array(raw.length)
+	for (let i = 0; i < raw.length; i++) {
+		output[i] = raw.charCodeAt(i)
+	}
+	return output
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer | null): string {
+	if (buffer === null) return ''
+	const bytes = new Uint8Array(buffer)
+	let binary = ''
+	for (const byte of bytes) {
+		binary += String.fromCharCode(byte)
+	}
+	return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function isStandaloneDisplay(): boolean {
+	return window.matchMedia('(display-mode: standalone)').matches
+}
+
+/** Create the notify settings panel — fail-safe overlay opened from the drawer. */
+export function createNotifyPanel(deps: NotifyPanelDeps): NotifyPanelResult {
+	const fetchFn = deps.fetchFn ?? fetch.bind(globalThis)
+	const overlay = el('div', { id: 'wt-notify' })
+	const closeBtn = el('button', { class: 'wt-notify-close', type: 'button' }, '\u00D7')
+	const title = el('h2', {}, 'Notifications')
+	const status = el('p', { class: 'wt-notify-status', role: 'status' })
+	const iosHint = el('p', { class: 'wt-notify-ios-hint' })
+	iosHint.textContent =
+		'On iPhone, add herdweb to your Home Screen to receive push notifications. Safari tabs cannot subscribe.'
+	const toggleRow = el('div', { class: 'wt-notify-row' })
+	const toggleLabel = el('label', { class: 'wt-notify-toggle-label' }, 'Push notifications')
+	const toggle = el('input', { type: 'checkbox', class: 'wt-notify-toggle' }) as HTMLInputElement
+	toggleRow.append(toggleLabel, toggle)
+	const testBtn = el(
+		'button',
+		{ type: 'button', class: 'wt-notify-test' },
+		'Send test notification',
+	)
+	overlay.append(closeBtn, title, status, iosHint, toggleRow, testBtn)
+
+	function setStatus(message: string): void {
+		status.textContent = message
+	}
+
+	function updateIosHint(): void {
+		iosHint.style.display = isStandaloneDisplay() ? 'none' : 'block'
+	}
+
+	async function getRegistration(): Promise<ServiceWorkerRegistration | null> {
+		if (!('serviceWorker' in navigator)) return null
+		try {
+			return await navigator.serviceWorker.ready
+		} catch {
+			return null
+		}
+	}
+
+	async function refreshToggle(): Promise<void> {
+		const registration = await getRegistration()
+		if (!registration) {
+			toggle.checked = false
+			toggle.disabled = true
+			setStatus('Service worker unavailable')
+			return
+		}
+		toggle.disabled = false
+		const sub = await registration.pushManager.getSubscription()
+		toggle.checked = sub !== null
+		setStatus(sub ? 'Subscribed' : 'Not subscribed')
+	}
+
+	async function subscribe(): Promise<void> {
+		const registration = await getRegistration()
+		if (!registration) {
+			setStatus('Service worker unavailable')
+			return
+		}
+		const permission = await Notification.requestPermission()
+		if (permission !== 'granted') {
+			setStatus('Notification permission denied')
+			toggle.checked = false
+			return
+		}
+		const keyResponse = await fetchFn(joinBasePath(deps.basePath, '/api/push/vapid-key'))
+		if (!keyResponse.ok) {
+			setStatus('Failed to fetch VAPID key')
+			toggle.checked = false
+			return
+		}
+		const { publicKey } = (await keyResponse.json()) as { publicKey?: string }
+		if (typeof publicKey !== 'string') {
+			setStatus('Invalid VAPID key response')
+			toggle.checked = false
+			return
+		}
+		const subscription = await registration.pushManager.subscribe({
+			userVisibleOnly: true,
+			applicationServerKey: new Uint8Array(urlBase64ToUint8Array(publicKey)) as BufferSource,
+		})
+		const response = await fetchFn(joinBasePath(deps.basePath, '/api/push/subscribe'), {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				endpoint: subscription.endpoint,
+				keys: {
+					p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
+					auth: arrayBufferToBase64(subscription.getKey('auth')),
+				},
+			}),
+		})
+		if (!response.ok) {
+			setStatus('Subscribe failed on server')
+			await subscription.unsubscribe().catch(() => {})
+			toggle.checked = false
+			return
+		}
+		setStatus('Subscribed')
+	}
+
+	async function unsubscribe(): Promise<void> {
+		const registration = await getRegistration()
+		if (!registration) return
+		const sub = await registration.pushManager.getSubscription()
+		if (!sub) {
+			setStatus('Not subscribed')
+			return
+		}
+		await fetchFn(joinBasePath(deps.basePath, '/api/push/subscription'), {
+			method: 'DELETE',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ endpoint: sub.endpoint }),
+		}).catch(() => {})
+		await sub.unsubscribe().catch(() => {})
+		setStatus('Not subscribed')
+	}
+
+	function open(): void {
+		updateIosHint()
+		overlay.style.display = 'block'
+		void refreshToggle()
+	}
+
+	function close(): void {
+		overlay.style.display = 'none'
+	}
+
+	onTap(overlay, (e: Event) => {
+		if (e.target === closeBtn) close()
+	})
+
+	onTap(closeBtn, (e: Event) => {
+		e.stopPropagation()
+		close()
+	})
+
+	onTap(toggle, () => {
+		void (async () => {
+			if (toggle.checked) {
+				await subscribe()
+			} else {
+				await unsubscribe()
+			}
+		})()
+	})
+
+	onTap(testBtn, () => {
+		void (async () => {
+			const response = await fetchFn(joinBasePath(deps.basePath, '/api/events'), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					v: 1,
+					kind: 'test',
+					title: 'herdweb test',
+					body: 'Test notification from panel',
+					ts: Date.now(),
+				}),
+			})
+			if (response.status === 202) {
+				setStatus('Test event sent')
+			} else {
+				setStatus(`Test failed (${response.status})`)
+			}
+		})()
+	})
+
+	return { element: overlay, open, close }
+}
