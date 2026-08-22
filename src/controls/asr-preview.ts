@@ -32,7 +32,7 @@ const COMPOSER_STORAGE_KEY_PREFIX = 'herdweb:composer:v1:'
 const LEGACY_APP = 're' + 'mobi'
 const LEGACY_COMPOSER_STORAGE_KEY_PREFIX = `${LEGACY_APP}:composer:v1:`
 
-export { COMPOSER_STORAGE_KEY_PREFIX, LEGACY_COMPOSER_STORAGE_KEY_PREFIX }
+export { LEGACY_COMPOSER_STORAGE_KEY_PREFIX }
 
 const DRAFT_RESTORE_FAILURE = 'Draft could not be restored; stored copy left untouched.'
 const DRAFT_CORRUPT_RESET = 'Draft storage was corrupt and has been reset; your text is saved.'
