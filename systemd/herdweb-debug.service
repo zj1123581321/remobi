@@ -1,5 +1,5 @@
 [Unit]
-Description=remobi production bridge for the default herdr session
+Description=herdweb Tailscale debug bridge for herdr herdweb-dev
 Documentation=file:///home/zlx/projects/oss/remobi/docs/deploy-herdr.md
 
 [Service]
@@ -9,7 +9,4 @@ RestartSec=3
 Environment=HOME=%h
 Environment=PATH=/home/zlx/.local/share/fnm/aliases/default/bin:/home/zlx/.local/bin:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=/home/zlx/projects/oss/remobi
-ExecStart=/home/zlx/projects/oss/remobi/scripts/serve-prod.sh serve --host 127.0.0.1 --port 7681 -- herdr --session default
-
-[Install]
-WantedBy=default.target
+ExecStart=/home/zlx/.local/share/fnm/aliases/default/bin/pnpm exec tsx cli.ts serve --host 127.0.0.1 --port 7691 --base-path /remobi --config /home/zlx/projects/oss/remobi/.omo/herdweb-debug.config.ts -- herdr session attach herdweb-dev

@@ -34,12 +34,12 @@ check_homepage() {
   case "$status" in
     302|403|401) printf 'PASS: 首页需要认证（status=%s）\n' "$status" ;;
     200)
-      feature_count="$(grep -aEic 'remobi|xterm' "$HOME_BODY" || :)"
+      feature_count="$(grep -aEic 'herdweb|xterm' "$HOME_BODY" || :)"
       access_count="$(grep -aEic 'cloudflare access|cf-access|zero trust|access login|one-time pin|email verification' "$HOME_BODY" || :)"
       if (( access_count > 0 )); then
         printf 'PASS: 首页显示身份门页面（status=%s access_features=%s）\n' "$status" "$access_count"
       elif (( feature_count > 0 )); then
-        printf 'FAIL: 首页暴露 remobi 应用（status=%s app_features=%s）\n' "$status" "$feature_count"; EXPOSED=1
+        printf 'FAIL: 首页暴露 herdweb 应用（status=%s app_features=%s）\n' "$status" "$feature_count"; EXPOSED=1
       else
         printf 'FAIL: 首页无法判定（status=%s app_features=0 access_features=0）\n' "$status"; UNKNOWN=1
       fi
@@ -81,7 +81,7 @@ check_websocket() {
 check_homepage
 check_websocket
 if (( EXPOSED )); then
-  printf '暴露警告：公网入口仍可直接访问 remobi，退出码=1\n'; exit 1
+  printf '暴露警告：公网入口仍可直接访问 herdweb，退出码=1\n'; exit 1
 fi
 if (( UNKNOWN )); then
   printf '无法判定：网络或响应状态不足以证明入口已受保护，退出码=2\n'; exit 2

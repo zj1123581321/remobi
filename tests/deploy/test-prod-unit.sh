@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-UNIT="$ROOT/systemd/remobi.service"
+UNIT="$ROOT/systemd/herdweb.service"
 fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
 has() { grep -F -- "$2" "$1" >/dev/null || fail "$3"; }
 
@@ -16,9 +16,9 @@ has "$UNIT" 'Environment=PATH=/home/zlx/.local/share/fnm/aliases/default/bin:/ho
 grep -F -- 'node-versions/' "$UNIT" >/dev/null && fail 'production PATH must not pin node-versions'
 grep -F -- '0.0.0.0' "$UNIT" >/dev/null && fail 'production unit must remain loopback-only'
 grep -Fx -- '[Install]' "$UNIT" >/dev/null || fail 'production unit must be installable'
-has "$ROOT/scripts/install-prod.sh" 'UNIT_SOURCE="${REPO_ROOT}/systemd/remobi.service"' 'prod installer must only install prod unit'
-grep -F -- 'remobi-debug.service' "$ROOT/scripts/install-prod.sh" >/dev/null && fail 'prod installer must not install debug unit'
-has "$ROOT/scripts/install-debug.sh" 'UNIT_SOURCE="${REPO_ROOT}/systemd/remobi-debug.service"' 'debug installer contract missing'
+has "$ROOT/scripts/install-prod.sh" 'UNIT_SOURCE="${REPO_ROOT}/systemd/herdweb.service"' 'prod installer must only install prod unit'
+grep -F -- 'herdweb-debug.service' "$ROOT/scripts/install-prod.sh" >/dev/null && fail 'prod installer must not install debug unit'
+has "$ROOT/scripts/install-debug.sh" 'UNIT_SOURCE="${REPO_ROOT}/systemd/herdweb-debug.service"' 'debug installer contract missing'
 
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
