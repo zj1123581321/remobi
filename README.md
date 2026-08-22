@@ -1,248 +1,126 @@
 <div align="center">
-  <img src="logo/logo.svg" width="128" alt="remobi logo"/>
+  <img src="logo/logo.svg" width="128" alt="herdweb logo"/>
 </div>
 
-# remobi
+# herdweb
 
-[![CI](https://github.com/connorads/remobi/actions/workflows/ci.yml/badge.svg)](https://github.com/connorads/remobi/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/remobi)](https://www.npmjs.com/package/remobi)
-[![licence](https://img.shields.io/npm/l/remobi)](LICENSE)
+**Purpose-built Web UI for [herdr](https://github.com/ogulcancelik/herdr) — monitor and drive your coding agents from your phone.**
 
-**Your terminal. Everywhere.**
+herdweb is a mobile-first browser overlay for herdr sessions: swipe between tabs, pinch to zoom, tap to send commands, and keep full terminal power on a 6-inch screen. It is a self-hosted fork of the upstream [connorads/remobi](https://github.com/connorads/remobi) project — independent since 2026-08-20. See [fork decision](docs/decisions/2026-08-20-fork-herdr-focus.md) for background.
 
-Your tmux session, on your phone. Same panes, same windows, same bindings — nothing changes on your computer. Swipe between windows, pinch to zoom, tap to send commands. You just get a remote control.
+## Why herdweb
 
-It's a terminal on a 6-inch screen. It won't win design awards. But you can do *everything* — monitor coding agents, intervene when they're stuck, scroll through output, switch contexts. Full power.
-
-```bash
-/bin/bash -c "$(curl -fsSL http://remobi.app/install.sh)"
-```
-
-To upgrade stable: `npm install -g remobi@latest`
-
-To try the experimental channel: `npm install -g remobi@dev`
-
-Your coding agent handles the rest. It installs remobi, inspects your tmux config, generates a config, and suggests tweaks to make your tmux more mobile-friendly — one conversation. Works with Claude Code and Codex.
-
-## Why remobi
-
-- **Zero workflow changes** — your existing tmux setup, untouched
-- **Swipe between windows** — gesture navigation, no prefix key fumbling on a phone screen
+- **Built for herdr** — drawer buttons, gestures, and defaults match herdr keybindings out of the box
+- **Swipe between tabs** — gesture navigation without prefix-key fumbling on a phone screen
 - **Pinch to zoom** — resize text like every other app on your phone
 - **Install to your home screen** — standalone PWA, looks and feels native
 - **Config-driven** — your buttons, your gestures, your layout
-- **Self-hosted** — local-first by default. Bring your own access layer (Tailscale, Cloudflare, ngrok)
-
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/952bdb34-4b73-4210-815a-b2b60f99f87f" />
-</div>
+- **Self-hosted** — local-first by default; bring your own access layer (Tailscale, Cloudflare, ngrok)
 
 ## Requirements
 
 - [Node.js](https://nodejs.org/) ≥ 22
-- [tmux](https://github.com/tmux/tmux) (the default target multiplexer) — or [zellij](https://github.com/zellij-org/zellij) ([Using with zellij](#using-with-zellij)) or [herdr](https://github.com/ogulcancelik/herdr) ([Using with herdr](#using-with-herdr))
+- [herdr](https://github.com/ogulcancelik/herdr) — the agent multiplexer herdweb controls
 
-## Manual setup
+## Quick start
 
 ```bash
-# 1. Install
-npm install -g remobi
+git clone <your-fork-url> herdweb && cd herdweb
+pnpm install
+git config core.hooksPath .hk-hooks   # enable commit hooks (conventional commits, biome)
 
-# 2. Enable mouse mode in tmux (required for touch scroll and tap-to-focus)
-#    Add to ~/.config/tmux/tmux.conf or ~/.tmux.conf:
-#    set -g mouse on
-
-# 3. Start (spawns your command, serves remobi on 127.0.0.1:7681)
-remobi serve
+# Start (spawns herdr, serves herdweb on 127.0.0.1:7681)
+pnpm exec tsx cli.ts serve
 ```
 
-**Essential tmux settings for mobile** — add to your `tmux.conf` if not already present:
+Or build first, then run from `dist/`:
 
-| Setting | Command | Why |
-|---------|---------|-----|
-| Mouse mode | `set -g mouse on` | Enables touch scroll, tap-to-focus, drag resize. **The single highest-value setting for mobile use.** |
-| Status position | `set -g status-position top` | Keeps status bar away from remobi's touch toolbar at the bottom |
-| Renumber windows | `set -g renumber-windows on` | Keeps window list tidy after closing windows |
+```bash
+pnpm run build:dist
+node dist/cli.mjs serve
+```
 
-See [Mobile-friendly tmux config](.agents/skills/remobi-setup/references/mobile-tmux.md) for responsive status bars, popup sizing, and more.
+Open `http://localhost:7681` on the same machine to verify. For phone access, deploy behind a trusted proxy or tunnel — see [Deploying herdweb](docs/deploy-herdr.md).
 
-For local development, see the [Development](#development) section below.
-
-Open `http://localhost:7681` on the same machine to verify it works. For phone access, put a trusted proxy/tunnel in front of it, for example [Tailscale Serve](.agents/skills/remobi-setup/references/tailscale-serve.md). If your proxy mounts remobi under a URL prefix, start remobi with `--base-path /that-prefix` so the HTML, PWA links, and WebSocket all use the same external path.
+herdr captures mouse input by default, so touch scroll and tap-to-focus work with no extra multiplexer configuration.
 
 ### Voice composer prerequisites
 
 Voice composer microphone capture requires a secure browser context: use HTTPS on a phone (for
 example Tailscale Serve or an HTTPS reverse proxy). `localhost` and `127.0.0.1` are secure-context
 exceptions for local development; a plain HTTP LAN address is not. If the browser cannot use
-`getUserMedia`, remobi hides the voice composer entry instead of showing an unusable control.
-
-## Using with zellij
-
-[zellij](https://github.com/zellij-org/zellij) is a batteries-included tmux alternative with a discoverable, modal UI. remobi serves it the same way it serves tmux:
-
-```bash
-remobi serve -- zellij attach --create main
-```
-
-`zellij attach --create <name>` attaches or creates, like `tmux new-session -A`. Sessions persist across remobi restarts (zellij detaches rather than dying when the client goes away).
-
-zellij needs no extra setup for mobile:
-
-- Mouse mode is on by default, so touch scroll and tap-to-focus just work — no `set -g mouse on` equivalent to remember
-- Stock zellij ships a tmux-compat mode on `Ctrl-B`, so remobi's Prefix drawer button works unchanged, as do the New Window (`prefix+c`), Split (`prefix+%`/`prefix+"`), Zoom (`prefix+z`), Copy/scrollback (`prefix+[`), and Kill (`prefix+x`) drawer buttons; the swipe gestures (`prefix+n`/`prefix+p` — next/previous tab) work once enabled (they default to off)
-- Its native modal shortcuts (`Ctrl+t` for tabs, `Ctrl+p` for panes, …) also pass through fine
-
-Only three drawer buttons send sequences zellij doesn't bind. A `remobi.config.ts` with zellij equivalents:
-
-```typescript
-export default {
-  name: 'zellij',
-  drawer: {
-    buttons: (defaults) => [
-      ...defaults.filter((b) => !['tmux-sessions', 'tmux-windows', 'tmux-help'].includes(b.id)),
-      { id: 'zellij-sessions', label: 'Sessions', description: 'Open session manager', action: { type: 'send', data: '\x0fw' } },
-      { id: 'zellij-lock', label: 'Lock', description: 'Toggle locked mode (pass Ctrl keys through)', action: { type: 'send', data: '\x07' } },
-    ],
-  },
-}
-```
-
-`zellij-lock` toggles zellij's locked mode, which passes `Ctrl` keys straight through — handy when a TUI inside the session wants shortcuts zellij would otherwise capture. If you also stay attached from your desktop while remobi is connected, set `mirror_session true` in `~/.config/zellij/config.kdl` so both clients see the same view. For interactive onboarding, point an AI agent at the [remobi-setup skill](.agents/skills/remobi-setup/SKILL.md), which covers the zellij path.
-
-## Using with herdr
-
-[herdr](https://github.com/ogulcancelik/herdr) is an agent multiplexer — a tmux alternative purpose-built for supervising AI coding agents, with per-pane agent status detection. remobi serves it the same way it serves tmux:
-
-```bash
-remobi serve -- herdr --session main
-```
-
-`herdr --session <name>` attaches or creates, like `tmux new-session -A`. Sessions persist across remobi restarts.
-
-herdr needs no extra setup for mobile:
-
-- Mouse capture is on by default, so touch scroll and tap-to-focus just work — no `set -g mouse on` equivalent to remember
-- Its default prefix is `Ctrl-B`, the same as tmux, so remobi's Prefix drawer button works unchanged, as do the New Window (`prefix+c`), Zoom (`prefix+z`), Kill (`prefix+x`), and Help (`prefix+?`) drawer buttons; the swipe gestures (`prefix+n`/`prefix+p`) work once enabled (they default to off)
-- It has a built-in single-column mobile layout for narrow terminals (`ui.mobile_width_threshold` in herdr's config)
-
-Only a few drawer buttons send sequences herdr doesn't bind. A `remobi.config.ts` with herdr equivalents:
-
-```typescript
-export default {
-  name: 'herdr',
-  drawer: {
-    buttons: (defaults) => [
-      ...defaults.filter(
-        (b) => !['tmux-split-vertical', 'tmux-split-horizontal', 'tmux-sessions', 'tmux-windows', 'tmux-copy'].includes(b.id),
-      ),
-      { id: 'herdr-split-v', label: 'Split |', description: 'Split pane side-by-side', action: { type: 'send', data: '\x02v' } },
-      { id: 'herdr-split-h', label: 'Split —', description: 'Split pane stacked', action: { type: 'send', data: '\x02-' } },
-      { id: 'herdr-workspaces', label: 'Spaces', description: 'Workspace picker', action: { type: 'send', data: '\x02w' } },
-      { id: 'herdr-sidebar', label: 'Sidebar', description: 'Toggle agent sidebar', action: { type: 'send', data: '\x02b' } },
-      { id: 'herdr-scrollback', label: 'Scroll', description: 'Edit scrollback', action: { type: 'send', data: '\x02e' } },
-    ],
-  },
-}
-```
-
-`tmux-windows` is filtered out because in herdr `prefix+w` opens the workspace picker — `herdr-workspaces` re-adds the same sequence with an accurate label. For interactive onboarding, point an AI agent at the [remobi-setup skill](.agents/skills/remobi-setup/SKILL.md), which covers the herdr path.
-
-## Release channels
-
-- `main` publishes stable releases to npm `latest`
-- `dev` publishes prereleases to npm `dev`
-- merge `dev` into `main` to promote an experimental line to stable
-
-If an experimental change is breaking for consumers, include a `BREAKING CHANGE:` footer so semantic-release computes the right next version on both channels. `!` in the header is optional shorthand only; on its own it does not trigger a major release in this repo.
+`getUserMedia`, herdweb hides the voice composer entry instead of showing an unusable control.
 
 ## Set up with AI
 
-The setup skill checks your environment, inspects your tmux config, generates a `remobi.config.ts`, and suggests tmux mobile optimisations — one conversation. Three ways to use it, from simplest to most manual:
+The [herdweb-setup skill](.agents/skills/herdweb-setup/SKILL.md) checks your environment, interviews you about your workflow, generates a validated `herdweb.config.ts`, and walks through deployment — one conversation.
 
-**Option 1: One-liner** — installs the skill and launches an interactive session with your coding agent:
+Tell your coding agent:
 
-```bash
-/bin/bash -c "$(curl -fsSL http://remobi.app/install.sh)"
-```
-
-**Option 2: Install the skill** — if you prefer to start the conversation yourself:
-
-```bash
-npx skills add connorads/remobi
-```
-
-Then tell your coding agent: "Use the remobi-setup skill to onboard me."
-
-**Option 3: Already in a session?** — if an agent is already looking at this repo (or you don't want to install a skill), tell it:
-
-> Read `.agents/skills/remobi-setup/SKILL.md` in this repo and follow it to onboard me.
-
-The skill file contains the full setup workflow. The agent can read it directly — no installation needed.
+> Read `.agents/skills/herdweb-setup/SKILL.md` in this repo and follow it to onboard me.
 
 ## Security model
 
-`remobi` is a remote-control surface for your terminal. Anyone who can reach it can drive the tmux session with your user privileges.
+herdweb is a remote-control surface for your terminal. Anyone who can reach it can drive the herdr session with your user privileges.
 
-- `remobi serve` binds to `127.0.0.1` by default.
-- The inner PTY-backed terminal session stays local to the remobi process.
-- There is no built-in login, password, or ACL in remobi itself.
+- `herdweb serve` binds to `127.0.0.1` by default.
+- The inner PTY-backed terminal session stays local to the herdweb process.
+- There is no built-in login, password, or ACL in herdweb itself.
 - Safe default: keep it on localhost and publish it through a trusted layer like Tailscale Serve.
-- If you use `remobi serve --host 0.0.0.0`, you are exposing terminal control to your LAN/whatever can route to that port. Do that only if you intentionally want direct network exposure and have separate network controls in place.
+- If you use `herdweb serve --host 0.0.0.0`, you are exposing terminal control to your LAN/whatever can route to that port. Do that only if you intentionally want direct network exposure and have separate network controls in place.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## CLI reference
 
 ```text
-remobi serve [--config <path>] [--port <n>] [--host <addr>] [--base-path <path>] [-- <command...>]
-  Start remobi with its built-in web terminal and PWA support.
-  Default host: 127.0.0.1. Default port: 7681. Default command: tmux new-session -A -s main
-  Example: remobi serve --host 0.0.0.0 --port 8080
-  Example: remobi serve --base-path /random-token
-  Example: remobi serve --port 8080 -- tmux new -As dev
+herdweb serve [--config <path>] [--port <n>] [--host <addr>] [--base-path <path>] [-- <command...>]
+  Start herdweb with its built-in web terminal and PWA support.
+  Default host: 127.0.0.1. Default port: 7681. Default command: herdr --session default
+  Example: herdweb serve --host 0.0.0.0 --port 8080
+  Example: herdweb serve --base-path /random-token
+  Example: herdweb serve --port 8080 -- herdr --session dev
 
-remobi build [--config <path>] [--output <path>] [--dry-run]
-  Deprecated. remobi no longer patches ttyd HTML.
+herdweb build [--config <path>] [--output <path>] [--dry-run]
+  Deprecated. herdweb no longer patches ttyd HTML.
 
-remobi inject [--config <path>] [--dry-run]
-  Deprecated. remobi no longer patches ttyd HTML.
+herdweb inject [--config <path>] [--dry-run]
+  Deprecated. herdweb no longer patches ttyd HTML.
 
-remobi init
-  Scaffold a remobi.config.ts with commented defaults.
+herdweb init
+  Scaffold a herdweb.config.ts with commented defaults.
 
-remobi --version
-remobi --help
+herdweb --version
+herdweb --help
 ```
 
 Short flags: `-c` (`--config`), `-p` (`--port`). Legacy deprecated flags: `-o` (`--output`), `-n` (`--dry-run`).
 
+The `--` escape hatch after `serve` lets you override the default command, for example `herdweb serve -- bash --norc` for debugging without herdr.
+
 ### Config resolution
 
-When `--config` is not specified, remobi searches:
+When `--config` is not specified, herdweb searches:
 
-1. `remobi.config.ts` / `.js` in the current directory
-2. `~/.config/remobi/remobi.config.ts` / `.js` (XDG fallback)
+1. `herdweb.config.ts` / `.js` in the current directory
+2. `~/.config/herdweb/herdweb.config.ts` / `.js` (XDG fallback)
+3. Legacy `remobi.config.ts` paths (automatic fallback for migration)
 
 ## Configuration
 
-Create `remobi.config.ts` (or run `remobi init`):
+Create `herdweb.config.ts` (or run `herdweb init`):
 
 ```typescript
 export default {
+  name: 'herdr',
   font: {
     family: 'JetBrainsMono NFM, monospace',
-    mobileSizeDefault: 13,   // adjusted sizes (drawer Font -/+) persist in localStorage
+    mobileSizeDefault: 13,
     sizeRange: [8, 32],
   },
   toolbar: {
-    // Single row by default (8 buttons): Esc, C-c, ✥ dpad-toggle, ⏎ Enter,
-    // 🎤 voice-input (hidden unless ASR is available), 🖼 image-upload,
-    // ⌨ keyboard-toggle, ☰ drawer-toggle. ✥ pops up a floating d-pad
-    // (← ↑ ↓ → ⌫ ⏎) above the toolbar — the arrow keys and ⌫ live there
-    // now (⌫ and up/down also keep fallback buttons in the drawer). row2
-    // defaults to empty — set it to opt into a second row.
-    // Ctrl/Prefix/Paste/Tab live in the drawer.
+    // Single row by default: Esc, C-c, ✥ dpad-toggle, ⏎ Enter, 🎤 voice-input,
+    // 🖼 image-upload, ⌨ keyboard-toggle, ☰ drawer-toggle
     row1: [
       { id: 'esc', label: 'Esc', description: 'Send Escape key', action: { type: 'send', data: '\x1b' } },
       { id: 'ctrl-c', label: 'C-c', description: 'Send Ctrl-C interrupt', action: { type: 'send', data: '\x03' } },
@@ -252,21 +130,26 @@ export default {
   },
   drawer: {
     buttons: [
-      { id: 'tmux-new-window', label: '+ Win', description: 'Create tmux window', action: { type: 'send', data: '\x02c' } },
-      { id: 'tmux-split-vertical', label: 'Split |', description: 'Split pane vertically', action: { type: 'send', data: '\x02%' } },
-      { id: 'combo-picker', label: 'Combo', description: 'Open combo sender (Ctrl/Alt + key)', action: { type: 'combo-picker' } },
-      { id: 'font-increase', label: 'Font +', description: 'Increase font size', action: { type: 'font-size', delta: 2 } },
-      { id: 'guide', label: 'Guide', description: 'Open the remobi help guide', action: { type: 'help' } },
+      { id: 'herdr-new-window', label: '+ Win', description: 'Create herdr tab', action: { type: 'send', data: '\x02c' } },
+      { id: 'herdr-split-v', label: 'Split |', description: 'Split pane side-by-side', action: { type: 'send', data: '\x02v' } },
+      { id: 'herdr-split-h', label: 'Split —', description: 'Split pane stacked', action: { type: 'send', data: '\x02-' } },
+      { id: 'herdr-zoom', label: 'Zoom', description: 'Toggle pane zoom', action: { type: 'send', data: '\x02z' } },
+      { id: 'herdr-workspaces', label: 'Spaces', description: 'Workspace picker', action: { type: 'send', data: '\x02w' } },
+      { id: 'herdr-sidebar', label: 'Sidebar', description: 'Toggle agent sidebar', action: { type: 'send', data: '\x02b' } },
+      { id: 'herdr-scrollback', label: 'Scroll', description: 'Edit scrollback', action: { type: 'send', data: '\x02e' } },
+      { id: 'herdr-kill-pane', label: 'Kill', description: 'Kill pane', action: { type: 'send', data: '\x02x' } },
+      { id: 'herdr-help', label: 'Help', description: 'Show herdr help', action: { type: 'send', data: '\x02?' } },
+      { id: 'herdr-prefix', label: 'Prefix', description: 'Send herdr prefix (Ctrl-B)', action: { type: 'send', data: '\x02' } },
       // ...
     ],
   },
   gestures: {
     swipe: {
-      enabled: true,        // default: false — horizontal swipes scroll the toolbar row; opt in to swipe-to-switch-window
-      left: '\x02n',         // data sent on swipe left (default: next tmux window)
-      right: '\x02p',        // data sent on swipe right (default: prev tmux window)
-      leftLabel: 'Next tmux window',    // shown in help overlay
-      rightLabel: 'Previous tmux window',
+      enabled: true,
+      left: '\x02n',
+      right: '\x02p',
+      leftLabel: 'Next herdr tab',
+      rightLabel: 'Previous herdr tab',
     },
     scroll: {
       enabled: true,
@@ -280,12 +163,9 @@ export default {
     pinch: { enabled: true },
   },
   mobile: {
-    initData: '\x02z',     // send on mobile load when viewport < widthThreshold
-    widthThreshold: 768,   // px — default matches common phone/tablet breakpoint
-    keyboardMode: 'auto',  // 'auto': tapping the terminal opens the soft keyboard.
-                           // 'manual': the keyboard stays suppressed — only the ⌨
-                           // button (toolbar row1) summons/dismisses it. In manual
-                           // mode remobi injects a ⌨ button if your config has none.
+    initData: '\x02z',
+    widthThreshold: 768,
+    keyboardMode: 'auto',
   },
   floatingButtons: [
     {
@@ -296,8 +176,7 @@ export default {
     },
   ],
   scrollButtons: {
-    enabled: false,      // floating PgUp/PgDn arrows on the right edge (default off —
-                         // finger-drag scroll already covers them)
+    enabled: false,
   },
 }
 ```
@@ -312,17 +191,17 @@ self-hosted deployment. Keep the key in the `.local` config file; it is necessar
 the browser when voice input is enabled.
 
 ```typescript
-// remobi.config.ts — shared settings, no secret
+// herdweb.config.ts — shared settings, no secret
 export default {
   asr: {
     enabled: true,
-    autoEnter: true, // sends a separate Enter after confirmed text
+    autoEnter: true,
   },
 }
 ```
 
 ```typescript
-// remobi.config.local.ts — keep this file private
+// herdweb.config.local.ts — keep this file private
 export default {
   asr: {
     doubao: {
@@ -334,83 +213,29 @@ export default {
 ```
 
 The `voice-input` action is toolbar-only; putting it in `drawer.buttons` or `floatingButtons` is
-rejected by config validation. The toolbar entry opens a full-screen, bottom-sheet voice composer
-without starting a recording or focusing the input. Tap the composer's circular Mic to start or
-stop the session; while recording, partial text is read-only, then the final preview can be edited
-and sent. Typed text can also be sent directly. The Send button closes the composer; × and the
-backdrop discard the current session. The default row1 already carries `voice-input` (between ⏎
-and 🖼) — it stays hidden until ASR is available. With a custom row1 that lacks it, remobi injects
-the entry after `keyboard-toggle` and before `drawer-toggle` (or appends it to row1).
-Before sending, hooks run first and the last sanitization pass removes C0 controls (including tab,
-newline, and carriage return), DEL, and C1 controls; `autoEnter` appends its carriage return
-separately. If the terminal WebSocket is down, the composer stays visible and is never queued for
-later delivery.
-
-On iOS, Safari/PWA backgrounding, screen locking, calls, Siri, or another app taking the audio
-session can interrupt capture. remobi cancels that recording and keeps the composer safe to use
-again; start a new session after returning to the page.
-
-Shipped tmux drawer defaults stick to stock tmux bindings (`c`, `%`, `"`, `s`, `w`, `[`, `?`, `x`, `z`) rather than personal popup workflows.
-
-Replace the drawer entirely with a plain array when you want a fully custom setup:
-
-```typescript
-import { defineConfig } from 'remobi/config'
-
-export default defineConfig({
-  drawer: {
-    buttons: [
-      { id: 'sessions', label: 'Sessions', description: 'Choose tmux session', action: { type: 'send', data: '\x02s' } },
-      { id: 'git', label: 'Git', description: 'Open my tmux git popup', action: { type: 'send', data: '\x02g' } },
-    ],
-  },
-})
-```
-
-At runtime, remobi validates the config object shape and rejects unknown keys with clear path-based errors.
+rejected by config validation.
 
 `gestures.scroll.strategy` controls touch scroll behaviour:
 
 - `wheel` (default): sends SGR mouse wheel events with touch-mapped terminal coordinates.
 - `keys`: sends `PageUp` / `PageDown` for app-level paging when preferred.
 
-### Programmatic API
-
-```typescript
-import { defineConfig, serialiseThemeForTtyd } from 'remobi/config'
-import type { RemobiConfig, ControlButton } from 'remobi/types'
-import { init } from 'remobi'
-```
-
-Advanced consumers can use hook registry primitives to observe lifecycle and terminal-send events:
-
-```typescript
-import { createHookRegistry, init } from 'remobi'
-
-const hooks = createHookRegistry()
-hooks.on('beforeSendData', (ctx) => {
-  if (ctx.data.includes('rm -rf /')) return { block: true }
-})
-
-init(undefined, hooks)
-```
+At runtime, herdweb validates the config object shape and rejects unknown keys with clear path-based errors.
 
 ## Guides
 
-- [Mobile-friendly tmux config](.agents/skills/remobi-setup/references/mobile-tmux.md) — responsive status bar, popup sizing, binding ergonomics
-- [Mobile pane navigation](.agents/skills/remobi-setup/references/mobile-panes.md) — zoom-aware swipe, auto-zoom on load, floating buttons
-- [Tailscale Serve](.agents/skills/remobi-setup/references/tailscale-serve.md) — expose over your tailnet with HTTPS
-- [Keeping your Mac awake](.agents/skills/remobi-setup/references/keep-awake.md) — prevent sleep during remote sessions
-- [ttyd flags](.agents/skills/remobi-setup/references/ttyd-flags.md) — legacy notes for old ttyd-based setups
+- [Mobile pane navigation](.agents/skills/herdweb-setup/references/mobile-panes.md) — zoom-aware swipe, auto-zoom on load, floating buttons
+- [Tailscale Serve](.agents/skills/herdweb-setup/references/tailscale-serve.md) — expose over your tailnet with HTTPS
+- [Keeping your Mac awake](.agents/skills/herdweb-setup/references/keep-awake.md) — prevent sleep during remote sessions
 
 ## Architecture docs
 
-- [How remobi works](docs/architecture/how-remobi-works.md) — runtime overview, shared session model, and boot path
+- [How herdweb works](docs/architecture/how-herdweb-works.md) — runtime overview, shared session model, and boot path
 - [Networking and WebSocket flow](docs/architecture/networking-and-websockets.md) — request lifecycle, protocol, and network boundary
 
 ## Architecture
 
-Pure TypeScript + DOM API — no framework. The build bundles the browser client via esbuild, serves it from Node, and bridges browser input/output to a local PTY via `node-pty`. `xterm.js` handles terminal rendering in the browser; remobi layers the mobile controls on top. The docs above walk through the current runtime in more detail, including diagrams for the server, browser, and WebSocket flow.
+Pure TypeScript + DOM API — no framework. The build bundles the browser client via esbuild, serves it from Node, and bridges browser input/output to a local PTY via `node-pty`. `xterm.js` handles terminal rendering in the browser; herdweb layers the mobile controls on top.
 
 Key modules:
 
@@ -424,30 +249,12 @@ Key modules:
 | `src/viewport/` | Height management, landscape detection |
 | `src/util/` | DOM helpers, terminal, keyboard, haptics |
 
-## Public API and semver
-
-remobi follows semantic versioning. The public API is defined by the following import paths:
-
-| Import path | Contents | Stability |
-|---|---|---|
-| `remobi` | `init`, `defineConfig`, `createHookRegistry`, `RemobiConfig`, `ControlButton`, `ButtonAction`, `ButtonArrayPatch`, `ButtonArrayInput`, `RemobiConfigOverrides`, `HookRegistry` | Public — breaking changes are semver-major |
-| `remobi/config` | `defineConfig`, `mergeConfig`, `defaultConfig`, `serialiseThemeForTtyd` | Public |
-| `remobi/types` | All types in `src/types.ts` | Public |
-
-**Internal modules** (not part of the public API — may change without a major version bump):
-`src/toolbar/`, `src/drawer/`, `src/gestures/`, `src/controls/`, `src/theme/`, `src/viewport/`, `src/util/`, `src/serve.ts`, `src/cli/`, `build.ts`
-
-**Semver policy**:
-- **Major**: removing or renaming a public export, changing a public function signature incompatibly, removing a config field
-- **Minor**: adding new public exports, new optional config fields, new `ButtonArrayInput` operations
-- **Patch**: bug fixes, internal refactors, documentation updates
-
 ## Development
 
 ```bash
-git clone https://github.com/connorads/remobi.git && cd remobi
+git clone <your-fork-url> herdweb && cd herdweb
 pnpm install
-git config core.hooksPath .hk-hooks   # enable commit hooks (conventional commits, biome)
+git config core.hooksPath .hk-hooks
 ```
 
 ### Running locally
@@ -455,17 +262,15 @@ git config core.hooksPath .hk-hooks   # enable commit hooks (conventional commit
 From source (bundles the browser client on the fly via esbuild — no build step needed):
 
 ```bash
-tsx cli.ts serve              # localhost:7681, default tmux session
+pnpm exec tsx cli.ts serve              # localhost:7681, default herdr session
 ```
 
 Or build first, then run from dist/:
 
 ```bash
-pnpm run build:dist          # transpile TS → JS + bundle browser client
-node dist/cli.mjs serve      # run locally-built version on localhost:7681
+pnpm run build:dist
+node dist/cli.mjs serve
 ```
-
-No watch mode — re-run the build or use `tsx` for automatic source bundling.
 
 ### Checks
 
@@ -475,28 +280,27 @@ pnpm run test:pw     # playwright e2e (needs: pnpm exec playwright install chrom
 pnpm run check       # biome lint + format
 ```
 
+## Release channels
+
+- `main` publishes stable GitHub Releases
+- `dev` publishes prereleases
+- merge `dev` into `main` to promote an experimental line to stable
+
+This fork does not publish to npm. Versioning and changelog are driven by semantic-release on push to `main` and `dev`.
+
 ## FAQ
 
 **Is this secure?**
-remobi doesn't handle auth — it's a UI overlay. Use a tunnel or VPN you trust. We recommend [Tailscale](.agents/skills/remobi-setup/references/tailscale-serve.md) (deployment guide included) — your session never leaves your tailnet. Cloudflare Tunnel and ngrok also work. Security is your responsibility.
+herdweb doesn't handle auth — it's a UI overlay. Use a tunnel or VPN you trust. See [Deploying herdweb](docs/deploy-herdr.md) and [Tailscale Serve](.agents/skills/herdweb-setup/references/tailscale-serve.md). Security is your responsibility.
 
 **Why not Termux / Termius / SSH apps?**
-They work. But you're managing SSH keys, losing your tmux setup, and fighting a UI that wasn't built for touch. remobi keeps your exact workflow — same panes, same windows, same bindings — and adds touch controls on top.
+They work, but you're managing SSH keys and fighting a UI that wasn't built for touch. herdweb keeps your herdr workflow and adds touch controls on top.
 
-**Why not [Happy](https://github.com/slopus/happy) / Claude resume / chat-based mobile apps?**
-Those tools change your workflow. Chat relays route through third-party servers. Claude's resume has limitations. remobi gives you the raw terminal — full power, self-hosted, works with every agent because it works with tmux.
-
-**Why Node?**
-remobi migrated from Bun to Node.js + pnpm for broader compatibility. It transpiles to JS via tsdown for npm distribution and uses esbuild for the browser client bundle.
+**Why not chat-based mobile apps?**
+Those tools change your workflow. herdweb gives you the raw terminal — full power, self-hosted, works with every agent herdr can host.
 
 **Is this production-ready?**
-It's v0.1. The author uses it daily. It works. It's also early — feedback welcome, forks encouraged.
-
-## Acknowledgements
-
-remobi owns the full web terminal path now: a local PTY on the server, `xterm.js` in the browser, and the mobile touch controls on top.
-
-Earlier versions were built on top of [ttyd](https://github.com/tsl0922/ttyd). It helped remobi launch quickly, prove the workflow, and shape the product before the runtime moved in-house.
+It's early. The author uses it daily. Feedback welcome.
 
 ## Licence
 
