@@ -29,7 +29,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     def do_GET(self):
         if mode == "exposed" and self.path == "/":
-            body = b"<title>remobi</title><div>xterm</div>FAKE_BODY_SHOULD_NOT_LEAK"
+            body = b"<title>herdweb</title><div>xterm</div>FAKE_BODY_SHOULD_NOT_LEAK"
             self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
         elif mode == "exposed" and self.path == "/ws":
             self.send_response_only(101); self.send_header("Connection", "Upgrade"); self.send_header("Upgrade", "websocket"); self.end_headers(); self.close_connection = True
