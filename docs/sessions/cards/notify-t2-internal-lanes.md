@@ -28,7 +28,7 @@
   6. 静默/健康都走 `NotifyService.dispatchEvent`（统一去重/落盘/异步推送），不走 HTTP。
 - **任务类型**：backend-logic
 - **复杂度**：M
-- **Base commit**：（派发时由主脑填：卡 1 合入 feat/notify-attention 后的 sha）
+- **Base commit**：6f2570d8182e98679ade653cd86205d102ed4c58（卡 1 已合入 feat/notify-attention）
 - **Branch**：由 delegate 分配（card/<worktree 名>），执行器不得另建分支
 - **Worktree**：是，delegate 创建
 - **当前唯一写入者**：delegate 派发的执行器

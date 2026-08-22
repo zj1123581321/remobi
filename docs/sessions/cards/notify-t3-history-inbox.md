@@ -25,7 +25,7 @@
   5. DOM 创建一律走 `src/util/dom.ts` helpers，样式进 `styles/base.css`，风格对齐既有面板。
 - **任务类型**：frontend-ui
 - **复杂度**：M
-- **Base commit**：（派发时由主脑填：卡 1 合入 feat/notify-attention 后的 sha）
+- **Base commit**：6f2570d8182e98679ade653cd86205d102ed4c58（卡 1 已合入 feat/notify-attention）
 - **Branch**：由 delegate 分配（card/<worktree 名>），执行器不得另建分支
 - **Worktree**：是，delegate 创建
 - **当前唯一写入者**：delegate 派发的执行器
