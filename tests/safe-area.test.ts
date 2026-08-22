@@ -50,6 +50,29 @@ describe('base.css safe-area coverage', () => {
 		expect(blockFor('#wt-scroll-buttons')).toContain('env(safe-area-inset-right, 0px)')
 	})
 
+	test('terminal container respects the top and side insets', () => {
+		const block = blockFor('#terminal-container')
+		expect(block).toContain('box-sizing: border-box')
+		expect(block).toContain('padding-top: env(safe-area-inset-top, 0px)')
+		expect(block).toContain('padding-left: env(safe-area-inset-left, 0px)')
+		expect(block).toContain('padding-right: env(safe-area-inset-right, 0px)')
+	})
+
+	test('terminal container has no bottom inset or clearing shorthand', () => {
+		const block = blockFor('#terminal-container')
+		expect(block).not.toContain('safe-area-inset-bottom')
+		expect(block).not.toMatch(/(^|;)\s*padding\s*:/)
+	})
+
+	test('#terminal itself carries no safe-area padding', () => {
+		const blocks = [...css.matchAll(/#terminal\s*\{([^}]*)\}/g)].map((m) => m[1] ?? '')
+		expect(blocks.length).toBeGreaterThan(0)
+		expect(blocks.some((b) => b.includes('height: 100%'))).toBe(true)
+		for (const block of blocks) {
+			expect(block).not.toContain('safe-area-inset')
+		}
+	})
+
 	test('existing bottom inset coverage is preserved', () => {
 		expect(blockFor('#wt-toolbar')).toContain('env(safe-area-inset-bottom, 0px)')
 		expect(blockFor('.wt-floating-bottom-left')).toContain('env(safe-area-inset-bottom, 0px)')
