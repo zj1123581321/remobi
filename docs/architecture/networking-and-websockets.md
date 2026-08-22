@@ -1,16 +1,16 @@
 # Networking and WebSocket flow
 
-This page explains how a browser reaches remobi, how the WebSocket transport works, and how the shared terminal session stays in sync across clients.
+This page explains how a browser reaches herdweb, how the WebSocket transport works, and how the shared terminal session stays in sync across clients.
 
-For the high-level runtime layout, see [How remobi works](how-remobi-works.md).
+For the high-level runtime layout, see [How herdweb works](how-herdweb-works.md).
 
 ## Network boundary
 
-remobi is intentionally simple at the network edge:
+herdweb is intentionally simple at the network edge:
 
-- `remobi serve` binds to `127.0.0.1` by default
+- `herdweb serve` binds to `127.0.0.1` by default
 - there is no built-in auth layer
-- the recommended deployment model is localhost remobi behind Tailscale Serve, a VPN, or another trusted tunnel
+- the recommended deployment model is localhost herdweb behind Tailscale Serve, a VPN, or another trusted tunnel
 - using `--host 0.0.0.0` deliberately exposes terminal control beyond loopback
 
 The browser talks to three server entry points:
@@ -19,14 +19,14 @@ The browser talks to three server entry points:
 - `GET /ws` for the terminal WebSocket
 - `POST /api/image-drop` for image uploads from the drawer Image button
 
-When `remobi serve --base-path /prefix` is used, remobi also serves the same HTML, WebSocket, manifest, and icon routes under `/prefix/...`. Root routes stay available for direct local access.
+When `herdweb serve --base-path /prefix` is used, herdweb also serves the same HTML, WebSocket, manifest, and icon routes under `/prefix/...`. Root routes stay available for direct local access.
 
 ## Browser-to-session sequence
 
 ```mermaid
 sequenceDiagram
     participant Browser
-    participant Server as remobi server
+    participant Server as herdweb server
     participant Session as SharedTerminalSession
     participant PTY as node-pty command
 
@@ -50,7 +50,7 @@ sequenceDiagram
 
 ## Message protocol
 
-The WebSocket payloads are JSON strings. remobi validates both shape and size before acting on them.
+The WebSocket payloads are JSON strings. herdweb validates both shape and size before acting on them.
 
 ### Browser -> server
 
@@ -99,7 +99,7 @@ That is why the browser client has both snapshot handling and pending-output buf
 
 ## Security and browser constraints
 
-The current server behaviour matters for docs because remobi is usually deployed behind another network layer:
+The current server behaviour matters for docs because herdweb is usually deployed behind another network layer:
 
 - `/ws` upgrades, including prefixed variants such as `/prefix/ws`, are gated by an Origin check against the request Host header
 - when no Origin is sent, loopback hosts are the only implicit allow case
@@ -113,5 +113,5 @@ The browser opens exactly one terminal socket to `${location.host}${basePath}/ws
 - before the socket opens, outbound messages are queued locally
 - on open, the client sends a resize based on the fitted terminal size, then flushes queued messages
 - inbound `output` can arrive before `snapshot`, so the client buffers that output until the snapshot has been written
-- if reconnect UI is enabled, remobi can show a reconnect overlay when the socket closes or errors
+- if reconnect UI is enabled, herdweb can show a reconnect overlay when the socket closes or errors
 - if reconnect UI is disabled, the browser shows a simple session-ended or connection-lost overlay with a reload button
