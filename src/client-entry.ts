@@ -802,9 +802,7 @@ function main(config: HerdwebConfig, version: string | undefined): void {
 		window.removeEventListener('pageshow', onPageShow)
 		window.removeEventListener('online', onOnline)
 		window.removeEventListener('offline', onOffline)
-		window.removeEventListener('resize', syncSize)
 		window.removeEventListener('beforeunload', dispose)
-		window.visualViewport?.removeEventListener('resize', syncSize)
 	}
 	// Keep explicit teardown available without coupling it to a cancelable navigation event.
 	void dispose
@@ -819,8 +817,8 @@ function main(config: HerdwebConfig, version: string | undefined): void {
 
 	connect()
 
-	window.addEventListener('resize', syncSize)
-	window.visualViewport?.addEventListener('resize', syncSize)
+	// Viewport-driven resizes flow through the height manager (src/viewport/height.ts),
+	// which debounces them into a single resizeTerm → __herdwebResize → syncSize call.
 
 	const hooks = createHookRegistry()
 	// Image drop: synced/fresh gating reuses the term bridge — isConnected() is the
