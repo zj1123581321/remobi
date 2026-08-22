@@ -65,7 +65,7 @@ describe('base.css safe-area coverage', () => {
 	})
 
 	test('#terminal itself carries no safe-area padding', () => {
-		const blocks = [...css.matchAll(/#terminal\s*\{([^}]*)\}/g)].map((m) => m[1])
+		const blocks = [...css.matchAll(/#terminal\s*\{([^}]*)\}/g)].map((m) => m[1] ?? '')
 		expect(blocks.length).toBeGreaterThan(0)
 		expect(blocks.some((b) => b.includes('height: 100%'))).toBe(true)
 		for (const block of blocks) {
