@@ -21,7 +21,7 @@
 - **锁定决策**：
   1. README 通知节必须如实写明：①iOS 前提=添加到主屏幕的 PWA（iOS 16.4+，Safari 标签页无 Push API）；②VAPID 首次启动自动生成，轮换走 config `notify.vapid.*`；③状态目录按端口分仓 `~/.local/state/herdweb/{port}/`（7681/7691 并发互不干扰）；④`POST /api/events` 仅回环 + 可选 `notify.token`——外部事件源须与 herdweb 同机；⑤延迟如实：herdweb 自有静默车道 3-5 分钟；badge 车道（asking/done/ci-red）接入后典型 60-90 秒，且该车道在 agent-config 侧（zlxlabs/agent-config#495）未合入前不可用——不得写成「已可用」；⑥curl 冒烟示例一条。
   2. `.agents/skills/herdweb-setup/SKILL.md`：推送 onboarding 步骤（订阅路径 ☰→🔔→通知面板、iOS 主屏引导、测试按钮验证、故障排查一行：检查 vapid.json 与订阅文件）；config 变更表补 `notify.*` 全量键。skill 与真实 config 形状/CLI 行为同步是该文件自身纪律。
-  3. GOALS.md：新增里程碑 M4「注意力层 v1」+ `goals/M4-notify-attention.md` 进度文件（完成定义引用 HANDOFF 的用户可感知验收 + 真机人工门清单，状态标注「代码完成，真机人工门待用户执行」）；当前激活里程碑保持「无」不变。
+  3. `goals/M4-notify-attention.md` 进度文件（完成定义引用 HANDOFF 的用户可感知验收 + 真机人工门清单，状态标注「代码完成，真机人工门待用户执行」）；GOALS.md 索引行由主脑维护（闸规则），执行器不得改 GOALS.md。
   4. AGENTS.md Module Layout 加 `src/notify/` 与 `src/sw-entry.ts` 一行；`docs/deploy-herdr.md` 补状态目录契约与重启只发一条通知的运维预期。
 - **任务类型**：tests-docs
 - **复杂度**：M
@@ -35,10 +35,10 @@
 
 ## 修改边界
 
-- **允许**：`README.md`、`.agents/skills/herdweb-setup/SKILL.md`、`GOALS.md`、`goals/M4-notify-attention.md`（新建）、`AGENTS.md`、`docs/deploy-herdr.md`
-- **禁止**：`src/**`、`tests/**`、`.github/workflows/**`、`CHANGELOG.md`、`docs/sessions/cards/**`（历史卡不再改写）
+- **允许**：`README.md`、`.agents/skills/herdweb-setup/SKILL.md`、`goals/M4-notify-attention.md`（新建）、`AGENTS.md`、`docs/deploy-herdr.md`
+- **禁止**：`GOALS.md`（主脑维护，闸规则）、`src/**`、`tests/**`、`.github/workflows/**`、`CHANGELOG.md`、`docs/sessions/cards/**`（历史卡不再改写）
 - **验证根默认禁止**：`.github/workflows/`（所有仓）
-- **Scope-Globs**：README.md .agents/skills/herdweb-setup/SKILL.md GOALS.md goals/M4-notify-attention.md AGENTS.md docs/deploy-herdr.md
+- **Scope-Globs**：README.md .agents/skills/herdweb-setup/SKILL.md goals/M4-notify-attention.md AGENTS.md docs/deploy-herdr.md
 - **高风险区域**：无（纯文档）；注意 README 中不得出现夸大可用性表述（badge 车道未接入）。
 
 ## 完成条件
