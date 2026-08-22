@@ -800,4 +800,5 @@ export async function serve(
 	notifyService.dispose()
 	server.close()
 	caffeinateProc?.kill()
+	await session?.dispose()
 }
