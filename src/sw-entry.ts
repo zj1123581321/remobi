@@ -65,7 +65,7 @@ export async function handlePushSubscriptionChange(
 		}).catch(() => {})
 	}
 
-	await fetchFn(resolveScopeUrl(scope, 'api/push/subscribe'), {
+	const subscribeResponse = await fetchFn(resolveScopeUrl(scope, 'api/push/subscribe'), {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify({
@@ -76,6 +76,10 @@ export async function handlePushSubscriptionChange(
 			},
 		}),
 	})
+	if (!subscribeResponse.ok) {
+		await subscription.unsubscribe().catch(() => {})
+		throw new Error(`subscribe failed: ${subscribeResponse.status}`)
+	}
 }
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
