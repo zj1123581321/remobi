@@ -60,14 +60,15 @@
 
 ## 修改边界
 
-- **允许**：`README.md`、`AGENTS.md`（CLAUDE.md 是指向它的软链，只改这一份）、`GOALS.md`、
+- **允许**：`README.md`、`AGENTS.md`（CLAUDE.md 是指向它的软链，只改这一份）、
   `demo.md`、`docs/architecture/**`（含改名）、`.agents/skills/remobi-setup/**` 与
   `.agents/skills/herdweb-setup/**`（git mv 后的新路径）
 - **禁止**：`src/**`、`tests/**`、`cli.ts`、`build.ts`、`package.json`、`tsconfig.json`、
   `install.sh`、`SECURITY.md`、`systemd/**`、`scripts/**`、`docs/deploy-herdr.md`、
+  `GOALS.md`（主脑维护的全局层，执行器禁碰，主脑自行更新提法）、
   `docs/sessions/**`、`docs/decisions/**`、`docs/designs/**`、`spikes/**`、`goals/M*.md`、
   `retro/**`、`CHANGELOG.md`、`.github/**`
-- **Scope-Globs**：README.md AGENTS.md GOALS.md demo.md docs/architecture/** .agents/skills/remobi-setup/** .agents/skills/herdweb-setup/**
+- **Scope-Globs**：README.md AGENTS.md demo.md docs/architecture/** .agents/skills/remobi-setup/** .agents/skills/herdweb-setup/**
 - **高风险区域**：
   - **README 内链完整性**：重写后所有相对链接（skill references、docs/architecture、
     deploy-herdr、designs）必须指向真实存在的路径；skill 改名后
@@ -94,8 +95,8 @@
      onboarding 流程产出 herdweb.config.ts。
   4. `docs/architecture/how-herdweb-works.md` 与 networking 文内 tmux 表述改 herdr
      （PTY 图中的默认命令、示例）。
-  5. GOALS.md 提法 herdweb/herdr；demo.md 更新（若内容纯属上游演示脚本则删除并在报告
-     说明理由）。
+  5. demo.md 更新（若内容纯属上游演示脚本则删除并在报告说明理由）；GOALS.md 不在
+     本卡范围（主脑另行更新）。
   6. 封笔扫描（贴报告）：`grep -rni remobi README.md AGENTS.md GOALS.md demo.md
      docs/architecture/ .agents/skills/herdweb-setup/` → 除锁定决策 2 允许的 fork 起源
      句外**零命中**。
@@ -145,7 +146,7 @@
     mobile-panes.md、tailscale-serve.md、keep-awake.md、ttyd-flags.md。
   - `docs/architecture/how-remobi-works.md`（9 处，PTY 图 "default: tmux new-session -A -s
     main"）、`networking-and-websockets.md`（9 处）。
-  - GOALS.md:5 "remobi/Herdr"；demo.md 5 处。
+  - demo.md 5 处 remobi 提法。（GOALS.md:5 "remobi/Herdr" 由主脑更新，不在本卡。）
 - **已完成**：无（本卡全部待做）。
 - **未完成**：本卡全部内容。
 - **关键决策**：demo.md 去留由执行器按内容判断（上游演示素材→删，通用素材→改），报告写明。
